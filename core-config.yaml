@@ -1,0 +1,46 @@
+markdownExploder: true
+project:
+  type: greenfield
+  name: Maetria Social
+  installedAt: '2026-04-04T00:00:00.000Z'
+  version: 2.1.0
+user_profile: kassio
+ide:
+  selected:
+    - claude-code
+  configs:
+    vscode: false
+    codex: false
+    cursor: false
+    claude-code: true
+mcp:
+  enabled: false
+  configLocation: .claude/mcp.json
+  servers: []
+qa:
+  qaLocation: docs/qa
+prd:
+  prdFile: docs/prd.md
+  prdVersion: v4
+  prdSharded: true
+  prdShardedLocation: docs/prd
+  epicFilePattern: epic-{n}*.md
+architecture:
+  architectureFile: docs/architecture.md
+  architectureVersion: v4
+  architectureSharded: true
+  architectureShardedLocation: docs/architecture
+devLoadAlwaysFiles:
+  - docs/framework/coding-standards.md
+  - docs/framework/tech-stack.md
+  - docs/framework/source-tree.md
+devDebugLog: .ai/debug-log.md
+devStoryLocation: docs/stories
+slashPrefix: AIOX
+frameworkDocsLocation: docs/framework
+projectDocsLocation: docs/architecture/project-decisions
+boundary:
+  frameworkProtection: true
+git:
+  showConfigWarning: true
+  cacheTimeSeconds: 300
