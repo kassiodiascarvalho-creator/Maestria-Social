@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createOpenAIClient, MODEL } from '@/lib/openai'
 import { buildSystemPrompt } from '@/lib/agente/prompts'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
+import { getConfig } from '@/lib/config'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
 
 const CAMPOS_VALIDOS: CampoQualificacao[] = [
@@ -70,9 +71,23 @@ export async function POST(req: NextRequest) {
       .order('criado_em', { ascending: true })
       .limit(20)
 
+    // Verificar se agente está ativo
+    const agenteAtivo = await getConfig('AGENT_ATIVO')
+    if (agenteAtivo === 'false') {
+      return NextResponse.json({ ok: true, ignorado: true })
+    }
+
+    // Buscar prompt e temperatura configuráveis
+    const promptCustom = await getConfig('AGENT_SYSTEM_PROMPT')
+    const tempConfig = await getConfig('AGENT_TEMPERATURE')
+    const temperatura = tempConfig ? parseFloat(tempConfig) : 0.2
+    const systemPrompt = promptCustom
+      ? promptCustom.replace('{{nome}}', lead.nome).replace('{{pilar}}', lead.pilar_fraco ?? 'Comunicação')
+      : buildSystemPrompt(lead)
+
     // Montar array de mensagens para OpenAI
     const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: buildSystemPrompt(lead) },
+      { role: 'system', content: systemPrompt },
     ]
 
     if (historico) {
@@ -97,7 +112,7 @@ export async function POST(req: NextRequest) {
     const completion = await openai.chat.completions.create({
       model: MODEL,
       messages: mensagensOpenAI,
-      temperature: 0.7,
+      temperature: temperatura,
       max_tokens: 600,
     })
 

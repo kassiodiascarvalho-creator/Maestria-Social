@@ -8,6 +8,9 @@ const ALLOWED_KEYS = [
   'META_ACCESS_TOKEN',
   'META_PHONE_NUMBER_ID',
   'META_FORWARD_WEBHOOK_URL',
+  'AGENT_TEMPERATURE',
+  'AGENT_SYSTEM_PROMPT',
+  'AGENT_ATIVO',
 ]
 
 export async function POST(req: NextRequest) {
