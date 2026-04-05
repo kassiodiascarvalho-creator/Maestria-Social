@@ -141,12 +141,13 @@ function qsLevel(total: number) {
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
   :root {
-    --bg:#0a0907; --s1:#141210; --s2:#1a1714; --border:#252018;
-    --gold:#c08a20; --gl:#d4a035; --gdim:rgba(192,138,32,.13);
-    --text:#f0ead8; --muted:#7a7060; --muted2:#3d352a; --r:14px;
-    --font-serif:'Cormorant Garamond',serif; --font-sans:'DM Sans',sans-serif;
+    --bg:#0e0f09; --s1:#1a1410; --s2:#22180f; --border:#2a1f18;
+    --gold:#c2904d; --gl:#d4a055; --gdim:rgba(194,144,77,.13);
+    --text:#fff9e6; --muted:#7a6e5e; --muted2:#3d3328; --r:14px;
+    --font-serif:var(--font-serif,'Cormorant Garamond',serif);
+    --font-sans:var(--font-sans,'Inter',sans-serif);
+    --font-display:var(--font-display,'Bebas Neue',sans-serif);
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:var(--bg);color:var(--text);font-family:var(--font-sans);min-height:100vh;overflow-x:hidden;}
@@ -206,7 +207,7 @@ const css = `
   .ring-svg{position:absolute;inset:-3px;width:calc(100%+6px);height:calc(100%+6px);transform:rotate(-90deg);}
   .ring-track{fill:none;stroke:var(--border);stroke-width:3;}
   .ring-fill{fill:none;stroke-width:3.5;stroke-linecap:round;stroke-dasharray:390;stroke-dashoffset:390;transition:stroke-dashoffset 1.3s cubic-bezier(.4,0,.2,1) .4s;}
-  .score-num{font-family:'Bebas Neue',sans-serif;font-size:78px;font-weight:400;line-height:1;letter-spacing:2px;}
+  .score-num{font-family:var(--font-display,'Bebas Neue',sans-serif);font-size:78px;font-weight:400;line-height:1;letter-spacing:2px;}
   .score-den{font-size:13px;color:var(--muted);margin-top:2px;letter-spacing:.5px;}
   .score-pct{font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--muted);margin-top:3px;}
   .level-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gdim);padding:6px 18px;border-radius:40px;margin-bottom:14px;background:rgba(192,138,32,.04);}
@@ -293,6 +294,7 @@ export default function QuizApp() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(SECTIONS.map(s => Array(s.questions.length).fill(0)));
   const [barWidths, setBarWidths] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
   const sec = SECTIONS[step];
@@ -305,6 +307,21 @@ export default function QuizApp() {
   const scoreDisplay = useCountUp(step === SECTIONS.length ? total : 0);
 
   const weakestIdx = sectionScores.indexOf(Math.min(...sectionScores));
+
+  // Salva resultado na API quando exibe resultado
+  useEffect(() => {
+    if (step !== SECTIONS.length) return;
+    const leadId = typeof window !== 'undefined' ? sessionStorage.getItem('lead_id') : null;
+    if (!leadId) return;
+    setSaving(true);
+    const scores = { A: sectionScores[0], B: sectionScores[1], C: sectionScores[2], D: sectionScores[3], E: sectionScores[4] };
+    fetch('/api/quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_id: leadId, scores }),
+    }).finally(() => setSaving(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const scrollTop = () => topRef.current?.scrollIntoView({ behavior: "smooth" });
 
