@@ -18,7 +18,8 @@ const FIELDS_CONFIG = [
     fields: [
       { label: "META_VERIFY_TOKEN", key: "META_VERIFY_TOKEN", type: "text", placeholder: "Token de verificação do webhook" },
       { label: "META_ACCESS_TOKEN", key: "META_ACCESS_TOKEN", type: "password", placeholder: "EAAxx..." },
-      { label: "META_PHONE_NUMBER_ID", key: "META_PHONE_NUMBER_ID", type: "text", placeholder: "ID do número de telefone" },
+      { label: "META_PHONE_NUMBER_ID", key: "META_PHONE_NUMBER_ID", type: "text", placeholder: "ID do número de telefone do Maestria Social" },
+      { label: "META_FORWARD_WEBHOOK_URL", key: "META_FORWARD_WEBHOOK_URL", type: "text", placeholder: "URL da outra plataforma (opcional — coexistência)" },
     ],
   },
 ];

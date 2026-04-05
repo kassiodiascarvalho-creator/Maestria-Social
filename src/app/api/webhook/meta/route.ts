@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getConfig } from '@/lib/config'
 
 // GET — verificação do webhook pela Meta
 export async function GET(req: NextRequest) {
@@ -8,7 +9,9 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token')
   const challenge = searchParams.get('hub.challenge')
 
-  if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
+  const verifyToken = await getConfig('META_VERIFY_TOKEN')
+
+  if (mode === 'subscribe' && token && token === verifyToken) {
     return new NextResponse(challenge, { status: 200 })
   }
 
@@ -17,51 +20,82 @@ export async function GET(req: NextRequest) {
 
 // POST — recebe mensagens do WhatsApp via Meta Cloud API
 export async function POST(req: NextRequest) {
+  let body: unknown
   try {
-    const body = await req.json()
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ status: 'ok' }, { status: 200 })
+  }
 
-    // Estrutura padrão do payload Meta Cloud API
-    const entry = body?.entry?.[0]
-    const changes = entry?.changes?.[0]
-    const value = changes?.value
+  try {
+    const entry = (body as Record<string, unknown>)?.entry as Record<string, unknown>[] | undefined
+    const changes = entry?.[0]?.changes as Record<string, unknown>[] | undefined
+    const value = changes?.[0]?.value as Record<string, unknown> | undefined
 
-    if (!value?.messages?.length) {
-      // Pode ser notificação de status — ignorar silenciosamente
+    if (!value?.messages) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    const message = value.messages[0]
-    const from = message.from        // número do remetente (whatsapp)
-    const text = message?.text?.body // texto da mensagem
+    const messages = value.messages as Record<string, unknown>[]
+    if (!messages.length) {
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
+
+    const phoneNumberId = value.metadata
+      ? (value.metadata as Record<string, string>).phone_number_id
+      : undefined
+
+    const message = messages[0]
+    const from = message.from as string
+    const text = (message.text as Record<string, string> | undefined)?.body
 
     if (!from || !text) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
+    // ── Roteamento por número ─────────────────────────────────────────────────
+    // Se tiver múltiplos números no mesmo App Meta, verificar se este phone_number_id
+    // pertence ao Maestria Social. Se não, encaminhar para a outra plataforma.
+    const maestriaPhoneId = await getConfig('META_PHONE_NUMBER_ID')
+    const forwardUrl = await getConfig('META_FORWARD_WEBHOOK_URL')
+
+    if (phoneNumberId && maestriaPhoneId && phoneNumberId !== maestriaPhoneId) {
+      // Este webhook não é para o Maestria Social — encaminhar para outra plataforma
+      if (forwardUrl) {
+        fetch(forwardUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).catch((err) => console.error('[webhook/meta] Erro ao encaminhar:', err))
+      }
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
+
+    // ── Processar mensagem do Maestria Social ─────────────────────────────────
     const supabase = createAdminClient()
 
-    // Busca lead pelo WhatsApp
-    const { data: lead, error: leadError } = await supabase
+    // Normalizar número (remover formatação, garantir DDI 55)
+    const digitos = from.replace(/\D/g, '')
+    const telefoneNormalizado = digitos.startsWith('55') ? digitos : `55${digitos}`
+    const telefoneCurto = digitos.startsWith('55') ? digitos.slice(2) : digitos
+
+    // Busca lead pelo WhatsApp (tenta com e sem DDI)
+    const { data: lead } = await supabase
       .from('leads')
-      .select('id, nome, pilar_fraco, nivel_qs, scores, status_lead')
-      .eq('whatsapp', from)
+      .select('id')
+      .or(`whatsapp.ilike.%${telefoneCurto}%,whatsapp.ilike.%${telefoneNormalizado}%`)
+      .limit(1)
       .single()
 
-    if (leadError || !lead) {
+    if (!lead) {
       console.warn('[webhook/meta] Lead não encontrado para WhatsApp:', from)
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    // Salva mensagem do usuário no histórico
-    await supabase.from('conversas').insert({
-      lead_id: lead.id,
-      role: 'user',
-      mensagem: text,
-    })
+    // Dispara agente SDR de forma assíncrona (retorna 200 imediatamente para a Meta)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://maestria-social.vercel.app'
 
-    // Dispara processamento do agente SDR de forma assíncrona
-    // (não aguarda — retorna 200 imediatamente para a Meta)
-    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('supabase.co', '') || ''}${process.env.NEXTAUTH_URL || ''}/api/agente/responder`, {
+    fetch(`${baseUrl}/api/agente/responder`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lead_id: lead.id, mensagem: text }),
@@ -70,7 +104,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (err) {
     console.error('[POST /api/webhook/meta]', err)
-    // Sempre retorna 200 para a Meta não reenviar
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   }
 }

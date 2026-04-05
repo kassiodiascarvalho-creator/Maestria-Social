@@ -7,6 +7,7 @@ const ALLOWED_KEYS = [
   'META_VERIFY_TOKEN',
   'META_ACCESS_TOKEN',
   'META_PHONE_NUMBER_ID',
+  'META_FORWARD_WEBHOOK_URL',
 ]
 
 export async function POST(req: NextRequest) {
