@@ -73,18 +73,19 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── PROVA SOCIAL ── */}
-        <section className="ms-proof">
-          <div className="ms-proof-line" />
-          <p className="ms-proof-text">
-            &ldquo;Depois do diagnóstico, entendi exatamente onde estava
-            perdendo oportunidades. Era minha Persuasão — e nunca tinha
-            percebido isso.&rdquo;
-          </p>
-          <p className="ms-proof-author">— Participante do Método Maestria Social</p>
-          <div className="ms-proof-line" />
-        </section>
       </main>
+
+      {/* ── PROVA SOCIAL (fora do grid) ── */}
+      <section className="ms-proof">
+        <div className="ms-proof-line" />
+        <p className="ms-proof-text">
+          &ldquo;Depois do diagnóstico, entendi exatamente onde estava
+          perdendo oportunidades. Era minha Persuasão — e nunca tinha
+          percebido isso.&rdquo;
+        </p>
+        <p className="ms-proof-author">— Participante do Método Maestria Social</p>
+        <div className="ms-proof-line" />
+      </section>
     </>
   );
 }
@@ -123,7 +124,7 @@ const css = `
   .ms-wrap {
     position: relative; z-index: 1;
     max-width: 1100px; margin: 0 auto;
-    padding: 0 24px 100px;
+    padding: 0 24px 48px;
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto auto;
@@ -264,9 +265,10 @@ const css = `
   .ms-trust-divider { width: 1px; height: 32px; background: var(--ms-border); }
 
   .ms-proof {
-    grid-column: 1 / 3; grid-row: 2;
+    position: relative; z-index: 1;
     display: flex; flex-direction: column; align-items: center; gap: 20px;
-    padding: 48px 0 0;
+    padding: 72px 24px 80px;
+    max-width: 1100px; margin: 0 auto;
   }
   .ms-proof-line {
     width: 60px; height: 1px;
