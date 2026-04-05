@@ -218,7 +218,7 @@ const css = `
     outline: none; width: 100%;
     transition: border-color .2s, background .2s;
   }
-  .ms-input::placeholder { color: var(--ms-muted2); }
+  .ms-input::placeholder { color: #6b5e4e; }
   .ms-input:focus { border-color: rgba(194,144,77,.5); background: rgba(194,144,77,.04); }
   .ms-input--error { border-color: rgba(220,80,60,.5) !important; }
   .ms-error { font-size: 12px; color: #e05840; font-weight: 500; }
