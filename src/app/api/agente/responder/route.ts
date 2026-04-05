@@ -80,7 +80,9 @@ export async function POST(req: NextRequest) {
     // Buscar prompt e temperatura configuráveis
     const promptCustom = await getConfig('AGENT_SYSTEM_PROMPT')
     const tempConfig = await getConfig('AGENT_TEMPERATURE')
+    const modeloConfig = await getConfig('AGENT_MODEL')
     const temperatura = tempConfig ? parseFloat(tempConfig) : 0.2
+    const modelo = modeloConfig || MODEL
     const systemPrompt = promptCustom
       ? promptCustom.replace('{{nome}}', lead.nome).replace('{{pilar}}', lead.pilar_fraco ?? 'Comunicação')
       : buildSystemPrompt(lead)
@@ -110,7 +112,7 @@ export async function POST(req: NextRequest) {
     // Chamar OpenAI
     const openai = await createOpenAIClient()
     const completion = await openai.chat.completions.create({
-      model: MODEL,
+      model: modelo,
       messages: mensagensOpenAI,
       temperature: temperatura,
       max_tokens: 600,

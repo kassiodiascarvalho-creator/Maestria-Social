@@ -2,6 +2,13 @@
 
 import { useState, useEffect } from "react";
 
+const MODELS = [
+  { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", desc: "Rápido, eficiente e econômico. Ideal para volume alto de conversas.", cost: "Baixo custo" },
+  { id: "gpt-4.1", name: "GPT-4.1", desc: "Alta capacidade de raciocínio e contexto longo. Melhor qualidade.", cost: "Custo médio" },
+  { id: "gpt-4o", name: "GPT-4o", desc: "Modelo multimodal da OpenAI. Excelente equilíbrio custo-benefício.", cost: "Custo médio" },
+  { id: "gpt-4o-mini", name: "GPT-4o Mini", desc: "Versão compacta do GPT-4o. Ótimo para respostas rápidas.", cost: "Baixo custo" },
+];
+
 const DEFAULT_PROMPT = `Você é um consultor especialista em Inteligência Social do Método Maestria Social.
 Seu papel é conduzir uma conversa de sondagem via WhatsApp para entender a situação do lead e qualificá-lo.
 
@@ -32,6 +39,7 @@ export default function AgentePage() {
   const [prompt, setPrompt] = useState("");
   const [temperature, setTemperature] = useState("0.2");
   const [ativo, setAtivo] = useState(true);
+  const [modelo, setModelo] = useState("gpt-4.1-mini");
   const [phoneId, setPhoneId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,7 +49,7 @@ export default function AgentePage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const keys = ["AGENT_SYSTEM_PROMPT", "AGENT_TEMPERATURE", "AGENT_ATIVO", "META_PHONE_NUMBER_ID"];
+      const keys = ["AGENT_SYSTEM_PROMPT", "AGENT_TEMPERATURE", "AGENT_ATIVO", "AGENT_MODEL", "META_PHONE_NUMBER_ID"];
       const results = await Promise.all(
         keys.map((k) =>
           fetch(`/api/admin/env?key=${k}`)
@@ -61,7 +69,8 @@ export default function AgentePage() {
       else setPrompt(DEFAULT_PROMPT);
       if (vals[1].value) setTemperature(vals[1].value);
       if (vals[2].value) setAtivo(vals[2].value !== "false");
-      if (vals[3].value) setPhoneId(vals[3].value);
+      if (vals[3].value) setModelo(vals[3].value);
+      if (vals[4].value) setPhoneId(vals[4].value);
       setLoading(false);
     }
     load();
@@ -75,6 +84,7 @@ export default function AgentePage() {
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_SYSTEM_PROMPT", value: prompt }) }),
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_TEMPERATURE", value: temperature }) }),
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_ATIVO", value: String(ativo) }) }),
+        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_MODEL", value: modelo }) }),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -193,9 +203,19 @@ export default function AgentePage() {
           {/* Modelo */}
           <div className="agente-card full">
             <div className="card-label">Modelo de IA</div>
-            <div className="model-row">
-              <div className="model-badge">GPT-4.1 Mini</div>
-              <p className="card-desc">O modelo é fixo. Para trocar, edite o código em <code>src/lib/openai.ts</code>.</p>
+            <p className="card-desc">Escolha o modelo usado pelo agente. Modelos mais capazes geram respostas melhores, mas custam mais por token.</p>
+            <div className="models-grid">
+              {MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  className={`model-card ${modelo === m.id ? "active" : ""}`}
+                  onClick={() => setModelo(m.id)}
+                >
+                  <div className="model-name">{m.name}</div>
+                  <div className="model-desc">{m.desc}</div>
+                  <div className="model-cost">{m.cost}</div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -250,8 +270,14 @@ const css = `
   .prompt-textarea{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:16px;font-size:13px;color:#fff9e6;font-family:monospace;line-height:1.7;resize:vertical;outline:none;transition:border-color .2s;}
   .prompt-textarea:focus{border-color:rgba(194,144,77,.3);}
   .prompt-chars{font-size:11px;color:#4a3e30;text-align:right;margin-top:6px;}
-  .model-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
-  .model-badge{display:inline-block;background:rgba(194,144,77,.1);border:1px solid rgba(194,144,77,.2);color:#c2904d;font-size:13px;font-weight:700;padding:7px 16px;border-radius:8px;letter-spacing:.5px;}
-  .model-row code{font-size:12px;color:#7a6e5e;background:#111009;padding:3px 8px;border-radius:4px;}
+  .models-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
+  .model-card{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:16px 18px;text-align:left;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .model-card:hover{border-color:rgba(194,144,77,.3);background:rgba(194,144,77,.04);}
+  .model-card.active{border-color:#c2904d;background:rgba(194,144,77,.08);}
+  .model-name{font-size:14px;font-weight:700;color:#fff9e6;margin-bottom:4px;}
+  .model-card.active .model-name{color:#c2904d;}
+  .model-desc{font-size:12px;color:#7a6e5e;line-height:1.5;margin-bottom:8px;font-weight:300;}
+  .model-cost{font-size:11px;font-weight:700;letter-spacing:.5px;color:#4a3e30;text-transform:uppercase;}
+  .model-card.active .model-cost{color:rgba(194,144,77,.6);}
   @media(max-width:768px){.agente-grid{grid-template-columns:1fr;}.agente-page{padding:20px;}.agente-header{flex-direction:column;}}
 `;
