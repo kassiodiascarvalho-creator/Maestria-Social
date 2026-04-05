@@ -93,7 +93,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Dispara agente SDR de forma assíncrona (retorna 200 imediatamente para a Meta)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://maestria-social.vercel.app'
+    const host = req.headers.get('host') || 'maestria-social.vercel.app'
+    const proto = host.includes('localhost') ? 'http' : 'https'
+    const baseUrl = `${proto}://${host}`
 
     fetch(`${baseUrl}/api/agente/responder`, {
       method: 'POST',
