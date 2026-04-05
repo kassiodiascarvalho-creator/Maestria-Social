@@ -20,7 +20,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/dashboard/login");
+    router.push("/login");
   }
 
   return (
