@@ -117,6 +117,25 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracoes: {
+        Row: {
+          chave: string
+          valor: string
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          chave: string
+          valor: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          valor?: string
+          atualizado_em?: string
+        }
+        Relationships: []
+      }
       webhook_configs: {
         Row: {
           id: string

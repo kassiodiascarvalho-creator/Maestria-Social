@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Chamar OpenAI
-    const openai = createOpenAIClient()
+    const openai = await createOpenAIClient()
     const completion = await openai.chat.completions.create({
       model: MODEL,
       messages: mensagensOpenAI,

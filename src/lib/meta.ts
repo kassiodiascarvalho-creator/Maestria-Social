@@ -1,13 +1,10 @@
-// Helper para Meta Cloud API (WhatsApp Business)
+import { getConfig } from './config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
 
-export async function enviarMensagemWhatsApp(
-  para: string,
-  texto: string
-): Promise<void> {
-  const phoneNumberId = process.env.META_PHONE_NUMBER_ID
-  const accessToken = process.env.META_ACCESS_TOKEN
+export async function enviarMensagemWhatsApp(para: string, texto: string): Promise<void> {
+  const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
+  const accessToken = await getConfig('META_ACCESS_TOKEN')
 
   if (!phoneNumberId || !accessToken) {
     console.warn('[meta] META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados')
