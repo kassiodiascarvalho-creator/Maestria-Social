@@ -54,6 +54,8 @@ export default function CapturaForm() {
       if (!res.ok && !data.id) throw new Error(data.error || "Erro ao salvar");
       // Salva lead_id no sessionStorage para o quiz usar
       sessionStorage.setItem("lead_id", data.id);
+      sessionStorage.setItem("lead_nome", fields.nome.trim());
+      sessionStorage.setItem("lead_whatsapp", fields.whatsapp.replace(/\D/g, ""));
       router.push("/quiz");
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : "Erro inesperado. Tente novamente.");

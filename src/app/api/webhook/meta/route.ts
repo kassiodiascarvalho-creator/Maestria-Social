@@ -1,8 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig } from '@/lib/config'
+import { responderAgenteParaLead } from '@/lib/agente/service'
+import { marcarMensagemComoLida } from '@/lib/meta'
 
-// GET — verificação do webhook pela Meta
+type MetaMessage = Record<string, unknown>
+
+function extrairTextoMensagem(msg: MetaMessage): string | null {
+  const type = msg.type as string | undefined
+
+  if (type === 'text') {
+    return ((msg.text as Record<string, unknown> | undefined)?.body as string | undefined) ?? null
+  }
+  if (type === 'button') {
+    return ((msg.button as Record<string, unknown> | undefined)?.text as string | undefined) ?? null
+  }
+  if (type === 'interactive') {
+    const interactive = msg.interactive as Record<string, unknown> | undefined
+    const buttonReply = interactive?.button_reply as Record<string, unknown> | undefined
+    const listReply = interactive?.list_reply as Record<string, unknown> | undefined
+    return (buttonReply?.title as string | undefined) || (listReply?.title as string | undefined) || null
+  }
+  return null
+}
+
+function normalizarTelefone(raw: string): { full: string; short: string } {
+  const digits = raw.replace(/\D/g, '')
+  const full = digits.startsWith('55') ? digits : `55${digits}`
+  const short = full.startsWith('55') ? full.slice(2) : full
+  return { full, short }
+}
+
+async function buscarLeadPorTelefone(raw: string): Promise<{ id: string } | null> {
+  const supabase = createAdminClient()
+  const { full, short } = normalizarTelefone(raw)
+
+  const tentativas = [full, short, raw].filter(Boolean)
+  for (const t of tentativas) {
+    const { data } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('whatsapp', t)
+      .maybeSingle()
+    if (data) return data
+  }
+
+  const { data: fallback } = await supabase
+    .from('leads')
+    .select('id')
+    .or(`whatsapp.ilike.%${short}%,whatsapp.ilike.%${full}%`)
+    .limit(1)
+    .maybeSingle()
+  return fallback ?? null
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const mode = searchParams.get('hub.mode')
@@ -18,7 +69,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }
 
-// POST — recebe mensagens do WhatsApp via Meta Cloud API
 export async function POST(req: NextRequest) {
   let body: unknown
   try {
@@ -32,12 +82,7 @@ export async function POST(req: NextRequest) {
     const changes = entry?.[0]?.changes as Record<string, unknown>[] | undefined
     const value = changes?.[0]?.value as Record<string, unknown> | undefined
 
-    if (!value?.messages) {
-      return NextResponse.json({ status: 'ok' }, { status: 200 })
-    }
-
-    const messages = value.messages as Record<string, unknown>[]
-    if (!messages.length) {
+    if (!value) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
@@ -45,22 +90,10 @@ export async function POST(req: NextRequest) {
       ? (value.metadata as Record<string, string>).phone_number_id
       : undefined
 
-    const message = messages[0]
-    const from = message.from as string
-    const text = (message.text as Record<string, string> | undefined)?.body
-
-    if (!from || !text) {
-      return NextResponse.json({ status: 'ok' }, { status: 200 })
-    }
-
-    // ── Roteamento por número ─────────────────────────────────────────────────
-    // Se tiver múltiplos números no mesmo App Meta, verificar se este phone_number_id
-    // pertence ao Maestria Social. Se não, encaminhar para a outra plataforma.
     const maestriaPhoneId = await getConfig('META_PHONE_NUMBER_ID')
     const forwardUrl = await getConfig('META_FORWARD_WEBHOOK_URL')
 
     if (phoneNumberId && maestriaPhoneId && phoneNumberId !== maestriaPhoneId) {
-      // Este webhook não é para o Maestria Social — encaminhar para outra plataforma
       if (forwardUrl) {
         fetch(forwardUrl, {
           method: 'POST',
@@ -71,38 +104,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    // ── Processar mensagem do Maestria Social ─────────────────────────────────
-    const supabase = createAdminClient()
+    const messages = value.messages as MetaMessage[] | undefined
+    if (!messages || messages.length === 0) {
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
 
-    // Normalizar número (remover formatação, garantir DDI 55)
-    const digitos = from.replace(/\D/g, '')
-    const telefoneNormalizado = digitos.startsWith('55') ? digitos : `55${digitos}`
-    const telefoneCurto = digitos.startsWith('55') ? digitos.slice(2) : digitos
+    const message = messages[0]
+    const from = message.from as string | undefined
+    const texto = extrairTextoMensagem(message)
+    const messageId = message.id as string | undefined
 
-    // Busca lead pelo WhatsApp (tenta com e sem DDI)
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('id')
-      .or(`whatsapp.ilike.%${telefoneCurto}%,whatsapp.ilike.%${telefoneNormalizado}%`)
-      .limit(1)
-      .single()
+    if (!from || !texto) {
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
 
+    if (messageId) {
+      marcarMensagemComoLida(messageId).catch((err) =>
+        console.error('[webhook/meta] erro ao marcar lida:', err)
+      )
+    }
+
+    const lead = await buscarLeadPorTelefone(from)
     if (!lead) {
       console.warn('[webhook/meta] Lead não encontrado para WhatsApp:', from)
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    // Dispara agente SDR de forma assíncrona (retorna 200 imediatamente para a Meta)
-    const host = req.headers.get('host') || 'maestria-social.vercel.app'
-    const proto = host.includes('localhost') ? 'http' : 'https'
-    const baseUrl = `${proto}://${host}`
-
-    fetch(`${baseUrl}/api/agente/responder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lead_id: lead.id, mensagem: text }),
-    }).catch((err) => console.error('[webhook/meta] Erro ao acionar agente:', err))
-
+    await responderAgenteParaLead(lead.id, texto, true)
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (err) {
     console.error('[POST /api/webhook/meta]', err)

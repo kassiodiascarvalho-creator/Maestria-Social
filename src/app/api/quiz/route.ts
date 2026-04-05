@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { iniciarAgenteParaLead } from '@/lib/agente/service'
+import { dispararWebhookSaida } from '@/lib/webhooks'
 import type { ScoresPilares, NivelQS } from '@/types/database'
 
 const PILARES = ['A', 'B', 'C', 'D', 'E'] as const
@@ -69,13 +71,20 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
-    // Acionar agente SDR de forma assíncrona (não bloqueia resposta)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`
-    fetch(`${baseUrl}/api/agente/iniciar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lead_id }),
-    }).catch((e) => console.error('[quiz] Erro ao iniciar agente:', e))
+    await dispararWebhookSaida('lead_qualificado', {
+      lead_id,
+      qs_total,
+      qs_percentual,
+      nivel_qs,
+      pilar_fraco,
+      scores: typedScores,
+    })
+
+    try {
+      await iniciarAgenteParaLead(lead_id)
+    } catch (e) {
+      console.error('[quiz] erro ao iniciar agente:', e)
+    }
 
     return NextResponse.json({ qs_total, qs_percentual, nivel_qs, pilar_fraco }, { status: 200 })
   } catch (err) {

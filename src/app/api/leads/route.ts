@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { dispararWebhookSaida } from '@/lib/webhooks'
 
 // Mascara WhatsApp: remove tudo que não é número
 function sanitizeWhatsApp(raw: string): string {
@@ -53,6 +54,13 @@ export async function POST(req: NextRequest) {
       }
       throw error
     }
+
+    await dispararWebhookSaida('novo_lead', {
+      lead_id: data.id,
+      nome: nome.trim(),
+      email: email.trim().toLowerCase(),
+      whatsapp: sanitizeWhatsApp(whatsapp),
+    })
 
     return NextResponse.json({ id: data.id }, { status: 201 })
   } catch (err) {

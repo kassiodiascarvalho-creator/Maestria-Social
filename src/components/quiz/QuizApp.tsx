@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const SECTIONS = [
@@ -291,10 +292,10 @@ function useCountUp(target: number, duration = 900) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function QuizApp() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(SECTIONS.map(s => Array(s.questions.length).fill(0)));
   const [barWidths, setBarWidths] = useState<number[]>([]);
-  const [saving, setSaving] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
   const sec = SECTIONS[step];
@@ -313,13 +314,19 @@ export default function QuizApp() {
     if (step !== SECTIONS.length) return;
     const leadId = typeof window !== 'undefined' ? sessionStorage.getItem('lead_id') : null;
     if (!leadId) return;
-    setSaving(true);
     const scores = { A: sectionScores[0], B: sectionScores[1], C: sectionScores[2], D: sectionScores[3], E: sectionScores[4] };
+    sessionStorage.setItem("quiz_result", JSON.stringify({
+      total,
+      percentual: ql.pct,
+      nivel: ql.name,
+      pilarFraco: SECTIONS[weakestIdx]?.title ?? "Comunicação",
+      scores,
+    }));
     fetch('/api/quiz', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lead_id: leadId, scores }),
-    }).finally(() => setSaving(false));
+    }).catch(() => undefined);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -348,6 +355,10 @@ export default function QuizApp() {
     setAnswers(SECTIONS.map(s => Array(s.questions.length).fill(0)));
     setBarWidths([]);
     scrollTop();
+  };
+
+  const irParaObrigado = () => {
+    router.push("/obrigado");
   };
 
   const typeMap: Record<string, string> = { a: "", s: "sit", d: "dor", v: "" };
@@ -484,7 +495,6 @@ export default function QuizApp() {
                   else if (sc <= 40) { text = ins.ok; cls = "ok"; }
                   else { text = ins.strong; cls = "strong"; }
                   text = text.replace("##SC##", `Nota ${sc} (${pct}%)`);
-                  const sl = secLevel(sc);
                   return (
                     <div key={i} className={`ins ${cls}`}>
                       <div className="ins-head">
@@ -509,7 +519,7 @@ export default function QuizApp() {
                 <p className="cta-desc">
                   Saber onde você está é o primeiro passo — e a boa notícia é que você pode começar a mudança a partir de agora. Apresente seu resultado e dê início ao próximo passo da sua transformação.
                 </p>
-                <button className="cta-btn">
+                <button className="cta-btn" onClick={irParaObrigado}>
                   Quero desenvolver minha {SECTIONS[weakestIdx].title} →
                 </button>
                 <div className="cta-sub">Diagnóstico individual · Plano personalizado · Método Maestria Social</div>

@@ -1,12 +1,37 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+
+type ApiKeyItem = {
+  id: string;
+  nome: string;
+  chave_prefixo: string;
+  ativa: boolean;
+  criado_em: string;
+};
+
+type WebhookItem = {
+  id: string;
+  evento: "novo_lead" | "lead_qualificado" | "mensagem_recebida" | "status_atualizado";
+  url: string;
+  secret: string | null;
+  ativo: boolean;
+  criado_em: string;
+};
 
 const FIELDS_CONFIG = [
   {
+    title: "API do Maestria Social",
+    badge: "Integração externa",
+    desc: "Chave simples para autenticar sistemas externos nos endpoints /api/v1/* e /api/integracoes/*.",
+    fields: [
+      { label: "INTEGRACOES_API_KEY", key: "INTEGRACOES_API_KEY", type: "password", placeholder: "ms_live_..." },
+    ],
+  },
+  {
     title: "OpenAI",
     badge: "IA / Agente SDR",
-    desc: "Chave de API para o modelo GPT-4.1 Mini usado pelo agente de qualificação.",
+    desc: "Chave de API para o modelo usado pelo agente de qualificação.",
     fields: [
       { label: "OPENAI_API_KEY", key: "OPENAI_API_KEY", type: "password", placeholder: "sk-..." },
     ],
@@ -18,11 +43,21 @@ const FIELDS_CONFIG = [
     fields: [
       { label: "META_VERIFY_TOKEN", key: "META_VERIFY_TOKEN", type: "text", placeholder: "Token de verificação do webhook" },
       { label: "META_ACCESS_TOKEN", key: "META_ACCESS_TOKEN", type: "password", placeholder: "EAAxx..." },
-      { label: "META_PHONE_NUMBER_ID", key: "META_PHONE_NUMBER_ID", type: "text", placeholder: "ID do número de telefone do Maestria Social" },
-      { label: "META_FORWARD_WEBHOOK_URL", key: "META_FORWARD_WEBHOOK_URL", type: "text", placeholder: "URL da outra plataforma (opcional — coexistência)" },
+      { label: "META_PHONE_NUMBER_ID", key: "META_PHONE_NUMBER_ID", type: "text", placeholder: "ID do número do Maestria Social" },
+      { label: "META_WHATSAPP_NUMBER", key: "META_WHATSAPP_NUMBER", type: "text", placeholder: "Número destino para CTA (5511...)" },
+      { label: "META_TEMPLATE_NAME", key: "META_TEMPLATE_NAME", type: "text", placeholder: "Template (opcional para 1º contato)" },
+      { label: "META_TEMPLATE_LANGUAGE", key: "META_TEMPLATE_LANGUAGE", type: "text", placeholder: "pt_BR (opcional)" },
+      { label: "META_FORWARD_WEBHOOK_URL", key: "META_FORWARD_WEBHOOK_URL", type: "text", placeholder: "URL da outra plataforma (coexistência)" },
     ],
   },
 ];
+
+const EVENTOS = [
+  { id: "novo_lead", label: "novo_lead" },
+  { id: "lead_qualificado", label: "lead_qualificado" },
+  { id: "mensagem_recebida", label: "mensagem_recebida" },
+  { id: "status_atualizado", label: "status_atualizado" },
+] as const;
 
 export default function IntegracoesPage() {
   const [status, setStatus] = useState<Record<string, boolean>>({});
@@ -31,7 +66,17 @@ export default function IntegracoesPage() {
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Carregar status de cada chave
+  const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
+  const [apiKeyName, setApiKeyName] = useState("");
+  const [apiKeyPlain, setApiKeyPlain] = useState("");
+  const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+
+  const [webhooks, setWebhooks] = useState<WebhookItem[]>([]);
+  const [webhookEvento, setWebhookEvento] = useState<WebhookItem["evento"]>("novo_lead");
+  const [webhookUrlNew, setWebhookUrlNew] = useState("");
+  const [webhookSecretNew, setWebhookSecretNew] = useState("");
+  const [loadingWebhooks, setLoadingWebhooks] = useState(true);
+
   useEffect(() => {
     const allKeys = FIELDS_CONFIG.flatMap((g) => g.fields.map((f) => f.key));
     Promise.all(
@@ -43,10 +88,37 @@ export default function IntegracoesPage() {
       )
     ).then((results) => {
       const s: Record<string, boolean> = {};
-      results.forEach(({ key, defined }) => { s[key] = defined; });
+      results.forEach(({ key, defined }) => {
+        s[key] = defined;
+      });
       setStatus(s);
     });
+
+    loadApiKeys();
+    loadWebhooks();
   }, []);
+
+  async function loadApiKeys() {
+    setLoadingApiKeys(true);
+    try {
+      const res = await fetch("/api/admin/integracoes/api-keys");
+      const data = await res.json();
+      if (res.ok) setApiKeys(data.api_keys ?? []);
+    } finally {
+      setLoadingApiKeys(false);
+    }
+  }
+
+  async function loadWebhooks() {
+    setLoadingWebhooks(true);
+    try {
+      const res = await fetch("/api/admin/integracoes/webhooks");
+      const data = await res.json();
+      if (res.ok) setWebhooks(data.webhooks ?? []);
+    } finally {
+      setLoadingWebhooks(false);
+    }
+  }
 
   async function handleSave(key: string) {
     const value = values[key]?.trim();
@@ -75,9 +147,60 @@ export default function IntegracoesPage() {
     }
   }
 
-  const webhookUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/webhook/meta`
-    : "/api/webhook/meta";
+  async function createApiKey() {
+    const nome = apiKeyName.trim();
+    if (!nome) return;
+    const res = await fetch("/api/admin/integracoes/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome }),
+    });
+    const data = await res.json();
+    if (!res.ok) return;
+    setApiKeyPlain(data.plain_key ?? "");
+    setApiKeyName("");
+    await loadApiKeys();
+  }
+
+  async function toggleApiKey(id: string, ativa: boolean) {
+    await fetch(`/api/admin/integracoes/api-keys/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ativa: !ativa }),
+    });
+    await loadApiKeys();
+  }
+
+  async function createWebhook() {
+    const url = webhookUrlNew.trim();
+    if (!url) return;
+    const res = await fetch("/api/admin/integracoes/webhooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ evento: webhookEvento, url, secret: webhookSecretNew.trim() }),
+    });
+    if (!res.ok) return;
+    setWebhookUrlNew("");
+    setWebhookSecretNew("");
+    await loadWebhooks();
+  }
+
+  async function toggleWebhook(id: string, ativo: boolean) {
+    await fetch(`/api/admin/integracoes/webhooks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ativo: !ativo }),
+    });
+    await loadWebhooks();
+  }
+
+  async function removeWebhook(id: string) {
+    await fetch(`/api/admin/integracoes/webhooks/${id}`, { method: "DELETE" });
+    await loadWebhooks();
+  }
+
+  const webhookUrlMeta =
+    typeof window !== "undefined" ? `${window.location.origin}/api/webhook/meta` : "/api/webhook/meta";
 
   return (
     <>
@@ -85,7 +208,7 @@ export default function IntegracoesPage() {
       <div className="int-page">
         <div className="int-header">
           <h1 className="int-title">Integrações</h1>
-          <p className="int-sub">Configure as credenciais das APIs externas</p>
+          <p className="int-sub">Configure credenciais, API keys e webhooks externos</p>
         </div>
 
         <div className="int-grid">
@@ -129,24 +252,157 @@ export default function IntegracoesPage() {
             </div>
           ))}
 
-          {/* Webhook */}
           <div className="int-card">
             <div className="int-card-head">
-              <div className="int-badge">URL de callback</div>
-              <div className="int-card-title">Webhook Meta</div>
+              <div className="int-badge">Meta Webhook</div>
+              <div className="int-card-title">Callback URL</div>
             </div>
-            <p className="int-desc">Configure esta URL no painel do Meta for Developers para receber mensagens do WhatsApp.</p>
+            <div className="webhook-url">
+              <code>{webhookUrlMeta}</code>
+              <button className="copy-btn" onClick={() => navigator.clipboard.writeText(webhookUrlMeta)}>
+                Copiar
+              </button>
+            </div>
+          </div>
+
+          <div className="int-card">
+            <div className="int-card-head">
+              <div className="int-badge">API Externa</div>
+              <div className="int-card-title">Endpoints públicos com API Key</div>
+            </div>
             <div className="webhook-box">
-              <div className="webhook-label">Callback URL</div>
-              <div className="webhook-url">
-                <code>{webhookUrl}</code>
-                <button className="copy-btn" onClick={() => navigator.clipboard.writeText(webhookUrl)}>
-                  Copiar
+              <div className="webhook-hint"><code>GET /api/v1/leads</code> e <code>POST /api/v1/leads</code></div>
+              <div className="webhook-hint"><code>GET /api/integracoes/leads</code> e <code>POST /api/integracoes/leads</code></div>
+              <div className="webhook-hint"><code>POST /api/integracoes/mensagens</code></div>
+            </div>
+          </div>
+
+          <div className="int-card">
+            <div className="int-card-head">
+              <div className="int-badge">API Keys</div>
+              <div className="int-card-title">Gestão de chaves por sistema</div>
+            </div>
+            <div className="int-row">
+              <input
+                className="int-input"
+                placeholder="Nome da integração (ex: CRM)"
+                value={apiKeyName}
+                onChange={(e) => setApiKeyName(e.target.value)}
+              />
+              <button className="int-save-btn" onClick={createApiKey} disabled={!apiKeyName.trim()}>
+                Criar chave
+              </button>
+            </div>
+            {apiKeyPlain && (
+              <div className="webhook-box" style={{ marginTop: 12 }}>
+                <div className="webhook-label">Nova chave gerada (copie agora)</div>
+                <div className="webhook-url">
+                  <code>{apiKeyPlain}</code>
+                  <button className="copy-btn" onClick={() => navigator.clipboard.writeText(apiKeyPlain)}>
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="table-wrap">
+              {loadingApiKeys ? (
+                <p className="empty">Carregando chaves...</p>
+              ) : apiKeys.length === 0 ? (
+                <p className="empty">Nenhuma API key criada.</p>
+              ) : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Prefixo</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apiKeys.map((k) => (
+                      <tr key={k.id}>
+                        <td>{k.nome}</td>
+                        <td><code>{k.chave_prefixo}...</code></td>
+                        <td>{k.ativa ? "Ativa" : "Inativa"}</td>
+                        <td>
+                          <button className="mini-btn" onClick={() => toggleApiKey(k.id, k.ativa)}>
+                            {k.ativa ? "Desativar" : "Ativar"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <div className="int-card">
+            <div className="int-card-head">
+              <div className="int-badge">Webhooks de saída</div>
+              <div className="int-card-title">Gestão de destinos de evento</div>
+            </div>
+            <div className="int-fields">
+              <div className="int-row">
+                <select className="int-input" value={webhookEvento} onChange={(e) => setWebhookEvento(e.target.value as WebhookItem["evento"])}>
+                  {EVENTOS.map((e) => (
+                    <option key={e.id} value={e.id}>{e.label}</option>
+                  ))}
+                </select>
+                <input
+                  className="int-input"
+                  placeholder="https://seu-sistema.com/webhook"
+                  value={webhookUrlNew}
+                  onChange={(e) => setWebhookUrlNew(e.target.value)}
+                />
+              </div>
+              <div className="int-row">
+                <input
+                  className="int-input"
+                  placeholder="Secret HMAC (opcional)"
+                  value={webhookSecretNew}
+                  onChange={(e) => setWebhookSecretNew(e.target.value)}
+                />
+                <button className="int-save-btn" onClick={createWebhook} disabled={!webhookUrlNew.trim()}>
+                  Adicionar webhook
                 </button>
               </div>
-              <p className="webhook-hint">
-                Cole esta URL em <strong>WhatsApp → Configuration → Webhook → Edit</strong> no painel do Meta for Developers.
-              </p>
+            </div>
+            <div className="table-wrap">
+              {loadingWebhooks ? (
+                <p className="empty">Carregando webhooks...</p>
+              ) : webhooks.length === 0 ? (
+                <p className="empty">Nenhum webhook configurado.</p>
+              ) : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Evento</th>
+                      <th>URL</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {webhooks.map((w) => (
+                      <tr key={w.id}>
+                        <td><code>{w.evento}</code></td>
+                        <td className="url-cell">{w.url}</td>
+                        <td>{w.ativo ? "Ativo" : "Inativo"}</td>
+                        <td className="action-cell">
+                          <button className="mini-btn" onClick={() => toggleWebhook(w.id, w.ativo)}>
+                            {w.ativo ? "Pausar" : "Ativar"}
+                          </button>
+                          <button className="mini-btn danger" onClick={() => removeWebhook(w.id)}>
+                            Excluir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -166,7 +422,7 @@ const css = `
   .int-badge{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#c2904d;margin-bottom:4px;}
   .int-card-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:700;color:#fff9e6;}
   .int-desc{font-size:14px;color:#7a6e5e;font-weight:300;line-height:1.6;margin-bottom:24px;}
-  .int-fields{display:flex;flex-direction:column;gap:18px;}
+  .int-fields{display:flex;flex-direction:column;gap:10px;}
   .int-field{display:flex;flex-direction:column;gap:6px;}
   .int-label-row{display:flex;align-items:center;justify-content:space-between;}
   .int-label{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#7a6e5e;}
@@ -189,6 +445,15 @@ const css = `
   .copy-btn{background:rgba(194,144,77,.1);border:1px solid rgba(194,144,77,.2);color:#c2904d;font-size:12px;font-weight:700;padding:6px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;font-family:inherit;transition:background .15s;}
   .copy-btn:hover{background:rgba(194,144,77,.2);}
   .webhook-hint{font-size:13px;color:#7a6e5e;line-height:1.55;}
-  .webhook-hint strong{color:#fff9e6;}
-  @media(max-width:768px){.int-page{padding:20px;}.int-card{padding:20px;}.int-row{flex-direction:column;}}
+  .table-wrap{overflow-x:auto;margin-top:12px;border:1px solid #2a1f18;border-radius:10px;}
+  .table{width:100%;border-collapse:collapse;font-size:13px;}
+  .table th{background:#111009;color:#4a3e30;font-size:11px;letter-spacing:1px;text-transform:uppercase;text-align:left;padding:10px 12px;}
+  .table td{padding:10px 12px;border-top:1px solid rgba(42,31,24,.5);}
+  .table code{color:#c2904d;}
+  .mini-btn{background:rgba(194,144,77,.08);border:1px solid rgba(194,144,77,.25);color:#c2904d;padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;}
+  .mini-btn.danger{border-color:rgba(224,88,64,.3);color:#e05840;background:rgba(224,88,64,.08);}
+  .action-cell{display:flex;gap:8px;}
+  .url-cell{max-width:340px;word-break:break-all;color:#7a6e5e;}
+  .empty{font-size:13px;color:#7a6e5e;padding:12px;}
+  @media(max-width:768px){.int-page{padding:20px;}.int-card{padding:20px;}.int-row{flex-direction:column;}.action-cell{flex-direction:column;}}
 `;

@@ -3,11 +3,15 @@ import { createClient } from '@/lib/supabase/server'
 import { getConfig } from '@/lib/config'
 
 const ALLOWED_KEYS = [
+  'INTEGRACOES_API_KEY',
   'AGENT_SYSTEM_PROMPT',
   'AGENT_TEMPERATURE',
   'AGENT_ATIVO',
   'AGENT_MODEL',
   'META_PHONE_NUMBER_ID',
+  'META_WHATSAPP_NUMBER',
+  'META_TEMPLATE_NAME',
+  'META_TEMPLATE_LANGUAGE',
 ]
 
 export async function GET(req: NextRequest) {

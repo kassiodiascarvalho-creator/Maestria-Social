@@ -50,13 +50,6 @@ export default function AgentePage() {
     async function load() {
       setLoading(true);
       const keys = ["AGENT_SYSTEM_PROMPT", "AGENT_TEMPERATURE", "AGENT_ATIVO", "AGENT_MODEL", "META_PHONE_NUMBER_ID"];
-      const results = await Promise.all(
-        keys.map((k) =>
-          fetch(`/api/admin/env?key=${k}`)
-            .then((r) => r.json())
-            .catch(() => ({ defined: false }))
-        )
-      );
       // Buscar valores reais via endpoint GET com valor
       const vals = await Promise.all(
         keys.map((k) =>
