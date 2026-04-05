@@ -135,11 +135,13 @@ export async function POST(req: NextRequest) {
 
     const lead = await buscarLeadPorTelefone(from)
     if (!lead) {
-      console.warn('[webhook/meta] Lead não encontrado para WhatsApp:', from)
+      console.warn('[webhook/meta] Lead não encontrado para WhatsApp:', from, '— o número precisa estar cadastrado na tabela leads com o campo whatsapp preenchido')
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
+    console.log('[webhook/meta] Mensagem recebida de lead', lead.id, '— disparando agente')
     await responderAgenteParaLead(lead.id, texto, true)
+    console.log('[webhook/meta] Agente processou mensagem de lead', lead.id)
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (err) {
     console.error('[POST /api/webhook/meta]', err)

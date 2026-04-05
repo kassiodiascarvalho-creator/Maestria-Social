@@ -191,7 +191,11 @@ export async function responderAgenteParaLead(
   }
 
   if (enviarWhatsApp && lead.whatsapp && resposta) {
-    await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+    try {
+      await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+    } catch (err) {
+      console.error('[agente] Falha ao enviar resposta via WhatsApp — verifique META_ACCESS_TOKEN e META_PHONE_NUMBER_ID (ou COEXISTENCIA_WEBHOOK_URL):', err)
+    }
   }
 
   return { ok: true, resposta }

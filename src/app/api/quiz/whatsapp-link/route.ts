@@ -26,13 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 })
     }
 
-    const numeroDestino = await getConfig('META_WHATSAPP_NUMBER')
-    if (!numeroDestino) {
-      return NextResponse.json(
-        { error: 'META_WHATSAPP_NUMBER não configurado no painel de integrações' },
-        { status: 400 }
-      )
-    }
+    const numeroDestino = (await getConfig('META_WHATSAPP_NUMBER')) || '5533984522635'
 
     const texto = [
       `Olá! Eu sou ${lead.nome}.`,

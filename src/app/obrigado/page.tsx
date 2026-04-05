@@ -73,7 +73,7 @@ export default function ObrigadoPage() {
 
           {!loading && !erro && (
             <a className="obg-btn" href={linkWhatsApp} target="_blank" rel="noopener noreferrer">
-              Quero desenvolver minha influência no WhatsApp →
+              Quero desenvolver minha {titulo} no WhatsApp →
             </a>
           )}
 
