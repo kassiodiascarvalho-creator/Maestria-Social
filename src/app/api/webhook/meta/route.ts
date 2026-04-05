@@ -4,6 +4,11 @@ import { getConfig } from '@/lib/config'
 import { responderAgenteParaLead } from '@/lib/agente/service'
 import { marcarMensagemComoLida } from '@/lib/meta'
 
+async function isCoexistenciaMode(): Promise<boolean> {
+  const mode = (await getConfig('WHATSAPP_MODE'))?.toLowerCase()
+  return mode === 'coexistencia'
+}
+
 type MetaMessage = Record<string, unknown>
 
 function extrairTextoMensagem(msg: MetaMessage): string | null {
@@ -90,10 +95,13 @@ export async function POST(req: NextRequest) {
       ? (value.metadata as Record<string, string>).phone_number_id
       : undefined
 
+    const coexistencia = await isCoexistenciaMode()
     const maestriaPhoneId = await getConfig('META_PHONE_NUMBER_ID')
     const forwardUrl = await getConfig('META_FORWARD_WEBHOOK_URL')
 
-    if (phoneNumberId && maestriaPhoneId && phoneNumberId !== maestriaPhoneId) {
+    // Em modo coexistência, ignora a verificação de phone_number_id — a mensagem
+    // pode vir encaminhada por outra plataforma com um ID diferente.
+    if (!coexistencia && phoneNumberId && maestriaPhoneId && phoneNumberId !== maestriaPhoneId) {
       if (forwardUrl) {
         fetch(forwardUrl, {
           method: 'POST',
@@ -118,7 +126,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    if (messageId) {
+    // Marca como lida apenas no modo Meta (coexistência não acessa Meta API diretamente)
+    if (!coexistencia && messageId) {
       marcarMensagemComoLida(messageId).catch((err) =>
         console.error('[webhook/meta] erro ao marcar lida:', err)
       )
