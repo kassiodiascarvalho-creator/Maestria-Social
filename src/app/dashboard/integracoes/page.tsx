@@ -41,6 +41,8 @@ const FIELDS_CONFIG = [
     badge: "WhatsApp Business",
     desc: "Credenciais para envio e recebimento de mensagens via WhatsApp Business.",
     fields: [
+      { label: "WHATSAPP_MODE", key: "WHATSAPP_MODE", type: "text", placeholder: "meta ou coexistencia" },
+      { label: "COEXISTENCIA_WEBHOOK_URL", key: "COEXISTENCIA_WEBHOOK_URL", type: "text", placeholder: "Webhook da plataforma coexistente (entrada/saída)" },
       { label: "META_VERIFY_TOKEN", key: "META_VERIFY_TOKEN", type: "text", placeholder: "Token de verificação do webhook" },
       { label: "META_ACCESS_TOKEN", key: "META_ACCESS_TOKEN", type: "password", placeholder: "EAAxx..." },
       { label: "META_PHONE_NUMBER_ID", key: "META_PHONE_NUMBER_ID", type: "text", placeholder: "ID do número do Maestria Social" },

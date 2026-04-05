@@ -5,6 +5,8 @@ import { setConfig, getConfig } from '@/lib/config'
 const ALLOWED_KEYS = [
   'OPENAI_API_KEY',
   'INTEGRACOES_API_KEY',
+  'WHATSAPP_MODE',
+  'COEXISTENCIA_WEBHOOK_URL',
   'META_VERIFY_TOKEN',
   'META_ACCESS_TOKEN',
   'META_PHONE_NUMBER_ID',

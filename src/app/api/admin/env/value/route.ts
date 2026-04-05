@@ -4,6 +4,8 @@ import { getConfig } from '@/lib/config'
 
 const ALLOWED_KEYS = [
   'INTEGRACOES_API_KEY',
+  'WHATSAPP_MODE',
+  'COEXISTENCIA_WEBHOOK_URL',
   'AGENT_SYSTEM_PROMPT',
   'AGENT_TEMPERATURE',
   'AGENT_ATIVO',
