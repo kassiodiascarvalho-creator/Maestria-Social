@@ -69,6 +69,14 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
+    // Acionar agente SDR de forma assíncrona (não bloqueia resposta)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get('host')}`
+    fetch(`${baseUrl}/api/agente/iniciar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_id }),
+    }).catch((e) => console.error('[quiz] Erro ao iniciar agente:', e))
+
     return NextResponse.json({ qs_total, qs_percentual, nivel_qs, pilar_fraco }, { status: 200 })
   } catch (err) {
     console.error('[POST /api/quiz]', err)
