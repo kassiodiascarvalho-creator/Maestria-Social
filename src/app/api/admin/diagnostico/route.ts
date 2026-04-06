@@ -15,6 +15,7 @@ export async function GET() {
     'AGENT_MODEL',
     'OPENAI_API_KEY',
     'COEXISTENCIA_WEBHOOK_URL',
+    'META_FORWARD_WEBHOOK_URL',
   ]
 
   for (const key of keys) {
