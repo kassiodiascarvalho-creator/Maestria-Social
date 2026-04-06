@@ -39,12 +39,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const resultado = await responderAgenteParaLead(lead.id, mensagem, true)
+    // Testa envio direto via Meta API para capturar erro real
+    let erroWhatsApp: string | null = null
+    try {
+      const { enviarMensagemWhatsApp } = await import('@/lib/meta')
+      await enviarMensagemWhatsApp(lead.whatsapp, 'Teste de conectividade — pode ignorar.')
+    } catch (err) {
+      erroWhatsApp = String(err)
+    }
+
+    const resultado = await responderAgenteParaLead(lead.id, mensagem, false)
     return NextResponse.json({
       ok: true,
       lead: { id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp },
       mensagemEnviada: mensagem,
       respostaAgente: resultado.resposta,
+      whatsapp: erroWhatsApp ? { ok: false, erro: erroWhatsApp } : { ok: true },
     })
   } catch (err) {
     return NextResponse.json({ ok: false, erro: String(err) }, { status: 500 })
