@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
   fixes['META_PHONE_NUMBER_ID'] = '1060702587117156'
   await setConfig('COEXISTENCIA_WEBHOOK_URL', '')
   fixes['COEXISTENCIA_WEBHOOK_URL'] = '(removido)'
+  await setConfig('META_FORWARD_WEBHOOK_URL', 'https://wzuunuyrgpwjohfbnglf.supabase.co/functions/v1/whatsapp-webhook')
+  fixes['META_FORWARD_WEBHOOK_URL'] = 'https://wzuunuyrgpwjohfbnglf.supabase.co/functions/v1/whatsapp-webhook'
 
   return NextResponse.json({ ok: true, fixes })
 }
