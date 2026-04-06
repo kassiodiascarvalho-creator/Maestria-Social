@@ -116,12 +116,20 @@ export async function POST(req: NextRequest) {
     // Em modo coexistência, ignora a verificação de phone_number_id — a mensagem
     // pode vir encaminhada por outra plataforma com um ID diferente.
     if (!coexistencia && phoneNumberId && maestriaPhoneId && phoneNumberId !== maestriaPhoneId) {
+      await saveDebug('forward_outro_numero', { phoneNumberId, forwardUrl })
       if (forwardUrl) {
-        fetch(forwardUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }).catch((err) => console.error('[webhook/meta] Erro ao encaminhar:', err))
+        try {
+          // IMPORTANTE: em serverless precisa ser await, senão a função encerra
+          // antes do fetch completar e a mensagem da clínica nunca chega.
+          const res = await fetch(forwardUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          await saveDebug('forward_resultado', { status: res.status, ok: res.ok })
+        } catch (err) {
+          await saveDebug('forward_erro', { erro: String(err) })
+        }
       }
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }

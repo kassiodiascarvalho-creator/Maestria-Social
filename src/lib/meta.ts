@@ -19,9 +19,11 @@ async function getMetaCredenciais() {
 }
 
 async function getCoexistenciaUrl(): Promise<string | null> {
-  const dedicated = await getConfig('COEXISTENCIA_WEBHOOK_URL')
-  if (dedicated) return dedicated
-  return await getConfig('META_FORWARD_WEBHOOK_URL')
+  // IMPORTANTE: apenas COEXISTENCIA_WEBHOOK_URL é usada para ENVIAR mensagens
+  // via parceiro de coexistência. META_FORWARD_WEBHOOK_URL é SÓ para
+  // encaminhar mensagens RECEBIDAS de outro número (ex: clínica), nunca
+  // deve ser usada como destino de envio do Maestria.
+  return await getConfig('COEXISTENCIA_WEBHOOK_URL')
 }
 
 async function enviarViaCoexistencia(payload: Record<string, unknown>): Promise<void> {
