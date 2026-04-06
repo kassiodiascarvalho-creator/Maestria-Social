@@ -41,7 +41,7 @@ function parseAgenteJSON(texto: string): { resposta: string; dados: AgenteJSON }
   }
 }
 
-export async function iniciarAgenteParaLead(leadId: string): Promise<{ ok: boolean; ignorado?: boolean }> {
+export async function iniciarAgenteParaLead(leadId: string, force = false): Promise<{ ok: boolean; ignorado?: boolean; erroWhatsApp?: string }> {
   const supabase = createAdminClient()
   const { data: lead, error: leadError } = await supabase
     .from('leads')
@@ -53,13 +53,20 @@ export async function iniciarAgenteParaLead(leadId: string): Promise<{ ok: boole
     throw new Error('Lead não encontrado')
   }
 
-  const { count } = await supabase
-    .from('conversas')
-    .select('id', { count: 'exact', head: true })
-    .eq('lead_id', leadId)
-
-  if (count && count > 0) {
+  // Verifica se já enviamos mensagem inicial (flag no lead)
+  if (!force && lead.agente_iniciado) {
     return { ok: true, ignorado: true }
+  }
+
+  // Fallback: sem flag, verifica conversas (compatibilidade)
+  if (!force && !lead.agente_iniciado) {
+    const { count } = await supabase
+      .from('conversas')
+      .select('id', { count: 'exact', head: true })
+      .eq('lead_id', leadId)
+    if (count && count > 0) {
+      return { ok: true, ignorado: true }
+    }
   }
 
   const primeiraMsg = buildPrimeiraMsg(lead)
@@ -70,11 +77,20 @@ export async function iniciarAgenteParaLead(leadId: string): Promise<{ ok: boole
     mensagem: primeiraMsg,
   })
 
+  // Marca que o agente foi iniciado para este lead
+  await supabase.from('leads').update({ agente_iniciado: true }).eq('id', leadId)
+
+  let erroWhatsApp: string | undefined
   if (lead.whatsapp) {
-    await enviarMensagemInicialWhatsApp(lead.whatsapp, primeiraMsg)
+    try {
+      await enviarMensagemInicialWhatsApp(lead.whatsapp, primeiraMsg)
+    } catch (err) {
+      erroWhatsApp = String(err)
+      console.error('[agente] Falha ao enviar mensagem inicial via WhatsApp:', err)
+    }
   }
 
-  return { ok: true }
+  return { ok: true, erroWhatsApp }
 }
 
 export async function responderAgenteParaLead(

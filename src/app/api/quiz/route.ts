@@ -81,7 +81,9 @@ export async function POST(req: NextRequest) {
     })
 
     try {
-      await iniciarAgenteParaLead(lead_id)
+      // force=true: sempre envia mensagem inicial ao finalizar quiz,
+      // mesmo que o lead já tenha conversas de sessões anteriores
+      await iniciarAgenteParaLead(lead_id, true)
     } catch (e) {
       console.error('[quiz] erro ao iniciar agente:', e)
     }

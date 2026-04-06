@@ -27,6 +27,7 @@ export type Database = {
           pilar_fraco: string | null
           nivel_qs: NivelQS | null
           status_lead: StatusLead
+          agente_iniciado: boolean
           criado_em: string
           atualizado_em: string
         }
@@ -41,6 +42,7 @@ export type Database = {
           pilar_fraco?: string | null
           nivel_qs?: NivelQS | null
           status_lead?: StatusLead
+          agente_iniciado?: boolean
           criado_em?: string
           atualizado_em?: string
         }
@@ -54,6 +56,7 @@ export type Database = {
           pilar_fraco?: string | null
           nivel_qs?: NivelQS | null
           status_lead?: StatusLead
+          agente_iniciado?: boolean
           atualizado_em?: string
         }
         Relationships: []
