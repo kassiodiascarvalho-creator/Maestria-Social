@@ -48,7 +48,13 @@ async function enviarViaCoexistencia(payload: Record<string, unknown>): Promise<
 
 async function getWhatsAppMode(): Promise<'meta' | 'coexistencia'> {
   const value = (await getConfig('WHATSAPP_MODE'))?.toLowerCase()
-  return value === 'coexistencia' ? 'coexistencia' : 'meta'
+  if (value !== 'coexistencia') return 'meta'
+
+  // Evita loop: se COEXISTENCIA_WEBHOOK_URL aponta para o próprio sistema, usa modo meta
+  const coexUrl = await getCoexistenciaUrl()
+  if (!coexUrl || coexUrl.includes('maestria-social.vercel.app')) return 'meta'
+
+  return 'coexistencia'
 }
 
 async function postMeta(payload: Record<string, unknown>) {

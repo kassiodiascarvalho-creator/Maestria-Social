@@ -12,7 +12,7 @@ export async function getConfig(chave: string): Promise<string | null> {
       .select('valor')
       .eq('chave', chave)
       .single()
-    return data?.valor ?? null
+    return data?.valor?.trim() ?? null
   } catch {
     return null
   }
