@@ -435,6 +435,9 @@ const css = `
   .int-input{flex:1;background:rgba(255,255,255,.04);border:1px solid #2a1f18;border-radius:10px;padding:11px 14px;font-size:14px;color:#fff9e6;font-family:inherit;outline:none;transition:border-color .2s;}
   .int-input::placeholder{color:#4a3e30;}
   .int-input:focus{border-color:rgba(194,144,77,.4);}
+  select.int-input{appearance:none;background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c2904d' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:38px;cursor:pointer;}
+  select.int-input option{background:#1a1410;color:#fff9e6;padding:8px;}
+  select.int-input option:checked{background:#c2904d;color:#0e0f09;}
   .int-save-btn{background:#c2904d;color:#0e0f09;border:none;border-radius:10px;padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap;}
   .int-save-btn:disabled{opacity:.4;cursor:not-allowed;}
   .int-save-btn.saved{background:#6acca0;color:#0e0f09;}

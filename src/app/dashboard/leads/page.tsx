@@ -25,10 +25,15 @@ export default async function LeadsPage({
     .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,criado_em")
     .order("criado_em", { ascending: false });
 
-  if (params.status) query = query.eq("status_lead", params.status as "frio" | "morno" | "quente");
-  if (params.nivel) query = query.eq("nivel_qs", params.nivel as "Negligente" | "Iniciante" | "Intermediário" | "Avançado" | "Mestre");
-  if (params.pilar) query = query.eq("pilar_fraco", params.pilar);
-  if (params.q) query = query.ilike("nome", `%${params.q}%`);
+  const status = params.status?.trim();
+  const nivel = params.nivel?.trim();
+  const pilar = params.pilar?.trim();
+  const q = params.q?.trim();
+
+  if (status) query = query.eq("status_lead", status as "frio" | "morno" | "quente");
+  if (nivel) query = query.eq("nivel_qs", nivel as "Negligente" | "Iniciante" | "Intermediário" | "Avançado" | "Mestre");
+  if (pilar) query = query.eq("pilar_fraco", pilar);
+  if (q) query = query.ilike("nome", `%${q}%`);
 
   const { data: leads } = await query.limit(100);
 
@@ -125,7 +130,9 @@ const css = `
   .filter-input{min-width:200px;}
   .filter-input::placeholder{color:#4a3e30;}
   .filter-input:focus,.filter-select:focus{border-color:rgba(194,144,77,.4);}
-  .filter-select option{background:#1a1410;}
+  .filter-select{appearance:none;background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c2904d' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;cursor:pointer;}
+  .filter-select option{background:#1a1410;color:#fff9e6;padding:8px;}
+  .filter-select option:checked{background:#c2904d;color:#0e0f09;}
   .filter-btn{background:#c2904d;color:#0e0f09;border:none;border-radius:10px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s;}
   .filter-btn:hover{filter:brightness(1.08);}
   .filter-clear{font-size:13px;color:#7a6e5e;text-decoration:none;padding:9px 4px;transition:color .15s;}
