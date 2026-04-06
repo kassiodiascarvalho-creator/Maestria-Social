@@ -65,13 +65,15 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token')
   const challenge = searchParams.get('hub.challenge')
 
-  const verifyToken = await getConfig('META_VERIFY_TOKEN')
+  const verifyToken = (await getConfig('META_VERIFY_TOKEN')) || process.env.META_VERIFY_TOKEN
 
-  if (mode === 'subscribe' && token && token === verifyToken) {
+  console.log('[webhook/meta] GET verify — mode:', mode, 'token match:', token === verifyToken, 'verifyToken set:', !!verifyToken)
+
+  if (mode === 'subscribe' && token && verifyToken && token === verifyToken) {
     return new NextResponse(challenge, { status: 200 })
   }
 
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  return NextResponse.json({ error: 'Forbidden', debug: { mode, tokenReceived: !!token, verifyTokenSet: !!verifyToken } }, { status: 403 })
 }
 
 export async function POST(req: NextRequest) {
