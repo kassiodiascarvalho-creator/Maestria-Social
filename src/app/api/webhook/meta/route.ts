@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getConfig } from '@/lib/config'
+import { getConfig, setConfig } from '@/lib/config'
 import { responderAgenteParaLead } from '@/lib/agente/service'
 import { marcarMensagemComoLida } from '@/lib/meta'
+
+async function saveDebug(etapa: string, detalhes: unknown) {
+  try {
+    const existing = (await getConfig('WEBHOOK_DEBUG_LOG')) || '[]'
+    const arr = JSON.parse(existing) as unknown[]
+    arr.push({ ts: new Date().toISOString(), etapa, detalhes })
+    const last20 = arr.slice(-20)
+    await setConfig('WEBHOOK_DEBUG_LOG', JSON.stringify(last20))
+  } catch {}
+}
 
 async function isCoexistenciaMode(): Promise<boolean> {
   const mode = (await getConfig('WHATSAPP_MODE'))?.toLowerCase()
@@ -84,6 +94,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   }
 
+  await saveDebug('webhook_recebido', body)
+
   try {
     const entry = (body as Record<string, unknown>)?.entry as Record<string, unknown>[] | undefined
     const changes = entry?.[0]?.changes as Record<string, unknown>[] | undefined
@@ -137,13 +149,18 @@ export async function POST(req: NextRequest) {
 
     const lead = await buscarLeadPorTelefone(from)
     if (!lead) {
-      console.warn('[webhook/meta] Lead não encontrado para WhatsApp:', from, '— o número precisa estar cadastrado na tabela leads com o campo whatsapp preenchido')
+      await saveDebug('lead_nao_encontrado', { from, texto })
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    console.log('[webhook/meta] Mensagem recebida de lead', lead.id, '— disparando agente')
-    await responderAgenteParaLead(lead.id, texto, true)
-    console.log('[webhook/meta] Agente processou mensagem de lead', lead.id)
+    await saveDebug('disparando_agente', { leadId: lead.id, texto })
+    try {
+      const result = await responderAgenteParaLead(lead.id, texto, true)
+      await saveDebug('agente_respondeu', { leadId: lead.id, resposta: result.resposta })
+    } catch (agenteErr) {
+      await saveDebug('agente_erro', { leadId: lead.id, erro: String(agenteErr) })
+      throw agenteErr
+    }
     return NextResponse.json({ status: 'ok' }, { status: 200 })
   } catch (err) {
     console.error('[POST /api/webhook/meta]', err)
