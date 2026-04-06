@@ -3,7 +3,7 @@ import { createAdminClient } from './supabase/admin'
 // Busca uma config: primeiro tenta process.env, depois a tabela configuracoes
 export async function getConfig(chave: string): Promise<string | null> {
   const fromEnv = process.env[chave]
-  if (fromEnv) return fromEnv
+  if (fromEnv) return fromEnv.trim()
 
   try {
     const supabase = createAdminClient()
