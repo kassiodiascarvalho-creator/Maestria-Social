@@ -46,11 +46,37 @@ function normalizarTelefone(raw: string): { full: string; short: string } {
   return { full, short }
 }
 
+// Gera variações com e sem o 9º dígito (números BR celular: DDD + 8 ou 9 dígitos)
+function variacoesTelefone(raw: string): string[] {
+  const { full, short } = normalizarTelefone(raw)
+  const variações = new Set([full, short, raw])
+
+  // short tem DDD (2 dígitos) + número local
+  // Se número local tem 8 dígitos → adiciona variação com 9 na frente (sem 55 e com 55)
+  // Se número local tem 9 dígitos → adiciona variação sem o 9 (sem 55 e com 55)
+  if (short.length === 10) {
+    // 2 DDD + 8 local → adiciona 9 após DDD
+    const ddd = short.slice(0, 2)
+    const local = short.slice(2)
+    const com9 = `${ddd}9${local}`
+    variações.add(com9)
+    variações.add(`55${com9}`)
+  } else if (short.length === 11) {
+    // 2 DDD + 9 + 8 local → remove 9 após DDD
+    const ddd = short.slice(0, 2)
+    const local = short.slice(3) // pula o 9
+    const sem9 = `${ddd}${local}`
+    variações.add(sem9)
+    variações.add(`55${sem9}`)
+  }
+
+  return Array.from(variações).filter(Boolean)
+}
+
 async function buscarLeadPorTelefone(raw: string): Promise<{ id: string } | null> {
   const supabase = createAdminClient()
-  const { full, short } = normalizarTelefone(raw)
+  const tentativas = variacoesTelefone(raw)
 
-  const tentativas = [full, short, raw].filter(Boolean)
   for (const t of tentativas) {
     const { data } = await supabase
       .from('leads')
@@ -60,6 +86,8 @@ async function buscarLeadPorTelefone(raw: string): Promise<{ id: string } | null
     if (data) return data
   }
 
+  // Fallback por ILIKE com os dois formatos principais
+  const { full, short } = normalizarTelefone(raw)
   const { data: fallback } = await supabase
     .from('leads')
     .select('id')
