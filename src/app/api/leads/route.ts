@@ -10,7 +10,7 @@ function sanitizeWhatsApp(raw: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { nome, email, whatsapp } = body
+    const { nome, email, whatsapp, instagram, profissao, renda_mensal } = body
 
     if (!nome?.trim() || !email?.trim() || !whatsapp?.trim()) {
       return NextResponse.json(
@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
         email: email.trim().toLowerCase(),
         whatsapp: sanitizeWhatsApp(whatsapp),
         status_lead: 'frio',
+        instagram: instagram?.trim() || null,
+        profissao: profissao?.trim() || null,
+        renda_mensal: renda_mensal?.trim() || null,
       })
       .select('id')
       .single()

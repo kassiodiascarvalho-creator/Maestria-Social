@@ -251,6 +251,14 @@ const css = `
 
   .ms-privacy { font-size: 11px; color: var(--ms-muted); text-align: center; margin-top: 12px; letter-spacing: .3px; }
 
+  .ms-select {
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a6e5e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 40px; cursor: pointer;
+  }
+  .ms-select option { background: #1a1410; color: #fff9e6; }
+
   .ms-trust {
     display: flex; align-items: center; justify-content: center;
     gap: 20px; margin-top: 24px; padding-top: 24px;

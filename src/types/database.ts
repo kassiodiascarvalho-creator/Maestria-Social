@@ -28,6 +28,9 @@ export type Database = {
           nivel_qs: NivelQS | null
           status_lead: StatusLead
           agente_iniciado: boolean
+          instagram: string | null
+          profissao: string | null
+          renda_mensal: string | null
           criado_em: string
           atualizado_em: string
         }
@@ -43,6 +46,9 @@ export type Database = {
           nivel_qs?: NivelQS | null
           status_lead?: StatusLead
           agente_iniciado?: boolean
+          instagram?: string | null
+          profissao?: string | null
+          renda_mensal?: string | null
           criado_em?: string
           atualizado_em?: string
         }
@@ -57,6 +63,9 @@ export type Database = {
           nivel_qs?: NivelQS | null
           status_lead?: StatusLead
           agente_iniciado?: boolean
+          instagram?: string | null
+          profissao?: string | null
+          renda_mensal?: string | null
           atualizado_em?: string
         }
         Relationships: []

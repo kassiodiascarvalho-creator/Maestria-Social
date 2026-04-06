@@ -9,7 +9,7 @@ export default function CapturaForm() {
   const whatsappRef = useRef<HTMLInputElement>(null);
   const maskRef = useRef<InstanceType<typeof IMask.InputMask> | null>(null);
 
-  const [fields, setFields] = useState({ nome: "", email: "", whatsapp: "" });
+  const [fields, setFields] = useState({ nome: "", email: "", whatsapp: "", instagram: "", profissao: "", renda_mensal: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
@@ -48,7 +48,14 @@ export default function CapturaForm() {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
+        body: JSON.stringify({
+          nome: fields.nome,
+          email: fields.email,
+          whatsapp: fields.whatsapp,
+          instagram: fields.instagram || null,
+          profissao: fields.profissao || null,
+          renda_mensal: fields.renda_mensal || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok && !data.id) throw new Error(data.error || "Erro ao salvar");
@@ -106,6 +113,47 @@ export default function CapturaForm() {
             autoComplete="tel"
           />
           {errors.whatsapp && <span className="ms-error">{errors.whatsapp}</span>}
+        </div>
+
+        {/* Instagram */}
+        <div className="ms-field">
+          <label className="ms-label">Instagram</label>
+          <input
+            className="ms-input"
+            type="text"
+            placeholder="@seuperfil"
+            value={fields.instagram}
+            onChange={(e) => setFields((p) => ({ ...p, instagram: e.target.value }))}
+          />
+        </div>
+
+        {/* Profissão */}
+        <div className="ms-field">
+          <label className="ms-label">Profissão</label>
+          <input
+            className="ms-input"
+            type="text"
+            placeholder="Ex: Empresário, Médico, Coach…"
+            value={fields.profissao}
+            onChange={(e) => setFields((p) => ({ ...p, profissao: e.target.value }))}
+          />
+        </div>
+
+        {/* Renda Mensal */}
+        <div className="ms-field">
+          <label className="ms-label">Renda Mensal</label>
+          <select
+            className="ms-input ms-select"
+            value={fields.renda_mensal}
+            onChange={(e) => setFields((p) => ({ ...p, renda_mensal: e.target.value }))}
+          >
+            <option value="">Selecione sua faixa de renda</option>
+            <option value="Até R$ 3.000">Até R$ 3.000</option>
+            <option value="R$ 3.000 – R$ 7.000">R$ 3.000 – R$ 7.000</option>
+            <option value="R$ 7.000 – R$ 15.000">R$ 7.000 – R$ 15.000</option>
+            <option value="R$ 15.000 – R$ 30.000">R$ 15.000 – R$ 30.000</option>
+            <option value="Acima de R$ 30.000">Acima de R$ 30.000</option>
+          </select>
         </div>
       </div>
 
