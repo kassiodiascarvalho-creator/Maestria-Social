@@ -148,6 +148,39 @@ export type Database = {
         }
         Relationships: []
       }
+      tarefas_agendadas: {
+        Row: {
+          id: string
+          lead_id: string | null
+          tipo: 'whatsapp_msg' | 'email' | 'recuperacao_quiz'
+          payload: Record<string, unknown>
+          agendado_para: string
+          status: 'pendente' | 'enviada' | 'erro' | 'cancelada'
+          tentativas: number
+          ultimo_erro: string | null
+          criado_em: string
+          processado_em: string | null
+        }
+        Insert: {
+          id?: string
+          lead_id?: string | null
+          tipo: 'whatsapp_msg' | 'email' | 'recuperacao_quiz'
+          payload?: Record<string, unknown>
+          agendado_para: string
+          status?: 'pendente' | 'enviada' | 'erro' | 'cancelada'
+          tentativas?: number
+          ultimo_erro?: string | null
+          criado_em?: string
+          processado_em?: string | null
+        }
+        Update: {
+          status?: 'pendente' | 'enviada' | 'erro' | 'cancelada'
+          tentativas?: number
+          ultimo_erro?: string | null
+          processado_em?: string | null
+        }
+        Relationships: []
+      }
       webhook_configs: {
         Row: {
           id: string

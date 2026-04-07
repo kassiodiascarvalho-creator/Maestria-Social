@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dispararWebhookSaida } from '@/lib/webhooks'
+import { agendarTarefa, emMinutos } from '@/lib/tarefas/agendar'
 
 // Mascara WhatsApp: remove tudo que não é número
 function sanitizeWhatsApp(raw: string): string {
@@ -56,6 +57,18 @@ export async function POST(req: NextRequest) {
         }
       }
       throw error
+    }
+
+    // Ação 2a: agendar recuperação de quiz abandonado em 15 min
+    try {
+      await agendarTarefa({
+        lead_id: data.id,
+        tipo: 'recuperacao_quiz',
+        payload: {},
+        agendado_para: emMinutos(15),
+      })
+    } catch (e) {
+      console.error('[leads] erro ao agendar recuperação:', e)
     }
 
     await dispararWebhookSaida('novo_lead', {

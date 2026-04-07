@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { iniciarAgenteParaLead } from '@/lib/agente/service'
 import { dispararWebhookSaida } from '@/lib/webhooks'
+import { agendarVarias, emDias, emMinutos } from '@/lib/tarefas/agendar'
 import type { ScoresPilares, NivelQS } from '@/types/database'
 
 const PILARES = ['A', 'B', 'C', 'D', 'E'] as const
@@ -86,6 +87,53 @@ export async function POST(req: NextRequest) {
       await iniciarAgenteParaLead(lead_id, true)
     } catch (e) {
       console.error('[quiz] erro ao iniciar agente:', e)
+    }
+
+    // Cancela qualquer recuperação de quiz pendente (lead concluiu)
+    try {
+      await supabase
+        .from('tarefas_agendadas')
+        .update({ status: 'cancelada' })
+        .eq('lead_id', lead_id)
+        .eq('tipo', 'recuperacao_quiz')
+        .eq('status', 'pendente')
+    } catch (e) {
+      console.error('[quiz] erro ao cancelar recuperação:', e)
+    }
+
+    // Ações 3 + 5: agenda funil de emails (D+0..D+7) e follow-ups WhatsApp (D+1, D+3, D+7)
+    try {
+      const followupWpp = (dia: number) =>
+        `Oi ${pilar_fraco ? '' : ''}— passou ${dia} ${dia === 1 ? 'dia' : 'dias'} desde seu diagnóstico. Quero te mandar um próximo passo prático sobre ${pilar_fraco}. Posso?`
+      await agendarVarias([
+        // Emails
+        { lead_id, tipo: 'email', payload: { template: 'dia_0' }, agendado_para: emMinutos(2) },
+        { lead_id, tipo: 'email', payload: { template: 'dia_1' }, agendado_para: emDias(1) },
+        { lead_id, tipo: 'email', payload: { template: 'dia_3' }, agendado_para: emDias(3) },
+        { lead_id, tipo: 'email', payload: { template: 'dia_5' }, agendado_para: emDias(5) },
+        { lead_id, tipo: 'email', payload: { template: 'dia_7' }, agendado_para: emDias(7) },
+        // Follow-ups WhatsApp
+        {
+          lead_id,
+          tipo: 'whatsapp_msg',
+          payload: { texto: followupWpp(1) },
+          agendado_para: emDias(1),
+        },
+        {
+          lead_id,
+          tipo: 'whatsapp_msg',
+          payload: { texto: followupWpp(3) },
+          agendado_para: emDias(3),
+        },
+        {
+          lead_id,
+          tipo: 'whatsapp_msg',
+          payload: { texto: followupWpp(7) },
+          agendado_para: emDias(7),
+        },
+      ])
+    } catch (e) {
+      console.error('[quiz] erro ao agendar funil:', e)
     }
 
     return NextResponse.json({ qs_total, qs_percentual, nivel_qs, pilar_fraco }, { status: 200 })
