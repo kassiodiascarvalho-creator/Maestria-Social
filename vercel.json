@@ -1,0 +1,6 @@
+{
+  "name": "maestria-social",
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "outputDirectory": ".next"
+}
