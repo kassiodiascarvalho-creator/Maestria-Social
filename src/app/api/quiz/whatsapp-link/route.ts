@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const supabase = createAdminClient()
     const { data: lead, error } = await supabase
       .from('leads')
-      .select('nome,qs_total,qs_percentual,nivel_qs,pilar_fraco')
+      .select('nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores')
       .eq('id', lead_id)
       .single()
 
@@ -28,11 +28,23 @@ export async function POST(req: NextRequest) {
 
     const numeroDestino = (await getConfig('META_WHATSAPP_NUMBER')) || '5533984522635'
 
+    // Calcula % do pilar fraco (score do pilar / 50 * 100)
+    const NOME_PARA_KEY: Record<string, string> = {
+      Sociabilidade: 'A',
+      Comunicação: 'B',
+      Relacionamento: 'C',
+      Persuasão: 'D',
+      Influência: 'E',
+    }
+    const scores = (lead.scores ?? {}) as Record<string, number>
+    const keyPilar = NOME_PARA_KEY[lead.pilar_fraco ?? ''] ?? 'B'
+    const scorePilar = scores[keyPilar] ?? 0
+    const percentualPilar = Math.round((scorePilar / 50) * 100)
+
     const texto = [
-      `Olá! Eu sou ${lead.nome}.`,
-      `Meu resultado no Quociente Social foi ${lead.qs_total ?? 0}/250 (${lead.qs_percentual ?? 0}%), nível ${lead.nivel_qs ?? 'N/A'}.`,
-      `Meu pilar com maior oportunidade de desenvolvimento é ${lead.pilar_fraco ?? 'Comunicação'}.`,
-      'Quero desenvolver minha influência e receber meu próximo passo.',
+      `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_total ?? 0}/250 — ${lead.nivel_qs ?? 'N/A'}.`,
+      `Meu pilar mais fraco é ${lead.pilar_fraco ?? 'Comunicação'} com ${percentualPilar}%.`,
+      'Quero entender meu próximo passo.',
     ].join(' ')
 
     const link = `https://wa.me/${normalizarTelefone(numeroDestino)}?text=${encodeURIComponent(texto)}`

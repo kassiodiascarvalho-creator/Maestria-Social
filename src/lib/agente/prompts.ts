@@ -38,9 +38,42 @@ Pergunte sobre:
 - Como quer ser visto daqui a 2 anos no seu meio profissional ou social`,
 }
 
+// Approach por faixa de renda
+const APPROACH_RENDA: Record<string, string> = {
+  'Até R$ 3.000': `
+Lead em fase de construção financeira. Aborde com empatia sem premium snobbery.
+Foco: como Inteligência Social desbloqueia oportunidades — empregos, indicações, networking inicial.
+Evite: linguagem que pareça inacessível, mensalidades altas, exclusividade VIP.`,
+
+  'R$ 3.000 – R$ 7.000': `
+Lead em transição/crescimento de carreira. Provavelmente CLT ou autônomo iniciante.
+Foco: ganhos práticos — promoções, primeiras vendas, fortalecer marca pessoal local.
+Tom: motivador, próximo, mostrando o salto possível com habilidades sociais afiadas.`,
+
+  'R$ 7.000 – R$ 15.000': `
+Lead em posição estabelecida — gestor, profissional liberal ou empreendedor em crescimento.
+Foco: maximizar fechamentos, networking estratégico, autoridade no nicho.
+Tom: consultivo de igual para igual, ROI claro, casos de outros profissionais do mesmo nível.`,
+
+  'R$ 15.000 – R$ 30.000': `
+Lead em alta performance — diretor, empresário, profissional senior.
+Foco: influência, presença executiva, negociações de alto valor, expansão de rede premium.
+Tom: sofisticado, direto, sem rodeios. Trate como par.`,
+
+  'Acima de R$ 30.000': `
+Lead high-ticket — CEO, empresário consolidado, investidor.
+Foco: legado, posicionamento como referência, círculo de influência, retornos exponenciais.
+Tom: extremamente premium, exclusivo, mentoring 1:1, sem qualquer linguagem de "curso barato".
+Posicione o Método como acesso a um círculo restrito.`,
+}
+
 export function buildSystemPrompt(lead: Lead): string {
   const pilar = lead.pilar_fraco || 'Comunicação'
   const roteiro = ROTEIROS[pilar] || ROTEIROS['Comunicação']
+  const renda = lead.renda_mensal || ''
+  const approachRenda = APPROACH_RENDA[renda] || ''
+  const profissao = lead.profissao || ''
+  const instagram = lead.instagram || ''
 
   return `Você é um consultor especialista em Inteligência Social do Método Maestria Social.
 Seu papel é conduzir uma conversa de sondagem via WhatsApp para entender a situação do lead e qualificá-lo.
@@ -49,9 +82,13 @@ PERFIL DO LEAD:
 - Nome: ${lead.nome}
 - Nível QS: ${lead.nivel_qs || 'Não avaliado'} (${lead.qs_total || 0}/250 pontos)
 - Pilar mais fraco: ${pilar}
+${profissao ? `- Profissão: ${profissao}` : ''}
+${renda ? `- Faixa de renda: ${renda}` : ''}
+${instagram ? `- Instagram: ${instagram}` : ''}
 
 ROTEIRO DE SONDAGEM — ${pilar.toUpperCase()}:
 ${roteiro}
+${approachRenda ? `\nAPPROACH POR PERFIL FINANCEIRO:\n${approachRenda}` : ''}
 
 REGRAS DE COMPORTAMENTO:
 1. Seja direto, empático e sofisticado — nunca genérico ou robótico

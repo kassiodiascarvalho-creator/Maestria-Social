@@ -15,10 +15,13 @@ export default function ObrigadoPage() {
   const [erro, setErro] = useState("");
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
   const [resumo, setResumo] = useState<QuizResumo>({});
+  const [leadId, setLeadId] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     async function load() {
       const leadId = sessionStorage.getItem("lead_id");
+      setLeadId(leadId);
       const quizRaw = sessionStorage.getItem("quiz_result");
       if (quizRaw) {
         try {
@@ -55,6 +58,25 @@ export default function ObrigadoPage() {
 
   const titulo = useMemo(() => resumo.pilarFraco || "influência", [resumo.pilarFraco]);
 
+  const linkPublico = leadId ? `${typeof window !== "undefined" ? window.location.origin : ""}/resultado/${leadId}` : "";
+  const imagemUrl = leadId ? `/api/og/resultado/${leadId}` : "";
+
+  async function compartilhar() {
+    if (!linkPublico) return;
+    const texto = `Meu Quociente Social: ${resumo.total ?? 0}/250 — ${resumo.nivel ?? ""}. Faça você também:`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Meu Quociente Social", text: texto, url: linkPublico });
+        return;
+      } catch {
+        // fallback abaixo
+      }
+    }
+    await navigator.clipboard.writeText(`${texto} ${linkPublico}`);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2500);
+  }
+
   return (
     <>
       <style>{css}</style>
@@ -77,6 +99,20 @@ export default function ObrigadoPage() {
             </a>
           )}
 
+          {!loading && leadId && (
+            <div className="obg-actions">
+              <a className="obg-action" href={imagemUrl} download={`maestria-social-resultado.png`}>
+                ↓ Salvar resultado
+              </a>
+              <button className="obg-action" onClick={compartilhar} type="button">
+                {copiado ? "✓ Link copiado!" : "↗ Compartilhar"}
+              </button>
+              <a className="obg-action" href={`/resultado/${leadId}`} target="_blank" rel="noopener noreferrer">
+                ◉ Ver página pública
+              </a>
+            </div>
+          )}
+
           <div className="obg-links">
             <Link href="/quiz">Refazer diagnóstico</Link>
             <Link href="/">Voltar para início</Link>
@@ -96,6 +132,9 @@ const css = `
   .obg-muted{font-size:14px;color:#7a6e5e;}
   .obg-error{font-size:14px;color:#e05840;}
   .obg-btn{display:inline-block;margin-top:8px;background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;text-decoration:none;font-weight:700;font-size:15px;padding:14px 24px;border-radius:12px;}
+  .obg-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
+  .obg-action{flex:1;min-width:140px;background:rgba(194,144,77,.06);border:1px solid rgba(194,144,77,.2);color:#c2904d;text-decoration:none;font-size:13px;font-weight:600;padding:11px 14px;border-radius:10px;text-align:center;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;}
+  .obg-action:hover{background:rgba(194,144,77,.12);border-color:rgba(194,144,77,.4);}
   .obg-links{display:flex;gap:16px;margin-top:20px;flex-wrap:wrap;}
   .obg-links a{font-size:13px;color:#7a6e5e;text-decoration:none;}
   .obg-links a:hover{color:#c2904d;}
