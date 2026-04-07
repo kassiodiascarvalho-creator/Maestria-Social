@@ -3,7 +3,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { dispararWebhookSaida } from '@/lib/webhooks'
 import { agendarTarefa, emMinutos } from '@/lib/tarefas/agendar'
 
-// Mascara WhatsApp: remove tudo que não é número
 function sanitizeWhatsApp(raw: string): string {
   return raw.replace(/\D/g, '')
 }
@@ -20,22 +19,56 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validação básica de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       return NextResponse.json({ error: 'Email inválido' }, { status: 400 })
     }
 
     const supabase = createAdminClient()
+    const emailNorm = email.trim().toLowerCase()
+    const wppNorm = sanitizeWhatsApp(whatsapp)
 
-    console.log('[leads] tentativa de insert:', { nome, email, whatsapp: sanitizeWhatsApp(whatsapp), instagram, profissao, renda_mensal })
+    // Busca lead existente por email OU whatsapp (evita duplicata + permite retorno)
+    const { data: existing } = await supabase
+      .from('leads')
+      .select('id, qs_total')
+      .or(`email.eq.${emailNorm},whatsapp.eq.${wppNorm}`)
+      .limit(1)
+      .maybeSingle()
 
+    if (existing) {
+      // Atualiza os campos — só sobrescreve campos que o usuário preencheu
+      const updates: Record<string, string | null> = { nome: nome.trim() }
+      if (instagram?.trim()) updates.instagram = instagram.trim()
+      if (profissao?.trim()) updates.profissao = profissao.trim()
+      if (renda_mensal?.trim()) updates.renda_mensal = renda_mensal.trim()
+
+      await supabase.from('leads').update(updates).eq('id', existing.id)
+
+      // Agenda recuperação de quiz se ainda não finalizou
+      if (!existing.qs_total) {
+        try {
+          await agendarTarefa({
+            lead_id: existing.id,
+            tipo: 'recuperacao_quiz',
+            payload: {},
+            agendado_para: emMinutos(15),
+          })
+        } catch (e) {
+          console.error('[leads] erro ao agendar recuperação (existente):', e)
+        }
+      }
+
+      return NextResponse.json({ id: existing.id, existing: true }, { status: 200 })
+    }
+
+    // Lead novo
     const { data, error } = await supabase
       .from('leads')
       .insert({
         nome: nome.trim(),
-        email: email.trim().toLowerCase(),
-        whatsapp: sanitizeWhatsApp(whatsapp),
+        email: emailNorm,
+        whatsapp: wppNorm,
         status_lead: 'frio',
         instagram: instagram?.trim() || null,
         profissao: profissao?.trim() || null,
@@ -44,50 +77,9 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single()
 
-    console.log('[leads] resultado do insert:', { data, error })
+    if (error) throw error
 
-    if (error) {
-      console.log('[leads] erro detectado, code:', error.code, 'message:', error.message)
-
-      // Email ou WhatsApp já cadastrado — atualiza os dados do lead existente
-      if (error.code === '23505') {
-        const { data: existing, error: findError } = await supabase
-          .from('leads')
-          .select('id')
-          .eq('email', email.trim().toLowerCase())
-          .single()
-
-        console.log('[leads] lead existente encontrado:', { existing, findError })
-
-        if (existing) {
-          // Atualiza os campos do lead existente
-          const { data: updatedData, error: updateError } = await supabase
-            .from('leads')
-            .update({
-              nome: nome.trim(),
-              instagram: instagram?.trim() || null,
-              profissao: profissao?.trim() || null,
-              renda_mensal: renda_mensal?.trim() || null,
-            })
-            .eq('id', existing.id)
-            .select('id')
-            .single()
-
-          if (updateError) {
-            console.error('[leads] erro ao atualizar lead existente:', updateError)
-            throw updateError
-          }
-
-          console.log('[leads] lead atualizado com sucesso:', updatedData)
-          return NextResponse.json({ id: existing.id, existing: true }, { status: 200 })
-        }
-      }
-      throw error
-    }
-
-    console.log('[leads] novo lead criado com sucesso:', data.id)
-
-    // Ação 2a: agendar recuperação de quiz abandonado em 15 min
+    // Ação 2a: agenda recuperação de quiz em 15 min
     try {
       await agendarTarefa({
         lead_id: data.id,
@@ -102,8 +94,8 @@ export async function POST(req: NextRequest) {
     await dispararWebhookSaida('novo_lead', {
       lead_id: data.id,
       nome: nome.trim(),
-      email: email.trim().toLowerCase(),
-      whatsapp: sanitizeWhatsApp(whatsapp),
+      email: emailNorm,
+      whatsapp: wppNorm,
     })
 
     return NextResponse.json({ id: data.id }, { status: 201 })
