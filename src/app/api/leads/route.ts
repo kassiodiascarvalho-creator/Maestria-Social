@@ -43,9 +43,8 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      // Email ou WhatsApp já cadastrado
+      // Email ou WhatsApp já cadastrado — atualiza os dados do lead existente
       if (error.code === '23505') {
-        // Busca o lead existente para redirecionar ao quiz
         const { data: existing } = await supabase
           .from('leads')
           .select('id')
@@ -53,6 +52,21 @@ export async function POST(req: NextRequest) {
           .single()
 
         if (existing) {
+          // Atualiza os campos do lead existente
+          const { error: updateError } = await supabase
+            .from('leads')
+            .update({
+              nome: nome.trim(),
+              instagram: instagram?.trim() || null,
+              profissao: profissao?.trim() || null,
+              renda_mensal: renda_mensal?.trim() || null,
+            })
+            .eq('id', existing.id)
+
+          if (updateError) {
+            console.error('[leads] erro ao atualizar lead existente:', updateError)
+          }
+
           return NextResponse.json({ id: existing.id, existing: true }, { status: 200 })
         }
       }
