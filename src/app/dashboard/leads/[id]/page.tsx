@@ -37,7 +37,23 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             <div className="lead-avatar-lg">{lead.nome.charAt(0).toUpperCase()}</div>
             <div>
               <h1 className="lead-name">{lead.nome}</h1>
-              <p className="lead-contact">{lead.email} · {lead.whatsapp}</p>
+              <div className="lead-contact-row">
+                <span className="lead-contact-item">{lead.email}</span>
+                <span className="lead-contact-sep">·</span>
+                <span className="lead-contact-item">{lead.whatsapp}</span>
+                {lead.instagram && <>
+                  <span className="lead-contact-sep">·</span>
+                  <span className="lead-contact-item lead-instagram">@{lead.instagram.replace(/^@/, '')}</span>
+                </>}
+                {lead.profissao && <>
+                  <span className="lead-contact-sep">·</span>
+                  <span className="lead-contact-item">{lead.profissao}</span>
+                </>}
+                {lead.renda_mensal && <>
+                  <span className="lead-contact-sep">·</span>
+                  <span className="lead-contact-item lead-renda">{lead.renda_mensal}</span>
+                </>}
+              </div>
             </div>
           </div>
           <span className="lead-status" style={{ color: STATUS_COLOR[lead.status_lead] }}>
@@ -139,6 +155,11 @@ const css = `
   .lead-name{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:700;color:#fff9e6;}
   .lead-contact{font-size:13px;color:#7a6e5e;margin-top:4px;}
   .lead-status{font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:capitalize;}
+  .lead-contact-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px 0;margin-top:4px;}
+  .lead-contact-item{font-size:13px;color:#7a6e5e;}
+  .lead-contact-sep{font-size:13px;color:#4a3e30;margin:0 6px;}
+  .lead-instagram{color:#9b8ec4;}
+  .lead-renda{color:#7a9e7a;}
   .lead-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   .lead-col{display:flex;flex-direction:column;gap:20px;}
   .lead-card{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:24px;}
@@ -212,5 +233,10 @@ const css = `
   /* Erro */
   .chat-erro{font-size:12px;color:#e07070;background:rgba(224,112,112,.06);border:1px solid rgba(224,112,112,.15);border-radius:8px;padding:8px 12px;}
 
-  @media(max-width:768px){.lead-grid{grid-template-columns:1fr;}.lead-page{padding:20px;}}
+  @media(max-width:768px){
+    .lead-grid{grid-template-columns:1fr;}
+    .lead-page{padding:20px;}
+    .lead-contact-row{flex-direction:column;align-items:flex-start;gap:3px;}
+    .lead-contact-sep{display:none;}
+  }
 `;
