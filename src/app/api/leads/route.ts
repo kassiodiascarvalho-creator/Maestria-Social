@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient()
 
+    console.log('[leads] tentativa de insert:', { nome, email, whatsapp: sanitizeWhatsApp(whatsapp), instagram, profissao, renda_mensal })
+
     const { data, error } = await supabase
       .from('leads')
       .insert({
@@ -42,18 +44,24 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single()
 
+    console.log('[leads] resultado do insert:', { data, error })
+
     if (error) {
+      console.log('[leads] erro detectado, code:', error.code, 'message:', error.message)
+
       // Email ou WhatsApp já cadastrado — atualiza os dados do lead existente
       if (error.code === '23505') {
-        const { data: existing } = await supabase
+        const { data: existing, error: findError } = await supabase
           .from('leads')
           .select('id')
           .eq('email', email.trim().toLowerCase())
           .single()
 
+        console.log('[leads] lead existente encontrado:', { existing, findError })
+
         if (existing) {
           // Atualiza os campos do lead existente
-          const { error: updateError } = await supabase
+          const { data: updatedData, error: updateError } = await supabase
             .from('leads')
             .update({
               nome: nome.trim(),
@@ -62,16 +70,22 @@ export async function POST(req: NextRequest) {
               renda_mensal: renda_mensal?.trim() || null,
             })
             .eq('id', existing.id)
+            .select('id')
+            .single()
 
           if (updateError) {
             console.error('[leads] erro ao atualizar lead existente:', updateError)
+            throw updateError
           }
 
+          console.log('[leads] lead atualizado com sucesso:', updatedData)
           return NextResponse.json({ id: existing.id, existing: true }, { status: 200 })
         }
       }
       throw error
     }
+
+    console.log('[leads] novo lead criado com sucesso:', data.id)
 
     // Ação 2a: agendar recuperação de quiz abandonado em 15 min
     try {
