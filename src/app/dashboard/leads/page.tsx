@@ -15,24 +15,26 @@ const STATUS_EMOJI: Record<string, string> = {
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; pilar?: string; nivel?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; pilar?: string; nivel?: string; renda?: string; q?: string }>;
 }) {
   const params = await searchParams;
   const supabase = createAdminClient();
 
   let query = supabase
     .from("leads")
-    .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,criado_em")
+    .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,renda_mensal,criado_em")
     .order("criado_em", { ascending: false });
 
   const status = params.status?.trim();
   const nivel = params.nivel?.trim();
   const pilar = params.pilar?.trim();
+  const renda = params.renda?.trim();
   const q = params.q?.trim();
 
   if (status) query = query.eq("status_lead", status as "frio" | "morno" | "quente");
   if (nivel) query = query.eq("nivel_qs", nivel as "Negligente" | "Iniciante" | "Intermediário" | "Avançado" | "Mestre");
   if (pilar) query = query.eq("pilar_fraco", pilar);
+  if (renda) query = query.eq("renda_mensal", renda);
   if (q) query = query.ilike("nome", `%${q}%`);
 
   const { data: leads } = await query.limit(100);
@@ -65,6 +67,12 @@ export default async function LeadsPage({
             <option value="">Todos os pilares</option>
             {["Sociabilidade","Comunicação","Relacionamento","Persuasão","Influência"].map(p => (
               <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <select className="filter-select" name="renda" defaultValue={params.renda ?? ""}>
+            <option value="">Todas as rendas</option>
+            {["Até R$ 3.000","R$ 3.000 – R$ 7.000","R$ 7.000 – R$ 15.000","R$ 15.000 – R$ 30.000","Acima de R$ 30.000"].map(r => (
+              <option key={r} value={r}>{r}</option>
             ))}
           </select>
           <button className="filter-btn" type="submit">Filtrar</button>
