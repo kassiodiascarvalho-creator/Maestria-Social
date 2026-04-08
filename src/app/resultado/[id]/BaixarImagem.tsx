@@ -2,24 +2,10 @@
 
 import { useState } from "react";
 
-async function fetchJpg(url: string): Promise<Blob> {
+async function fetchBlob(url: string): Promise<Blob> {
   const res = await fetch(url);
-  const blob = await res.blob();
-  const imgUrl = URL.createObjectURL(blob);
-  const img = new Image();
-  img.src = imgUrl;
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("Falha ao carregar imagem"));
-  });
-  URL.revokeObjectURL(imgUrl);
-  const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 630;
-  canvas.getContext("2d")!.drawImage(img, 0, 0, 1200, 630);
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => b ? resolve(b) : reject(new Error("Falha ao gerar JPG")), "image/jpeg", 0.95);
-  });
+  if (!res.ok) throw new Error(`Erro ${res.status}`);
+  return res.blob();
 }
 
 export default function BaixarImagem({ url, nome }: { url: string; nome: string }) {
@@ -30,7 +16,7 @@ export default function BaixarImagem({ url, nome }: { url: string; nome: string 
     if (baixando) return;
     setBaixando(true);
     try {
-      const jpg = await fetchJpg(url);
+      const jpg = await fetchBlob(url);
       const objectUrl = URL.createObjectURL(jpg);
       const a = document.createElement("a");
       a.href = objectUrl;
@@ -46,7 +32,7 @@ export default function BaixarImagem({ url, nome }: { url: string; nome: string 
     if (compartilhando) return;
     setCompartilhando(true);
     try {
-      const jpg = await fetchJpg(url);
+      const jpg = await fetchBlob(url);
       const file = new File([jpg], `maestria-social-${nome}.jpg`, { type: "image/jpeg" });
       const texto = `Fiz o Diagnóstico de Quociente Social. Veja meu resultado e faça o seu:`;
       const urlSite = "https://maestriasocial.com";

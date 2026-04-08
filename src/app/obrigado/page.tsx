@@ -10,26 +10,11 @@ type QuizResumo = {
   pilarFraco?: string;
 };
 
-async function fetchImagemJpg(url: string): Promise<Blob> {
+async function fetchImagem(url: string): Promise<{ blob: Blob; ext: string }> {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`Erro ${res.status} ao buscar imagem`);
   const blob = await res.blob();
-  // Converte PNG → JPEG via Canvas
-  const imgUrl = URL.createObjectURL(blob);
-  const img = new Image();
-  img.src = imgUrl;
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("Falha ao carregar imagem"));
-  });
-  URL.revokeObjectURL(imgUrl);
-  const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 630;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, 1200, 630);
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => b ? resolve(b) : reject(new Error("Falha ao gerar JPG")), "image/jpeg", 0.95);
-  });
+  return { blob, ext: "jpg" };
 }
 
 export default function ObrigadoPage() {
@@ -82,8 +67,8 @@ export default function ObrigadoPage() {
     if (!imagemUrl || baixando) return;
     setBaixando(true);
     try {
-      const jpg = await fetchImagemJpg(imagemUrl);
-      const url = URL.createObjectURL(jpg);
+      const { blob } = await fetchImagem(imagemUrl);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "maestria-social-resultado.jpg";
@@ -98,8 +83,8 @@ export default function ObrigadoPage() {
     if (!imagemUrl || compartilhando) return;
     setCompartilhando(true);
     try {
-      const jpg = await fetchImagemJpg(imagemUrl);
-      const file = new File([jpg], "maestria-social-resultado.jpg", { type: "image/jpeg" });
+      const { blob } = await fetchImagem(imagemUrl);
+      const file = new File([blob], "maestria-social-resultado.jpg", { type: "image/jpeg" });
       const texto = `Fiz o Diagnóstico de Quociente Social e tirei ${resumo.total ?? 0}/250 — nível ${resumo.nivel ?? ""}. Faça o seu:`;
       const urlSite = "https://maestriasocial.com";
 
