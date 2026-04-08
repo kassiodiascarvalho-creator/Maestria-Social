@@ -9,11 +9,8 @@ function normalizarTelefone(tel: string): string {
   return digits.startsWith('55') ? digits : `55${digits}`
 }
 
-export async function POST(req: NextRequest) {
+async function handler(lead_id: string): Promise<NextResponse> {
   try {
-    const { lead_id } = await req.json() as { lead_id: string }
-    if (!lead_id) return NextResponse.json({ error: 'lead_id obrigatório' }, { status: 400 })
-
     const supabase = createAdminClient()
     const { data: lead } = await supabase.from('leads').select('*').eq('id', lead_id).single()
     if (!lead) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 })
@@ -42,7 +39,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ erro: 'META_TEMPLATE_NAME não configurado', diagnostico })
     }
 
-    // Tenta enviar o template
     const payload = {
       messaging_product: 'whatsapp',
       to: normalizarTelefone(lead.whatsapp),
@@ -82,4 +78,16 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ erro: String(err) }, { status: 500 })
   }
+}
+
+export async function GET(req: NextRequest) {
+  const lead_id = req.nextUrl.searchParams.get('lead_id')
+  if (!lead_id) return NextResponse.json({ error: 'lead_id obrigatório' }, { status: 400 })
+  return handler(lead_id)
+}
+
+export async function POST(req: NextRequest) {
+  const { lead_id } = await req.json() as { lead_id: string }
+  if (!lead_id) return NextResponse.json({ error: 'lead_id obrigatório' }, { status: 400 })
+  return handler(lead_id)
 }
