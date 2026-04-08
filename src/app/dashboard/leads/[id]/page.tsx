@@ -136,7 +136,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               </div>
 
               {/* Input de envio */}
-              <ChatInput leadId={id} />
+              <ChatInput leadId={id} temConversa={!!(conversas && conversas.length > 0)} />
             </div>
           </div>
         </div>
@@ -232,6 +232,15 @@ const css = `
 
   /* Erro */
   .chat-erro{font-size:12px;color:#e07070;background:rgba(224,112,112,.06);border:1px solid rgba(224,112,112,.15);border-radius:8px;padding:8px 12px;}
+
+  /* Reenvio */
+  .reenvio-wrap{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+  .reenvio-btn{background:rgba(194,144,77,.06);border:1px solid rgba(194,144,77,.2);color:#c2904d;font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;text-align:left;}
+  .reenvio-btn:hover:not(:disabled){background:rgba(194,144,77,.12);border-color:rgba(194,144,77,.4);}
+  .reenvio-btn:disabled{opacity:.5;cursor:default;}
+  .reenvio-status{font-size:12px;padding:8px 12px;border-radius:8px;}
+  .reenvio-ok{color:#7ac47a;background:rgba(122,196,122,.06);border:1px solid rgba(122,196,122,.15);}
+  .reenvio-erro{color:#e07070;background:rgba(224,112,112,.06);border:1px solid rgba(224,112,112,.15);word-break:break-all;}
 
   @media(max-width:768px){
     .lead-grid{grid-template-columns:1fr;}

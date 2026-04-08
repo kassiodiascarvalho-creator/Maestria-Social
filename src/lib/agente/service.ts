@@ -83,7 +83,11 @@ export async function iniciarAgenteParaLead(leadId: string, force = false): Prom
   let erroWhatsApp: string | undefined
   if (lead.whatsapp) {
     try {
-      await enviarMensagemInicialWhatsApp(lead.whatsapp, primeiraMsg)
+      await enviarMensagemInicialWhatsApp(lead.whatsapp, primeiraMsg, {
+        nome: lead.nome,
+        qs_total: lead.qs_total ?? 0,
+        pilar_fraco: lead.pilar_fraco ?? 'Comunicação',
+      })
     } catch (err) {
       erroWhatsApp = String(err)
       console.error('[agente] Falha ao enviar mensagem inicial via WhatsApp:', err)

@@ -23,7 +23,7 @@ const ICONES: Record<Arquivo["tipo"], string> = {
   document: "📄",
 };
 
-export default function ChatInput({ leadId }: { leadId: string }) {
+export default function ChatInput({ leadId, temConversa }: { leadId: string; temConversa: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [texto, setTexto] = useState("");
@@ -31,6 +31,7 @@ export default function ChatInput({ leadId }: { leadId: string }) {
   const [caption, setCaption] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [reenvioStatus, setReenvioStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -84,6 +85,29 @@ export default function ChatInput({ leadId }: { leadId: string }) {
     }
   }
 
+  async function reenviarInicial() {
+    setReenvioStatus("enviando");
+    try {
+      const res = await fetch("/api/admin/leads/reenviar-mensagem-inicial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_id: leadId }),
+      });
+      const data = await res.json() as { ok?: boolean; mensagemSalva?: boolean; erro?: string; error?: string };
+      if (!res.ok || data.error) {
+        setReenvioStatus(`Erro: ${data.error ?? "falha"}`);
+      } else if (!data.ok && data.erro) {
+        setReenvioStatus(`Salvo no chat, mas WhatsApp falhou: ${data.erro}`);
+      } else {
+        setReenvioStatus("Mensagem enviada!");
+        startTransition(() => router.refresh());
+        setTimeout(() => setReenvioStatus(null), 3000);
+      }
+    } catch {
+      setReenvioStatus("Erro de conexão");
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -93,6 +117,19 @@ export default function ChatInput({ leadId }: { leadId: string }) {
 
   return (
     <div className="chat-input-wrap">
+      {/* Botão reenviar mensagem inicial (quando não tem conversa ou é a primeira vez) */}
+      {!temConversa && (
+        <div className="reenvio-wrap">
+          <button className="reenvio-btn" onClick={reenviarInicial} disabled={reenvioStatus === "enviando"} type="button">
+            {reenvioStatus === "enviando" ? "Enviando..." : "↺ Enviar mensagem inicial do agente"}
+          </button>
+          {reenvioStatus && reenvioStatus !== "enviando" && (
+            <div className={`reenvio-status ${reenvioStatus.startsWith("Erro") || reenvioStatus.startsWith("Salvo") ? "reenvio-erro" : "reenvio-ok"}`}>
+              {reenvioStatus}
+            </div>
+          )}
+        </div>
+      )}
       {/* Preview do arquivo */}
       {arquivo && (
         <div className="chat-preview">

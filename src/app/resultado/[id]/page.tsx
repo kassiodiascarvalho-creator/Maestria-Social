@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import BaixarImagem from './BaixarImagem'
 
 const PILARES = [
   { key: 'A', name: 'Sociabilidade' },
@@ -114,9 +115,7 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
             <p className="r-image-label">Imagem para compartilhar</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={ogImage} alt={`Resultado de ${lead.nome}`} className="r-image" />
-            <a href={ogImage} download={`maestria-social-${lead.nome}.png`} className="r-download">
-              ↓ Baixar imagem
-            </a>
+            <BaixarImagem url={ogImage} nome={lead.nome} />
           </div>
 
           <div className="r-cta-block">
@@ -161,8 +160,9 @@ const css = `
   .r-image-wrap { margin: 28px 0; padding: 16px; background: rgba(255,255,255,.02); border: 1px solid #2a1f18; border-radius: 14px; }
   .r-image-label { font-size: 11px; color: #4a3e30; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 12px; }
   .r-image { width: 100%; height: auto; border-radius: 8px; border: 1px solid #2a1f18; display: block; }
-  .r-download { display: inline-block; margin-top: 12px; font-size: 13px; color: #c2904d; text-decoration: none; font-weight: 600; }
+  .r-download { display: inline-block; margin-top: 12px; font-size: 13px; color: #c2904d; text-decoration: none; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
   .r-download:hover { text-decoration: underline; }
+  .r-download:disabled { opacity: .6; cursor: default; }
   .r-cta-block { text-align: center; padding-top: 24px; border-top: 1px solid #2a1f18; }
   .r-cta-text { font-size: 14px; color: #7a6e5e; margin-bottom: 14px; }
   .r-cta-btn { display: inline-block; background: linear-gradient(135deg, #c2904d, #d4a055); color: #0e0f09; text-decoration: none; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; }

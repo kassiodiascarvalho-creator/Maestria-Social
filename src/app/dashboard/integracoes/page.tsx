@@ -37,6 +37,15 @@ const FIELDS_CONFIG = [
     ],
   },
   {
+    title: "Email (Resend)",
+    badge: "Funil de emails",
+    desc: "Configurações de envio de email via Resend.",
+    fields: [
+      { label: "RESEND_API_KEY", key: "RESEND_API_KEY", type: "password", placeholder: "re_..." },
+      { label: "EMAIL_FROM", key: "EMAIL_FROM", type: "text", placeholder: "Maestria Social <nao-responda@maestriasocial.com>" },
+    ],
+  },
+  {
     title: "Meta Cloud API",
     badge: "WhatsApp Business",
     desc: "Credenciais para envio e recebimento de mensagens via WhatsApp Business.",

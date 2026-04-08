@@ -15,7 +15,7 @@ async function getRemetente(): Promise<string> {
   return (
     process.env.EMAIL_FROM ||
     (await getConfig('EMAIL_FROM')) ||
-    'Maestria Social <noreply@maestria-social.vercel.app>'
+    'Maestria Social <nao-responda@maestriasocial.com>'
   )
 }
 
@@ -35,6 +35,11 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<void> {
     subject: input.assunto,
     html: input.html,
     text: input.texto,
+    headers: {
+      'List-Unsubscribe': '<mailto:nao-responda@maestriasocial.com?subject=unsubscribe>',
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      'X-Entity-Ref-ID': `maestria-${Date.now()}`,
+    },
   })
   if (error) {
     throw new Error(`[email] ${error.message || 'falha ao enviar'}`)

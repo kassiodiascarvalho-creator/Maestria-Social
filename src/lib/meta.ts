@@ -100,23 +100,37 @@ export async function enviarMensagemWhatsApp(para: string, texto: string): Promi
   }
 }
 
+type TemplateParam = { type: 'text'; text: string }
+
 export async function enviarTemplateWhatsApp(
   para: string,
   nomeTemplate: string,
+  params: string[] = [],
   languageCode = 'pt_BR'
 ): Promise<void> {
+  const template: Record<string, unknown> = {
+    name: nomeTemplate,
+    language: { code: languageCode },
+  }
+
+  if (params.length > 0) {
+    const parametros: TemplateParam[] = params.map((text) => ({ type: 'text', text }))
+    template.components = [{ type: 'body', parameters: parametros }]
+  }
+
   await postMeta({
     messaging_product: 'whatsapp',
     to: normalizarTelefone(para),
     type: 'template',
-    template: {
-      name: nomeTemplate,
-      language: { code: languageCode },
-    },
+    template,
   })
 }
 
-export async function enviarMensagemInicialWhatsApp(para: string, textoFallback: string): Promise<void> {
+export async function enviarMensagemInicialWhatsApp(
+  para: string,
+  textoFallback: string,
+  templateParams?: { nome: string; qs_total: number; pilar_fraco: string }
+): Promise<void> {
   const mode = await getWhatsAppMode()
   if (mode === 'coexistencia') {
     await enviarMensagemWhatsApp(para, textoFallback)
@@ -127,7 +141,10 @@ export async function enviarMensagemInicialWhatsApp(para: string, textoFallback:
   const templateLanguage = (await getConfig('META_TEMPLATE_LANGUAGE')) || 'pt_BR'
 
   if (nomeTemplate) {
-    await enviarTemplateWhatsApp(para, nomeTemplate, templateLanguage)
+    const params = templateParams
+      ? [templateParams.nome, String(templateParams.qs_total), templateParams.pilar_fraco]
+      : []
+    await enviarTemplateWhatsApp(para, nomeTemplate, params, templateLanguage)
     return
   }
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { enviarMensagemWhatsApp } from '@/lib/meta'
+import { enviarMensagemWhatsApp, enviarTemplateWhatsApp } from '@/lib/meta'
 import { enviarEmail } from '@/lib/email/enviar'
+import { getConfig } from '@/lib/config'
 import type { Lead } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -89,7 +90,33 @@ async function executar(t: Tarefa): Promise<void> {
     const texto = String(t.payload.texto || '')
     if (!texto) throw new Error('payload.texto ausente')
     const textoResolvido = resolverVariaveis(texto, lead)
-    await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
+
+    // Tenta enviar via template se configurado (para contato business-initiated)
+    const diaKey = String(t.payload.dia || '')
+    const templateMap: Record<string, string> = {
+      '1': 'maestria_followup_d1',
+      '3': 'maestria_followup_d3',
+      '7': 'maestria_followup_d7',
+    }
+    const templatePadrao = templateMap[diaKey]
+    const templateCustom = templatePadrao ? await getConfig(`META_TEMPLATE_${diaKey.toUpperCase()}`) : null
+    const nomeTemplate = templateCustom || templatePadrao
+
+    let enviado = false
+    if (nomeTemplate) {
+      try {
+        const params = [lead.nome, String(lead.qs_total ?? 0), lead.pilar_fraco ?? 'Comunicação']
+        await enviarTemplateWhatsApp(lead.whatsapp, nomeTemplate, params)
+        enviado = true
+      } catch {
+        // fallback para texto livre abaixo
+      }
+    }
+
+    if (!enviado) {
+      await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
+    }
+
     await supabase.from('conversas').insert({
       lead_id: lead.id,
       role: 'assistant',

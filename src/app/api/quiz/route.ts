@@ -141,10 +141,10 @@ export async function POST(req: NextRequest) {
         { lead_id, tipo: 'email', payload: { template: 'dia_3' }, agendado_para: emDias(3) },
         { lead_id, tipo: 'email', payload: { template: 'dia_5' }, agendado_para: emDias(5) },
         { lead_id, tipo: 'email', payload: { template: 'dia_7' }, agendado_para: emDias(7) },
-        // Follow-ups WhatsApp segmentados por pilar
-        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[0] }, agendado_para: emDias(1) },
-        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[1] }, agendado_para: emDias(3) },
-        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[2] }, agendado_para: emDias(7) },
+        // Follow-ups WhatsApp segmentados por pilar (dia usado para selecionar template)
+        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[0], dia: '1' }, agendado_para: emDias(1) },
+        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[1], dia: '3' }, agendado_para: emDias(3) },
+        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[2], dia: '7' }, agendado_para: emDias(7) },
       ])
     } catch (e) {
       console.error('[quiz] erro ao agendar funil:', e)

@@ -17,6 +17,7 @@ export default function ObrigadoPage() {
   const [resumo, setResumo] = useState<QuizResumo>({});
   const [leadId, setLeadId] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [baixando, setBaixando] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -61,6 +62,23 @@ export default function ObrigadoPage() {
   const linkPublico = leadId ? `${typeof window !== "undefined" ? window.location.origin : ""}/resultado/${leadId}` : "";
   const imagemUrl = leadId ? `/api/og/resultado/${leadId}` : "";
 
+  async function salvarImagem() {
+    if (!imagemUrl || baixando) return;
+    setBaixando(true);
+    try {
+      const res = await fetch(imagemUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "maestria-social-resultado.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBaixando(false);
+    }
+  }
+
   async function compartilhar() {
     if (!linkPublico) return;
     const texto = `Meu Quociente Social: ${resumo.total ?? 0}/250 — ${resumo.nivel ?? ""}. Faça você também:`;
@@ -101,9 +119,9 @@ export default function ObrigadoPage() {
 
           {!loading && leadId && (
             <div className="obg-actions">
-              <a className="obg-action" href={imagemUrl} download={`maestria-social-resultado.png`}>
-                ↓ Salvar resultado
-              </a>
+              <button className="obg-action" onClick={salvarImagem} disabled={baixando} type="button">
+                {baixando ? "Baixando..." : "↓ Salvar resultado"}
+              </button>
               <button className="obg-action" onClick={compartilhar} type="button">
                 {copiado ? "✓ Link copiado!" : "↗ Compartilhar"}
               </button>
