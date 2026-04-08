@@ -10,13 +10,6 @@ type QuizResumo = {
   pilarFraco?: string;
 };
 
-async function fetchImagem(url: string): Promise<{ blob: Blob; ext: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Erro ${res.status} ao buscar imagem`);
-  const blob = await res.blob();
-  return { blob, ext: "jpg" };
-}
-
 export default function ObrigadoPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
@@ -67,13 +60,7 @@ export default function ObrigadoPage() {
     if (!imagemUrl || baixando) return;
     setBaixando(true);
     try {
-      const { blob } = await fetchImagem(imagemUrl);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "maestria-social-resultado.jpg";
-      a.click();
-      URL.revokeObjectURL(url);
+      window.open(imagemUrl, "_blank");
     } finally {
       setBaixando(false);
     }

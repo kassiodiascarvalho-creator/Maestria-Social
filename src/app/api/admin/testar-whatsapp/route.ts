@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig } from '@/lib/config'
+import { enviarMensagemInicialWhatsApp } from '@/lib/meta'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
 
@@ -80,9 +81,32 @@ async function handler(lead_id: string): Promise<NextResponse> {
   }
 }
 
+async function handlerViaService(lead_id: string): Promise<NextResponse> {
+  try {
+    const supabase = createAdminClient()
+    const { data: lead } = await supabase.from('leads').select('*').eq('id', lead_id).single()
+    if (!lead) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 })
+
+    try {
+      await enviarMensagemInicialWhatsApp(lead.whatsapp, 'teste fallback', {
+        nome: lead.nome,
+        qs_total: lead.qs_total ?? 0,
+        pilar_fraco: lead.pilar_fraco ?? 'Comunicação',
+      })
+      return NextResponse.json({ ok: true, via: 'enviarMensagemInicialWhatsApp' })
+    } catch (err) {
+      return NextResponse.json({ ok: false, via: 'enviarMensagemInicialWhatsApp', erro: String(err), stack: err instanceof Error ? err.stack : undefined })
+    }
+  } catch (err) {
+    return NextResponse.json({ erro: String(err) }, { status: 500 })
+  }
+}
+
 export async function GET(req: NextRequest) {
   const lead_id = req.nextUrl.searchParams.get('lead_id')
   if (!lead_id) return NextResponse.json({ error: 'lead_id obrigatório' }, { status: 400 })
+  const via = req.nextUrl.searchParams.get('via')
+  if (via === 'service') return handlerViaService(lead_id)
   return handler(lead_id)
 }
 

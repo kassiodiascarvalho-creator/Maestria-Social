@@ -11,32 +11,9 @@ export default function BaixarImagem({ nome, leadId }: { nome: string; leadId: s
     if (baixando) return;
     setBaixando(true);
     try {
-      // Tenta buscar a OG image (aparência perfeita)
-      const res = await fetch(`/api/og/resultado/${leadId}`);
-      if (res.ok && res.headers.get("content-type")?.startsWith("image/")) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `maestria-social-${nome}.jpg`;
-        a.click();
-        URL.revokeObjectURL(url);
-        return;
-      }
-      // Fallback: html2canvas no card da página
-      const card = document.getElementById("resultado-card");
-      if (!card) return;
-      const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: "#1a1410", logging: false });
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `maestria-social-${nome}.jpg`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }, "image/jpeg", 0.95);
+      // Abre a imagem OG em nova aba — usuário usa "Salvar imagem como"
+      // (funciona em 100% dos browsers, desktop e mobile)
+      window.open(`/api/og/resultado/${leadId}`, "_blank");
     } catch (err) {
       console.error("[BaixarImagem]", err);
     } finally {
