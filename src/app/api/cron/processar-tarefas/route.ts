@@ -2,14 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
 import { enviarEmail } from '@/lib/email/enviar'
-import {
-  emailDia0,
-  emailDia1,
-  emailDia3,
-  emailDia5,
-  emailDia7,
-  type EmailTemplate,
-} from '@/lib/email/templates'
 import type { Lead } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -17,6 +9,7 @@ export const dynamic = 'force-dynamic'
 
 const MAX_TENTATIVAS = 3
 const LOTE = 20
+const SITE_URL = 'https://maestria-social.vercel.app'
 
 type Tarefa = {
   id: string
@@ -28,28 +21,56 @@ type Tarefa = {
 
 function autorizado(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET
-  if (!expected) return true // dev
+  if (!expected) return true
   const auth = req.headers.get('authorization') || ''
   if (auth === `Bearer ${expected}`) return true
   if (req.nextUrl.searchParams.get('secret') === expected) return true
   return false
 }
 
-function emailPorTemplate(nome: string, lead: Lead): EmailTemplate | null {
-  switch (nome) {
-    case 'dia_0':
-      return emailDia0(lead)
-    case 'dia_1':
-      return emailDia1(lead)
-    case 'dia_3':
-      return emailDia3(lead)
-    case 'dia_5':
-      return emailDia5(lead)
-    case 'dia_7':
-      return emailDia7(lead)
-    default:
-      return null
-  }
+// Substitui variáveis {nome}, {qs_total}, etc no template
+function resolverVariaveis(texto: string, lead: Lead): string {
+  return texto
+    .replace(/{nome}/g, lead.nome)
+    .replace(/{qs_total}/g, String(lead.qs_total ?? 0))
+    .replace(/{qs_percentual}/g, String(lead.qs_percentual ?? 0))
+    .replace(/{nivel_qs}/g, lead.nivel_qs ?? '')
+    .replace(/{pilar_fraco}/g, lead.pilar_fraco ?? '')
+    .replace(/{link_resultado}/g, `${SITE_URL}/resultado/${lead.id}`)
+}
+
+// Converte 'dia_0' → 0, 'dia_1' → 1, etc
+function diaDoTemplate(tpl: string): number {
+  const match = tpl.match(/dia_(\d+)/)
+  return match ? parseInt(match[1]) : 0
+}
+
+async function buscarEmailTemplate(pilar: string, dia: number): Promise<{ assunto: string; corpo_html: string } | null> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('email_templates')
+    .select('assunto, corpo_html')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .eq('pilar', pilar as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .eq('dia', dia as any)
+    .eq('ativo', true)
+    .single()
+  return data ?? null
+}
+
+function wrapEmailHtml(titulo: string, corpo: string): string {
+  return `<!doctype html>
+<html lang="pt-BR"><body style="margin:0;background:#0e0f09;font-family:Arial,sans-serif;color:#fff9e6;">
+  <div style="max-width:600px;margin:0 auto;padding:32px 24px;">
+    <div style="font-size:11px;color:#c2904d;letter-spacing:3px;text-transform:uppercase;font-weight:700;margin-bottom:18px;">◆ Maestria Social</div>
+    <h1 style="font-size:26px;line-height:1.2;color:#fff9e6;margin:0 0 18px;">${titulo}</h1>
+    <div style="font-size:15px;line-height:1.7;color:#cdbfa8;">${corpo}</div>
+    <div style="margin-top:28px;"><a href="https://maestria-social.vercel.app/obrigado" style="display:inline-block;background:#c2904d;color:#0e0f09;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:10px;">Conversar no WhatsApp →</a></div>
+    <hr style="border:none;border-top:1px solid #2a1f18;margin:32px 0 18px;">
+    <p style="font-size:12px;color:#7a6e5e;">Maestria Social — Inteligência Social aplicada</p>
+  </div>
+</body></html>`
 }
 
 async function buscarLead(leadId: string): Promise<Lead | null> {
@@ -67,47 +88,51 @@ async function executar(t: Tarefa): Promise<void> {
   if (t.tipo === 'whatsapp_msg') {
     const texto = String(t.payload.texto || '')
     if (!texto) throw new Error('payload.texto ausente')
-    await enviarMensagemWhatsApp(lead.whatsapp, texto)
+    const textoResolvido = resolverVariaveis(texto, lead)
+    await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
     await supabase.from('conversas').insert({
       lead_id: lead.id,
       role: 'assistant',
-      mensagem: texto,
+      mensagem: textoResolvido,
     })
     return
   }
 
   if (t.tipo === 'email') {
-    const tpl = String(t.payload.template || '')
-    const email = emailPorTemplate(tpl, lead)
-    if (!email) throw new Error(`template "${tpl}" desconhecido`)
+    const tplNome = String(t.payload.template || '')
+    const dia = diaDoTemplate(tplNome)
+    const pilar = lead.pilar_fraco || 'Comunicação'
+
+    // Busca template no banco (segmentado por pilar)
+    const tpl = await buscarEmailTemplate(pilar, dia)
+    if (!tpl) throw new Error(`Template não encontrado: pilar=${pilar} dia=${dia}`)
+
+    const assuntoResolvido = resolverVariaveis(tpl.assunto, lead)
+    const corpoResolvido = resolverVariaveis(tpl.corpo_html, lead)
+    const html = wrapEmailHtml(assuntoResolvido, corpoResolvido)
+
     await enviarEmail({
       para: lead.email,
-      assunto: email.assunto,
-      html: email.html,
-      texto: email.texto,
+      assunto: assuntoResolvido,
+      html,
+      texto: `${assuntoResolvido} — Acesse: ${SITE_URL}/resultado/${lead.id}`,
     })
     return
   }
 
   if (t.tipo === 'recuperacao_quiz') {
     if (lead.qs_total) return // já fez quiz, ignora
-    const linkBase = 'https://maestria-social.vercel.app/quiz'
-    const texto =
-      String(t.payload.texto || '') ||
-      `Oi ${lead.nome}! Vi que você começou o Teste de Quociente Social mas não terminou. Leva uns 4 minutos e o resultado te mostra exatamente onde mirar primeiro: ${linkBase}`
-    // tenta WhatsApp primeiro
+    const linkBase = `${SITE_URL}/quiz`
+    const texto = String(t.payload.texto || '')
+      || `Oi ${lead.nome}! Vi que você começou o Teste de Quociente Social mas não terminou. Leva uns 4 minutos e o resultado te mostra exatamente onde mirar primeiro: ${linkBase}`
     try {
       await enviarMensagemWhatsApp(lead.whatsapp, texto)
-      await supabase.from('conversas').insert({
-        lead_id: lead.id,
-        role: 'assistant',
-        mensagem: texto,
-      })
+      await supabase.from('conversas').insert({ lead_id: lead.id, role: 'assistant', mensagem: texto })
     } catch {
       await enviarEmail({
         para: lead.email,
         assunto: `${lead.nome}, faltou pouco para seu resultado`,
-        html: `<p>${texto}</p>`,
+        html: wrapEmailHtml(`${lead.nome}, faltou pouco`, `<p>${texto}</p>`),
         texto,
       })
     }
@@ -160,15 +185,9 @@ export async function POST(req: NextRequest) {
       const status = tentativas >= MAX_TENTATIVAS ? 'erro' : 'pendente'
       await supabase
         .from('tarefas_agendadas')
-        .update({
-          status,
-          tentativas,
-          ultimo_erro: msg,
-          processado_em: status === 'erro' ? new Date().toISOString() : null,
-        })
+        .update({ status, tentativas, ultimo_erro: msg, processado_em: status === 'erro' ? new Date().toISOString() : null })
         .eq('id', t.id)
       fail++
-      console.error('[cron/processar-tarefas] tarefa', t.id, msg)
     }
   }
 

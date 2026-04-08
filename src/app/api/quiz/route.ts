@@ -101,36 +101,50 @@ export async function POST(req: NextRequest) {
       console.error('[quiz] erro ao cancelar recuperação:', e)
     }
 
-    // Ações 3 + 5: agenda funil de emails (D+0..D+7) e follow-ups WhatsApp (D+1, D+3, D+7)
+    // Ações 3 + 5: funil de emails (D+0..D+7) + follow-ups WhatsApp segmentados por pilar
     try {
-      const followupWpp = (dia: number) =>
-        `Oi ${pilar_fraco ? '' : ''}— passou ${dia} ${dia === 1 ? 'dia' : 'dias'} desde seu diagnóstico. Quero te mandar um próximo passo prático sobre ${pilar_fraco}. Posso?`
+      // Mensagens WhatsApp por pilar — focadas na dor específica de cada sub-avatar
+      const wppPorPilar: Record<string, [string, string, string]> = {
+        Sociabilidade: [
+          `Oi {nome}! Uma pergunta rápida: quando você está num ambiente com pessoas que não conhece, o que acontece internamente? Quero entender melhor sua situação.`,
+          `{nome}, a maioria das pessoas com dificuldade de iniciar conexões não sabe que o problema não é timidez — é ausência de método. Posso te mostrar o primeiro passo?`,
+          `{nome}, você ainda pensa naquele resultado? {qs_total}/250 em Sociabilidade significa oportunidades concretas passando pela sua frente toda semana. Vamos resolver isso?`,
+        ],
+        Comunicação: [
+          `Oi {nome}! Me conta: já perdeu uma oportunidade importante porque não conseguiu se expressar da forma certa na hora certa?`,
+          `{nome}, comunicação de impacto não é dom — é estrutura. Tem 3 elementos específicos que qualquer pessoa pode aprender. Curioso pra saber quais são?`,
+          `{nome}, {qs_total}/250 em Comunicação. Cada reunião sem impacto, cada proposta rejeitada — tem custo real acumulado. Bora virar esse jogo?`,
+        ],
+        Relacionamento: [
+          `Oi {nome}! Pergunta direta: quantas pessoas na sua rede entrariam em contato com você hoje com uma oportunidade? Seja honesto.`,
+          `{nome}, a diferença entre quem tem indicações chegando todo mês e quem fica esperando não é sorte — é intencionalidade. Posso te mostrar o sistema?`,
+          `{nome}, rede superficial tem validade curta. {qs_total}/250 em Relacionamento é o ponto exato onde networking para de funcionar. Uma conversa pode mudar isso.`,
+        ],
+        Persuasão: [
+          `Oi {nome}! Me conta: qual foi a última negociação ou conversa importante que você saiu sentindo que poderia ter ido melhor?`,
+          `{nome}, persuasão não é manipulação — é fazer a outra pessoa enxergar o que você já enxerga. Tem uma técnica específica pra isso. Quer conhecer?`,
+          `{nome}, {qs_total}/250 em Persuasão. Cada "vou pensar" que nunca voltou, cada venda perdida — tem um número real por trás disso. Vamos destravá-lo?`,
+        ],
+        Influência: [
+          `Oi {nome}! Me diz: as pessoas ao seu redor buscam sua opinião antes de tomar decisões — ou só depois, pra validar o que já decidiram?`,
+          `{nome}, influência não se pede — se constrói. E começa com uma mudança muito específica de como você se posiciona. Posso te mostrar?`,
+          `{nome}, {qs_total}/250 em Influência. Em 2 anos, onde você quer ser visto no seu meio? Esse resultado é o ponto de partida — mas só se você agir agora.`,
+        ],
+      }
+
+      const msgs = wppPorPilar[pilar_fraco] ?? wppPorPilar['Comunicação']
+
       await agendarVarias([
-        // Emails
+        // Emails (template buscado no banco por pilar + dia no momento do envio)
         { lead_id, tipo: 'email', payload: { template: 'dia_0' }, agendado_para: emMinutos(2) },
         { lead_id, tipo: 'email', payload: { template: 'dia_1' }, agendado_para: emDias(1) },
         { lead_id, tipo: 'email', payload: { template: 'dia_3' }, agendado_para: emDias(3) },
         { lead_id, tipo: 'email', payload: { template: 'dia_5' }, agendado_para: emDias(5) },
         { lead_id, tipo: 'email', payload: { template: 'dia_7' }, agendado_para: emDias(7) },
-        // Follow-ups WhatsApp
-        {
-          lead_id,
-          tipo: 'whatsapp_msg',
-          payload: { texto: followupWpp(1) },
-          agendado_para: emDias(1),
-        },
-        {
-          lead_id,
-          tipo: 'whatsapp_msg',
-          payload: { texto: followupWpp(3) },
-          agendado_para: emDias(3),
-        },
-        {
-          lead_id,
-          tipo: 'whatsapp_msg',
-          payload: { texto: followupWpp(7) },
-          agendado_para: emDias(7),
-        },
+        // Follow-ups WhatsApp segmentados por pilar
+        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[0] }, agendado_para: emDias(1) },
+        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[1] }, agendado_para: emDias(3) },
+        { lead_id, tipo: 'whatsapp_msg', payload: { texto: msgs[2] }, agendado_para: emDias(7) },
       ])
     } catch (e) {
       console.error('[quiz] erro ao agendar funil:', e)

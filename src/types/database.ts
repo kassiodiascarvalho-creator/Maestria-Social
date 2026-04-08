@@ -148,6 +148,33 @@ export type Database = {
         }
         Relationships: []
       }
+      email_templates: {
+        Row: {
+          id: string
+          pilar: 'Sociabilidade' | 'Comunicação' | 'Relacionamento' | 'Persuasão' | 'Influência'
+          dia: 0 | 1 | 3 | 5 | 7
+          assunto: string
+          corpo_html: string
+          ativo: boolean
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          pilar: 'Sociabilidade' | 'Comunicação' | 'Relacionamento' | 'Persuasão' | 'Influência'
+          dia: 0 | 1 | 3 | 5 | 7
+          assunto: string
+          corpo_html: string
+          ativo?: boolean
+          atualizado_em?: string
+        }
+        Update: {
+          assunto?: string
+          corpo_html?: string
+          ativo?: boolean
+          atualizado_em?: string
+        }
+        Relationships: []
+      }
       tarefas_agendadas: {
         Row: {
           id: string
