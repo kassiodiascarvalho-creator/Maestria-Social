@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
-import { createAdminClient } from '@/lib/supabase/admin'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://dhudmbbgdyxdxypixyis.supabase.co'
 
 const PILARES = [
   { key: 'A', name: 'Sociabilidade' },
@@ -34,12 +35,27 @@ export async function GET(
   const { id } = await params
 
   try {
-    const supabase = createAdminClient()
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores')
-      .eq('id', id)
-      .single()
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!key) return new ImageResponse(fallback, { width: 1200, height: 630 })
+
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}&select=nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores&limit=1`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      }
+    )
+
+    if (!res.ok) return new ImageResponse(fallback, { width: 1200, height: 630 })
+
+    const rows = await res.json() as unknown[]
+    const lead = Array.isArray(rows) && rows.length > 0
+      ? rows[0] as { nome: string; qs_total: number; qs_percentual: number; nivel_qs: string; pilar_fraco: string; scores: Record<string, number> }
+      : null
 
     if (!lead?.qs_total) return new ImageResponse(fallback, { width: 1200, height: 630 })
 
