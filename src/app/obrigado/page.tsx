@@ -10,14 +10,37 @@ type QuizResumo = {
   pilarFraco?: string;
 };
 
+async function fetchImagemJpg(url: string): Promise<Blob> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  // Converte PNG → JPEG via Canvas
+  const imgUrl = URL.createObjectURL(blob);
+  const img = new Image();
+  img.src = imgUrl;
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("Falha ao carregar imagem"));
+  });
+  URL.revokeObjectURL(imgUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0, 1200, 630);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((b) => b ? resolve(b) : reject(new Error("Falha ao gerar JPG")), "image/jpeg", 0.95);
+  });
+}
+
 export default function ObrigadoPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
   const [resumo, setResumo] = useState<QuizResumo>({});
   const [leadId, setLeadId] = useState<string | null>(null);
-  const [copiado, setCopiado] = useState(false);
+  const [compartilhando, setCompartilhando] = useState(false);
   const [baixando, setBaixando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -25,11 +48,7 @@ export default function ObrigadoPage() {
       setLeadId(leadId);
       const quizRaw = sessionStorage.getItem("quiz_result");
       if (quizRaw) {
-        try {
-          setResumo(JSON.parse(quizRaw) as QuizResumo);
-        } catch {
-          setResumo({});
-        }
+        try { setResumo(JSON.parse(quizRaw) as QuizResumo); } catch { setResumo({}); }
       }
 
       if (!leadId) {
@@ -53,25 +72,21 @@ export default function ObrigadoPage() {
         setLoading(false);
       }
     }
-
     load();
   }, []);
 
   const titulo = useMemo(() => resumo.pilarFraco || "influência", [resumo.pilarFraco]);
-
-  const linkPublico = leadId ? `${typeof window !== "undefined" ? window.location.origin : ""}/resultado/${leadId}` : "";
   const imagemUrl = leadId ? `/api/og/resultado/${leadId}` : "";
 
   async function salvarImagem() {
     if (!imagemUrl || baixando) return;
     setBaixando(true);
     try {
-      const res = await fetch(imagemUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const jpg = await fetchImagemJpg(imagemUrl);
+      const url = URL.createObjectURL(jpg);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "maestria-social-resultado.png";
+      a.download = "maestria-social-resultado.jpg";
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -80,19 +95,35 @@ export default function ObrigadoPage() {
   }
 
   async function compartilhar() {
-    if (!linkPublico) return;
-    const texto = `Meu Quociente Social: ${resumo.total ?? 0}/250 — ${resumo.nivel ?? ""}. Faça você também:`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Meu Quociente Social", text: texto, url: linkPublico });
+    if (!imagemUrl || compartilhando) return;
+    setCompartilhando(true);
+    try {
+      const jpg = await fetchImagemJpg(imagemUrl);
+      const file = new File([jpg], "maestria-social-resultado.jpg", { type: "image/jpeg" });
+      const texto = `Fiz o Diagnóstico de Quociente Social e tirei ${resumo.total ?? 0}/250 — nível ${resumo.nivel ?? ""}. Faça o seu:`;
+      const urlSite = "https://maestriasocial.com";
+
+      // Compartilha com imagem (abre Stories, WhatsApp, etc. no mobile)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Meu Quociente Social", text: `${texto} ${urlSite}` });
         return;
-      } catch {
-        // fallback abaixo
       }
+
+      // Fallback: tenta share só com texto/URL
+      if (navigator.share) {
+        await navigator.share({ title: "Meu Quociente Social", text: texto, url: urlSite });
+        return;
+      }
+
+      // Fallback desktop: copia link
+      await navigator.clipboard.writeText(`${texto} ${urlSite}`);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      // usuário cancelou ou erro — ignora
+    } finally {
+      setCompartilhando(false);
     }
-    await navigator.clipboard.writeText(`${texto} ${linkPublico}`);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 2500);
   }
 
   return (
@@ -122,8 +153,8 @@ export default function ObrigadoPage() {
               <button className="obg-action" onClick={salvarImagem} disabled={baixando} type="button">
                 {baixando ? "Baixando..." : "↓ Salvar resultado"}
               </button>
-              <button className="obg-action" onClick={compartilhar} type="button">
-                {copiado ? "✓ Link copiado!" : "↗ Compartilhar"}
+              <button className="obg-action" onClick={compartilhar} disabled={compartilhando} type="button">
+                {compartilhando ? "Gerando..." : copiado ? "✓ Link copiado!" : "↗ Compartilhar imagem"}
               </button>
               <a className="obg-action" href={`/resultado/${leadId}`} target="_blank" rel="noopener noreferrer">
                 ◉ Ver página pública
@@ -153,6 +184,7 @@ const css = `
   .obg-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
   .obg-action{flex:1;min-width:140px;background:rgba(194,144,77,.06);border:1px solid rgba(194,144,77,.2);color:#c2904d;text-decoration:none;font-size:13px;font-weight:600;padding:11px 14px;border-radius:10px;text-align:center;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;}
   .obg-action:hover{background:rgba(194,144,77,.12);border-color:rgba(194,144,77,.4);}
+  .obg-action:disabled{opacity:.5;cursor:default;}
   .obg-links{display:flex;gap:16px;margin-top:20px;flex-wrap:wrap;}
   .obg-links a{font-size:13px;color:#7a6e5e;text-decoration:none;}
   .obg-links a:hover{color:#c2904d;}

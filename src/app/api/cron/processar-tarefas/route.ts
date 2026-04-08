@@ -60,18 +60,29 @@ async function buscarEmailTemplate(pilar: string, dia: number): Promise<{ assunt
   return data ?? null
 }
 
-function wrapEmailHtml(titulo: string, corpo: string): string {
+function buildWppLink(lead: Lead, numero: string): string {
+  const NOME_KEY: Record<string, string> = { Sociabilidade: 'A', Comunicação: 'B', Relacionamento: 'C', Persuasão: 'D', Influência: 'E' }
+  const scores = (lead.scores ?? {}) as Record<string, number>
+  const key = NOME_KEY[lead.pilar_fraco ?? ''] ?? 'B'
+  const pct = Math.round(((scores[key] ?? 0) / 50) * 100)
+  const texto = `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_total ?? 0}/250 — ${lead.nivel_qs ?? 'N/A'}. Meu pilar mais fraco é ${lead.pilar_fraco ?? 'Comunicação'} com ${pct}%. Quero entender meu próximo passo.`
+  return `https://wa.me/${numero.replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`
+}
+
+function wrapEmailHtml(titulo: string, corpo: string, wppLink: string): string {
   return `<!doctype html>
 <html lang="pt-BR"><body style="margin:0;background:#0e0f09;font-family:Arial,sans-serif;color:#fff9e6;">
   <div style="max-width:600px;margin:0 auto;padding:0;">
 
     <!-- Header com logo -->
-    <div style="background:#111009;border-bottom:1px solid #2a1f18;padding:24px 32px;display:flex;align-items:center;gap:14px;">
-      <img src="https://i.imgur.com/mJZwwpe.png" alt="Maestria Social" width="44" height="44" style="border-radius:10px;display:block;" />
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#c2904d;letter-spacing:2px;text-transform:uppercase;">Maestria Social</div>
-        <div style="font-size:11px;color:#4a3e30;margin-top:2px;">Inteligência Social aplicada</div>
-      </div>
+    <div style="background:#111009;border-bottom:1px solid #2a1f18;padding:24px 32px;">
+      <table cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:14px;"><img src="https://i.imgur.com/mJZwwpe.png" alt="Maestria Social" width="44" height="44" style="border-radius:10px;display:block;" /></td>
+        <td>
+          <div style="font-size:13px;font-weight:700;color:#c2904d;letter-spacing:2px;text-transform:uppercase;">Maestria Social</div>
+          <div style="font-size:11px;color:#4a3e30;margin-top:2px;">Inteligência Social aplicada</div>
+        </td>
+      </tr></table>
     </div>
 
     <!-- Conteúdo -->
@@ -79,16 +90,18 @@ function wrapEmailHtml(titulo: string, corpo: string): string {
       <h1 style="font-size:26px;line-height:1.2;color:#fff9e6;margin:0 0 18px;">${titulo}</h1>
       <div style="font-size:15px;line-height:1.7;color:#cdbfa8;">${corpo}</div>
       <div style="margin-top:28px;">
-        <a href="https://maestriasocial.com" style="display:inline-block;background:#c2904d;color:#0e0f09;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:10px;">
+        <a href="${wppLink}" style="display:inline-block;background:#c2904d;color:#0e0f09;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:10px;">
           Conversar no WhatsApp →
         </a>
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="border-top:1px solid #2a1f18;padding:20px 32px;display:flex;align-items:center;gap:12px;">
-      <img src="https://i.imgur.com/mJZwwpe.png" alt="" width="24" height="24" style="border-radius:6px;opacity:.5;" />
-      <p style="margin:0;font-size:12px;color:#4a3e30;">© Maestria Social · <a href="https://maestriasocial.com" style="color:#4a3e30;text-decoration:none;">maestriasocial.com</a></p>
+    <div style="border-top:1px solid #2a1f18;padding:20px 32px;">
+      <table cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;"><img src="https://i.imgur.com/mJZwwpe.png" alt="" width="24" height="24" style="border-radius:6px;opacity:.5;" /></td>
+        <td><p style="margin:0;font-size:12px;color:#4a3e30;">© Maestria Social · <a href="https://maestriasocial.com" style="color:#4a3e30;text-decoration:none;">maestriasocial.com</a></p></td>
+      </tr></table>
     </div>
 
   </div>
@@ -157,7 +170,9 @@ async function executar(t: Tarefa): Promise<void> {
 
     const assuntoResolvido = resolverVariaveis(tpl.assunto, lead)
     const corpoResolvido = resolverVariaveis(tpl.corpo_html, lead)
-    const html = wrapEmailHtml(assuntoResolvido, corpoResolvido)
+    const numeroWpp = (await getConfig('META_WHATSAPP_NUMBER')) || '5533984522635'
+    const wppLink = buildWppLink(lead, numeroWpp)
+    const html = wrapEmailHtml(assuntoResolvido, corpoResolvido, wppLink)
 
     await enviarEmail({
       para: lead.email,
@@ -173,14 +188,16 @@ async function executar(t: Tarefa): Promise<void> {
     const linkBase = `${SITE_URL}/quiz`
     const texto = String(t.payload.texto || '')
       || `Oi ${lead.nome}! Vi que você começou o Teste de Quociente Social mas não terminou. Leva uns 4 minutos e o resultado te mostra exatamente onde mirar primeiro: ${linkBase}`
+    const numeroWpp = (await getConfig('META_WHATSAPP_NUMBER')) || '5533984522635'
     try {
       await enviarMensagemWhatsApp(lead.whatsapp, texto)
       await supabase.from('conversas').insert({ lead_id: lead.id, role: 'assistant', mensagem: texto })
     } catch {
+      const wppLink = `https://wa.me/${numeroWpp.replace(/\D/g, '')}`
       await enviarEmail({
         para: lead.email,
         assunto: `${lead.nome}, faltou pouco para seu resultado`,
-        html: wrapEmailHtml(`${lead.nome}, faltou pouco`, `<p>${texto}</p>`),
+        html: wrapEmailHtml(`${lead.nome}, faltou pouco`, `<p>${texto}</p>`, wppLink),
         texto,
       })
     }
