@@ -80,32 +80,22 @@ export default function ObrigadoPage() {
   }
 
   async function compartilhar() {
-    if (!imagemUrl || compartilhando) return;
+    if (!leadId || compartilhando) return;
     setCompartilhando(true);
     try {
-      const { blob } = await fetchImagem(imagemUrl);
-      const file = new File([blob], "maestria-social-resultado.jpg", { type: "image/jpeg" });
+      const urlResultado = `https://maestriasocial.com/resultado/${leadId}`;
       const texto = `Fiz o Diagnóstico de Quociente Social e tirei ${resumo.total ?? 0}/250 — nível ${resumo.nivel ?? ""}. Faça o seu:`;
-      const urlSite = "https://maestriasocial.com";
 
-      // Compartilha com imagem (abre Stories, WhatsApp, etc. no mobile)
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Meu Quociente Social", text: `${texto} ${urlSite}` });
-        return;
-      }
-
-      // Fallback: tenta share só com texto/URL
       if (navigator.share) {
-        await navigator.share({ title: "Meu Quociente Social", text: texto, url: urlSite });
+        await navigator.share({ title: "Meu Quociente Social — Maestria Social", text: texto, url: urlResultado });
         return;
       }
 
-      // Fallback desktop: copia link
-      await navigator.clipboard.writeText(`${texto} ${urlSite}`);
+      await navigator.clipboard.writeText(`${texto} ${urlResultado}`);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2500);
     } catch {
-      // usuário cancelou ou erro — ignora
+      // usuário cancelou
     } finally {
       setCompartilhando(false);
     }

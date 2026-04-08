@@ -72,7 +72,7 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
     <>
       <style>{css}</style>
       <main className="r-wrap">
-        <div className="r-card">
+        <div className="r-card" id="resultado-card">
           <div className="r-header">
             <span className="r-diamond">◆</span>
             <span className="r-brand">Maestria Social</span>
@@ -115,7 +115,7 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
             <p className="r-image-label">Imagem para compartilhar</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={ogImage} alt={`Resultado de ${lead.nome}`} className="r-image" />
-            <BaixarImagem url={ogImage} nome={lead.nome} />
+            <BaixarImagem nome={lead.nome} leadId={id} />
           </div>
 
           <div className="r-cta-block">

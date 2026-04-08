@@ -2,27 +2,37 @@
 
 import { useState } from "react";
 
-async function fetchBlob(url: string): Promise<Blob> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-  return res.blob();
-}
-
-export default function BaixarImagem({ url, nome }: { url: string; nome: string }) {
+export default function BaixarImagem({ nome, leadId }: { nome: string; leadId: string }) {
   const [baixando, setBaixando] = useState(false);
   const [compartilhando, setCompartilhando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   async function salvar() {
     if (baixando) return;
     setBaixando(true);
     try {
-      const jpg = await fetchBlob(url);
-      const objectUrl = URL.createObjectURL(jpg);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = `maestria-social-${nome}.jpg`;
-      a.click();
-      URL.revokeObjectURL(objectUrl);
+      const card = document.getElementById("resultado-card");
+      if (!card) throw new Error("Card não encontrado");
+
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#1a1410",
+        logging: false,
+      });
+
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `maestria-social-${nome}.jpg`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, "image/jpeg", 0.95);
+    } catch (err) {
+      console.error("[BaixarImagem]", err);
     } finally {
       setBaixando(false);
     }
@@ -32,20 +42,22 @@ export default function BaixarImagem({ url, nome }: { url: string; nome: string 
     if (compartilhando) return;
     setCompartilhando(true);
     try {
-      const jpg = await fetchBlob(url);
-      const file = new File([jpg], `maestria-social-${nome}.jpg`, { type: "image/jpeg" });
+      const urlResultado = `https://maestriasocial.com/resultado/${leadId}`;
       const texto = `Fiz o Diagnóstico de Quociente Social. Veja meu resultado e faça o seu:`;
-      const urlSite = "https://maestriasocial.com";
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Meu Quociente Social", text: `${texto} ${urlSite}` });
-        return;
-      }
       if (navigator.share) {
-        await navigator.share({ title: "Meu Quociente Social", text: texto, url: urlSite });
+        await navigator.share({
+          title: "Meu Quociente Social — Maestria Social",
+          text: texto,
+          url: urlResultado,
+        });
         return;
       }
-      await navigator.clipboard.writeText(`${texto} ${urlSite}`);
+
+      // Fallback: copiar link
+      await navigator.clipboard.writeText(`${texto} ${urlResultado}`);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
     } catch {
       // usuário cancelou
     } finally {
@@ -56,10 +68,10 @@ export default function BaixarImagem({ url, nome }: { url: string; nome: string 
   return (
     <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
       <button onClick={salvar} disabled={baixando} className="r-download" type="button">
-        {baixando ? "Baixando..." : "↓ Baixar imagem"}
+        {baixando ? "Gerando..." : "↓ Baixar imagem"}
       </button>
       <button onClick={compartilhar} disabled={compartilhando} className="r-download" type="button">
-        {compartilhando ? "Gerando..." : "↗ Compartilhar"}
+        {compartilhando ? "..." : copiado ? "✓ Link copiado!" : "↗ Compartilhar"}
       </button>
     </div>
   );
