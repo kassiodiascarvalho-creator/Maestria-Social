@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarEmail } from '@/lib/email/enviar'
 import type { Lead } from '@/types/database'
 
-const SITE_URL = 'https://maestria-social.vercel.app'
+const SITE_URL = 'https://maestriasocial.com'
 
 function resolverVariaveis(texto: string, lead: Lead): string {
   return texto

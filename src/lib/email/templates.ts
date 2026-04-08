@@ -1,6 +1,6 @@
 import type { Lead } from '@/types/database'
 
-const SITE_URL = 'https://maestria-social.vercel.app'
+const SITE_URL = 'https://maestriasocial.com'
 
 function wrap(titulo: string, corpoHtml: string, cta?: { texto: string; url: string }): string {
   return `<!doctype html>

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 
 const MAX_TENTATIVAS = 3
 const LOTE = 20
-const SITE_URL = 'https://maestria-social.vercel.app'
+const SITE_URL = 'https://maestriasocial.com'
 
 type Tarefa = {
   id: string
