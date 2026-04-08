@@ -11,17 +11,23 @@ export default function BaixarImagem({ nome, leadId }: { nome: string; leadId: s
     if (baixando) return;
     setBaixando(true);
     try {
+      // Tenta buscar a OG image (aparência perfeita)
+      const res = await fetch(`/api/og/resultado/${leadId}`);
+      if (res.ok && res.headers.get("content-type")?.startsWith("image/")) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `maestria-social-${nome}.jpg`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+      // Fallback: html2canvas no card da página
       const card = document.getElementById("resultado-card");
-      if (!card) throw new Error("Card não encontrado");
-
+      if (!card) return;
       const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(card, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#1a1410",
-        logging: false,
-      });
-
+      const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: "#1a1410", logging: false });
       canvas.toBlob((blob) => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
@@ -44,22 +50,15 @@ export default function BaixarImagem({ nome, leadId }: { nome: string; leadId: s
     try {
       const urlResultado = `https://maestriasocial.com/resultado/${leadId}`;
       const texto = `Fiz o Diagnóstico de Quociente Social. Veja meu resultado e faça o seu:`;
-
       if (navigator.share) {
-        await navigator.share({
-          title: "Meu Quociente Social — Maestria Social",
-          text: texto,
-          url: urlResultado,
-        });
+        await navigator.share({ title: "Meu Quociente Social — Maestria Social", text: texto, url: urlResultado });
         return;
       }
-
-      // Fallback: copiar link
       await navigator.clipboard.writeText(`${texto} ${urlResultado}`);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2500);
     } catch {
-      // usuário cancelou
+      // cancelado
     } finally {
       setCompartilhando(false);
     }

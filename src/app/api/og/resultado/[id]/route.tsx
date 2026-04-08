@@ -1,7 +1,8 @@
 import { ImageResponse } from 'next/og'
-import { createAdminClient } from '@/lib/supabase/admin'
 
-export const runtime = 'nodejs'
+export const runtime = 'edge'
+
+const SUPABASE_URL = 'https://dhudmbbgdyxdxypixyis.supabase.co'
 
 const PILARES = [
   { key: 'A', name: 'Sociabilidade' },
@@ -11,41 +12,53 @@ const PILARES = [
   { key: 'E', name: 'Influência' },
 ]
 
+const fallback = (
+  <div
+    style={{
+      display: 'flex',
+      width: '100%',
+      height: '100%',
+      background: '#0e0f09',
+      color: '#fff9e6',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 48,
+      fontFamily: 'sans-serif',
+    }}
+  >
+    Maestria Social
+  </div>
+)
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
 
-  const fallback = (
-    <div
-      style={{
-        display: 'flex',
-        width: '100%',
-        height: '100%',
-        background: '#0e0f09',
-        color: '#fff9e6',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 48,
-        fontFamily: 'serif',
-      }}
-    >
-      Maestria Social
-    </div>
-  )
-
   try {
-    const supabase = createAdminClient()
-    const { data: lead, error } = await supabase
-      .from('leads')
-      .select('nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores')
-      .eq('id', id)
-      .single()
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!key) return new ImageResponse(fallback, { width: 1200, height: 630 })
 
-    if (error || !lead || !lead.qs_total) {
-      return new ImageResponse(fallback, { width: 1200, height: 630 })
-    }
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}&select=nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores&limit=1`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          Accept: 'application/json',
+        },
+      }
+    )
+
+    if (!res.ok) return new ImageResponse(fallback, { width: 1200, height: 630 })
+
+    const rows = await res.json() as unknown[]
+    const lead = Array.isArray(rows) && rows.length > 0
+      ? rows[0] as { nome: string; qs_total: number; qs_percentual: number; nivel_qs: string; pilar_fraco: string; scores: Record<string, number> }
+      : null
+
+    if (!lead?.qs_total) return new ImageResponse(fallback, { width: 1200, height: 630 })
 
     const scores = (lead.scores ?? {}) as Record<string, number>
 
@@ -65,41 +78,23 @@ export async function GET(
           }}
         >
           {/* Glow */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -200,
-              right: -200,
-              width: 600,
-              height: 600,
-              background: 'radial-gradient(circle, rgba(194,144,77,0.18) 0%, transparent 65%)',
-              display: 'flex',
-            }}
-          />
+          <div style={{ position: 'absolute', top: -200, right: -200, width: 600, height: 600, background: 'radial-gradient(circle, rgba(194,144,77,0.18) 0%, transparent 65%)', display: 'flex' }} />
 
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 30 }}>
             <div style={{ fontSize: 14, color: '#c2904d', letterSpacing: 4 }}>◆</div>
-            <div style={{ fontSize: 16, color: '#c2904d', letterSpacing: 4, textTransform: 'uppercase', fontWeight: 700 }}>
-              Maestria Social
-            </div>
+            <div style={{ fontSize: 16, color: '#c2904d', letterSpacing: 4, textTransform: 'uppercase', fontWeight: 700 }}>Maestria Social</div>
           </div>
 
           {/* Nome */}
-          <div style={{ display: 'flex', fontSize: 28, color: '#7a6e5e', marginBottom: 12 }}>
-            {lead.nome}
-          </div>
+          <div style={{ display: 'flex', fontSize: 28, color: '#7a6e5e', marginBottom: 12 }}>{lead.nome}</div>
 
           {/* Título */}
-          <div style={{ display: 'flex', fontSize: 52, color: '#fff9e6', marginBottom: 24, fontWeight: 300 }}>
-            Quociente Social
-          </div>
+          <div style={{ display: 'flex', fontSize: 52, color: '#fff9e6', marginBottom: 24, fontWeight: 300 }}>Quociente Social</div>
 
           {/* Pontuação */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 8 }}>
-            <div style={{ fontSize: 160, fontWeight: 700, color: '#c2904d', lineHeight: 1 }}>
-              {lead.qs_total}
-            </div>
+            <div style={{ fontSize: 160, fontWeight: 700, color: '#c2904d', lineHeight: 1 }}>{lead.qs_total}</div>
             <div style={{ fontSize: 40, color: '#7a6e5e' }}>/250</div>
           </div>
 
@@ -116,31 +111,18 @@ export async function GET(
               const isFraco = lead.pilar_fraco === p.name
               return (
                 <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ display: 'flex', fontSize: 18, color: isFraco ? '#c2904d' : '#7a6e5e', width: 200, fontWeight: isFraco ? 700 : 400 }}>
-                    {p.name}
-                  </div>
+                  <div style={{ display: 'flex', fontSize: 18, color: isFraco ? '#c2904d' : '#7a6e5e', width: 200, fontWeight: isFraco ? 700 : 400 }}>{p.name}</div>
                   <div style={{ display: 'flex', flex: 1, height: 8, background: '#2a1f18', borderRadius: 99, overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        width: `${pct}%`,
-                        height: '100%',
-                        background: isFraco ? '#c2904d' : '#3d3328',
-                        display: 'flex',
-                      }}
-                    />
+                    <div style={{ width: `${pct}%`, height: '100%', background: isFraco ? '#c2904d' : '#3d3328', display: 'flex' }} />
                   </div>
-                  <div style={{ display: 'flex', fontSize: 18, color: isFraco ? '#c2904d' : '#7a6e5e', width: 50, justifyContent: 'flex-end', fontWeight: isFraco ? 700 : 400 }}>
-                    {pct}%
-                  </div>
+                  <div style={{ display: 'flex', fontSize: 18, color: isFraco ? '#c2904d' : '#7a6e5e', width: 50, justifyContent: 'flex-end', fontWeight: isFraco ? 700 : 400 }}>{pct}%</div>
                 </div>
               )
             })}
           </div>
 
           {/* Footer */}
-          <div style={{ display: 'flex', position: 'absolute', bottom: 32, right: 70, fontSize: 16, color: '#7a6e5e', letterSpacing: 1 }}>
-            maestriasocial.com
-          </div>
+          <div style={{ display: 'flex', position: 'absolute', bottom: 32, right: 70, fontSize: 16, color: '#7a6e5e', letterSpacing: 1 }}>maestriasocial.com</div>
         </div>
       ),
       { width: 1200, height: 630 }
