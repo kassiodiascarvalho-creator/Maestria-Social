@@ -29,14 +29,18 @@ const fallback = (
 )
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+  const debug = new URL(req.url).searchParams.get('debug') === '1'
 
   try {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!key) return new ImageResponse(fallback, { width: 1200, height: 630 })
+    if (!key) {
+      if (debug) return Response.json({ erro: 'Nenhuma chave Supabase disponível', SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY })
+      return new ImageResponse(fallback, { width: 1200, height: 630 })
+    }
 
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}&select=nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores&limit=1`,
@@ -50,13 +54,17 @@ export async function GET(
       }
     )
 
-    if (!res.ok) return new ImageResponse(fallback, { width: 1200, height: 630 })
+    if (!res.ok) {
+      if (debug) return Response.json({ erro: 'Supabase retornou erro', status: res.status, body: await res.text(), url: `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, temKey: !!key, keyInicio: key.substring(0, 10) })
+      return new ImageResponse(fallback, { width: 1200, height: 630 })
+    }
 
     const rows = await res.json() as unknown[]
     const lead = Array.isArray(rows) && rows.length > 0
       ? rows[0] as { nome: string; qs_total: number; qs_percentual: number; nivel_qs: string; pilar_fraco: string; scores: Record<string, number> }
       : null
 
+    if (debug) return Response.json({ rows, lead, temKey: !!key, keyInicio: key.substring(0, 10), supabaseUrl: SUPABASE_URL })
     if (!lead?.qs_total) return new ImageResponse(fallback, { width: 1200, height: 630 })
 
     const scores = (lead.scores ?? {}) as Record<string, number>
