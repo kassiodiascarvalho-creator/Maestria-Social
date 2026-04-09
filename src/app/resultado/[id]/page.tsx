@@ -72,7 +72,8 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
       <style>{css}</style>
       <main className="r-wrap">
         <div className="r-card" id="resultado-card">
-          <div id="capture-card" style={{ background: '#1a1410', padding: '44px 36px', borderRadius: 16 }}>
+
+          {/* ── tudo isso vai para a imagem capturada ── */}
           <div className="r-header">
             <span className="r-diamond">◆</span>
             <span className="r-brand">Maestria Social</span>
@@ -81,11 +82,13 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
           <p className="r-name">{lead.nome}</p>
           <h1 className="r-title">Quociente Social</h1>
 
-          <div className="r-score">
-            <span className="r-score-num">{lead.qs_total}</span>
-            <span className="r-score-den">/250</span>
+          <div className="r-score-wrap">
+            <div className="r-score">
+              <span className="r-score-num">{lead.qs_total}</span>
+              <span className="r-score-den">/250</span>
+            </div>
+            <p className="r-nivel">Nível {lead.nivel_qs} · {lead.qs_percentual}%</p>
           </div>
-          <p className="r-nivel">Nível {lead.nivel_qs} · {lead.qs_percentual}%</p>
 
           {lead.pilar_fraco && (
             <p className="r-pilar">Pilar com maior oportunidade: <strong>{lead.pilar_fraco}</strong></p>
@@ -110,16 +113,20 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
             })}
           </div>
 
-          </div>{/* fim capture-card */}
-
-          <BaixarImagem nome={lead.nome} leadId={id} />
-
           <div className="r-cta-block">
             <p className="r-cta-text">Quer descobrir o seu?</p>
             <Link href="/" className="r-cta-btn">
               Fazer o teste agora →
             </Link>
+            <p className="r-cta-url">maestriasocial.com</p>
           </div>
+          {/* ── fim da área capturada ── */}
+
+          {/* botões ficam fora da imagem */}
+          <div data-nocapture="true">
+            <BaixarImagem nome={lead.nome} leadId={id} />
+          </div>
+
         </div>
       </main>
     </>
@@ -137,10 +144,11 @@ const css = `
   .r-brand { font-size: 11px; color: #c2904d; letter-spacing: 4px; text-transform: uppercase; font-weight: 700; }
   .r-name { font-size: 14px; color: #7a6e5e; margin-bottom: 6px; }
   .r-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 38px; font-style: italic; color: #fff9e6; margin-bottom: 18px; }
-  .r-score { display: flex; align-items: baseline; gap: 6px; }
-  .r-score-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 96px; font-weight: 700; color: #c2904d; line-height: 1; }
-  .r-score-den { font-size: 22px; color: #7a6e5e; }
-  .r-nivel { font-size: 16px; color: #fff9e6; margin-top: 6px; margin-bottom: 8px; }
+  .r-score-wrap { margin-bottom: 12px; }
+  .r-score { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
+  .r-score-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 96px; font-weight: 700; color: #c2904d; line-height: 0.85; }
+  .r-score-den { font-size: 22px; color: #7a6e5e; padding-bottom: 8px; }
+  .r-nivel { font-size: 16px; color: #fff9e6; margin-bottom: 8px; }
   .r-pilar { font-size: 13px; color: #7a6e5e; margin-bottom: 28px; }
   .r-pilar strong { color: #c2904d; }
   .r-pilares { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
@@ -153,14 +161,12 @@ const css = `
   .r-pilar-row.is-fraco .r-pilar-name,
   .r-pilar-row.is-fraco .r-pilar-pct { color: #c2904d; font-weight: 700; }
   .r-pilar-row.is-fraco .r-pilar-fill { background: linear-gradient(90deg, #c2904d, #fee69d); }
-  .r-image-wrap { margin: 28px 0; padding: 16px; background: rgba(255,255,255,.02); border: 1px solid #2a1f18; border-radius: 14px; }
-  .r-image-label { font-size: 11px; color: #4a3e30; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 12px; }
-  .r-image { width: 100%; height: auto; border-radius: 8px; border: 1px solid #2a1f18; display: block; }
-  .r-download { display: inline-block; margin-top: 12px; font-size: 13px; color: #c2904d; text-decoration: none; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
-  .r-download:hover { text-decoration: underline; }
-  .r-download:disabled { opacity: .6; cursor: default; }
   .r-cta-block { text-align: center; padding-top: 24px; border-top: 1px solid #2a1f18; }
   .r-cta-text { font-size: 14px; color: #7a6e5e; margin-bottom: 14px; }
   .r-cta-btn { display: inline-block; background: linear-gradient(135deg, #c2904d, #d4a055); color: #0e0f09; text-decoration: none; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; }
   .r-cta-btn:hover { filter: brightness(1.08); }
+  .r-cta-url { font-size: 11px; color: #4a3e30; margin-top: 10px; letter-spacing: 1px; }
+  .r-download { display: inline-block; margin-top: 12px; font-size: 13px; color: #c2904d; text-decoration: none; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
+  .r-download:hover { text-decoration: underline; }
+  .r-download:disabled { opacity: .6; cursor: default; }
 `

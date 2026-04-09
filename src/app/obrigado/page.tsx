@@ -54,13 +54,12 @@ export default function ObrigadoPage() {
   }, []);
 
   const titulo = useMemo(() => resumo.pilarFraco || "influência", [resumo.pilarFraco]);
-  const imagemUrl = leadId ? `/api/og/resultado/${leadId}` : "";
 
   async function salvarImagem() {
-    if (!imagemUrl || baixando) return;
+    if (!leadId || baixando) return;
     setBaixando(true);
     try {
-      window.open(imagemUrl, "_blank");
+      window.open(`/resultado/${leadId}`, "_blank");
     } finally {
       setBaixando(false);
     }
