@@ -59,7 +59,7 @@ export default function ObrigadoPage() {
     if (!leadId || baixando) return;
     setBaixando(true);
     try {
-      window.open(`/resultado/${leadId}`, "_blank");
+      window.open(`/resultado/${leadId}?from=quiz`, "_blank");
     } finally {
       setBaixando(false);
     }
@@ -111,20 +111,23 @@ export default function ObrigadoPage() {
 
           {!loading && leadId && (
             <div className="obg-actions">
-              <button className="obg-action" onClick={salvarImagem} disabled={baixando} type="button">
-                {baixando ? "Baixando..." : "↓ Salvar resultado"}
-              </button>
-              <button className="obg-action" onClick={compartilhar} disabled={compartilhando} type="button">
-                {compartilhando ? "Gerando..." : copiado ? "✓ Link copiado!" : "↗ Compartilhar imagem"}
-              </button>
-              <a className="obg-action" href={`/resultado/${leadId}`} target="_blank" rel="noopener noreferrer">
-                ◉ Ver página pública
-              </a>
+              <div className="obg-action-item">
+                <button className="obg-action" onClick={salvarImagem} disabled={baixando} type="button">
+                  {baixando ? "Carregando..." : "◉ Ver resultado completo"}
+                </button>
+                <p className="obg-action-desc">Acesse o diagnóstico detalhado por pilar</p>
+              </div>
+              <div className="obg-action-item">
+                <button className="obg-action" onClick={compartilhar} disabled={compartilhando} type="button">
+                  {compartilhando ? "Gerando..." : copiado ? "✓ Link copiado!" : "↗ Compartilhar resultado"}
+                </button>
+                <p className="obg-action-desc">Envie o link para alguém fazer o teste também</p>
+              </div>
             </div>
           )}
 
           <div className="obg-links">
-            <Link href="/quiz">Refazer diagnóstico</Link>
+            <Link href="/intro">Refazer diagnóstico</Link>
             <Link href="/">Voltar para início</Link>
           </div>
         </div>
@@ -142,10 +145,12 @@ const css = `
   .obg-muted{font-size:14px;color:#7a6e5e;}
   .obg-error{font-size:14px;color:#e05840;}
   .obg-btn{display:inline-block;margin-top:8px;background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;text-decoration:none;font-weight:700;font-size:15px;padding:14px 24px;border-radius:12px;}
-  .obg-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
-  .obg-action{flex:1;min-width:140px;background:rgba(194,144,77,.06);border:1px solid rgba(194,144,77,.2);color:#c2904d;text-decoration:none;font-size:13px;font-weight:600;padding:11px 14px;border-radius:10px;text-align:center;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;}
+  .obg-actions{display:flex;flex-direction:column;gap:10px;margin-top:18px;}
+  .obg-action-item{display:flex;flex-direction:column;gap:4px;}
+  .obg-action{background:rgba(194,144,77,.06);border:1px solid rgba(194,144,77,.2);color:#c2904d;text-decoration:none;font-size:13px;font-weight:600;padding:12px 16px;border-radius:10px;text-align:left;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;width:100%;}
   .obg-action:hover{background:rgba(194,144,77,.12);border-color:rgba(194,144,77,.4);}
   .obg-action:disabled{opacity:.5;cursor:default;}
+  .obg-action-desc{font-size:12px;color:#4a3e30;padding-left:2px;}
   .obg-links{display:flex;gap:16px;margin-top:20px;flex-wrap:wrap;}
   .obg-links a{font-size:13px;color:#7a6e5e;text-decoration:none;}
   .obg-links a:hover{color:#c2904d;}

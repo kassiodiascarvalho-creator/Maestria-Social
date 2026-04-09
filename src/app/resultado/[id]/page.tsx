@@ -1,18 +1,18 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getConfig } from '@/lib/config'
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
 import type { Metadata } from 'next'
-import BaixarImagem from './BaixarImagem'
-
-const PILARES = [
-  { key: 'A', name: 'Sociabilidade' },
-  { key: 'B', name: 'Comunicação' },
-  { key: 'C', name: 'Relacionamento' },
-  { key: 'D', name: 'Persuasão' },
-  { key: 'E', name: 'Influência' },
-]
+import ResultadoCompleto from './ResultadoCompleto'
 
 const SITE_URL = 'https://maestriasocial.com'
+
+const NOME_PARA_KEY: Record<string, string> = {
+  Sociabilidade: 'A',
+  Comunicação: 'B',
+  Relacionamento: 'C',
+  Persuasão: 'D',
+  Influência: 'E',
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
@@ -53,10 +53,42 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
 }
 
-export default async function ResultadoPublicoPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const supabase = createAdminClient()
+async function gerarWhatsappLink(lead: {
+  nome: string;
+  qs_total: number;
+  nivel_qs: string;
+  pilar_fraco: string;
+  scores: Record<string, number>;
+}): Promise<string> {
+  try {
+    const numeroDestino = (await getConfig('META_WHATSAPP_NUMBER')) || '5533984522635'
+    const keyPilar = NOME_PARA_KEY[lead.pilar_fraco ?? ''] ?? 'B'
+    const scorePilar = lead.scores[keyPilar] ?? 0
+    const percentualPilar = Math.round((scorePilar / 50) * 100)
+    const texto = [
+      `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_total}/250 — ${lead.nivel_qs}.`,
+      `Meu pilar mais fraco é ${lead.pilar_fraco} com ${percentualPilar}%.`,
+      'Quero entender meu próximo passo.',
+    ].join(' ')
+    const num = numeroDestino.replace(/\D/g, '')
+    return `https://wa.me/${num}?text=${encodeURIComponent(texto)}`
+  } catch {
+    return ''
+  }
+}
 
+export default async function ResultadoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ from?: string }>
+}) {
+  const { id } = await params
+  const { from } = await searchParams
+  const fromQuiz = from === 'quiz'
+
+  const supabase = createAdminClient()
   const { data: lead } = await supabase
     .from('leads')
     .select('nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores')
@@ -67,106 +99,25 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
 
   const scores = (lead.scores ?? {}) as Record<string, number>
 
+  const leadResult = {
+    nome: lead.nome as string,
+    qs_total: lead.qs_total as number,
+    qs_percentual: lead.qs_percentual as number,
+    nivel_qs: lead.nivel_qs as string,
+    pilar_fraco: lead.pilar_fraco as string,
+    scores,
+  }
+
+  const whatsappLink = fromQuiz
+    ? await gerarWhatsappLink(leadResult)
+    : undefined
+
   return (
-    <>
-      <style>{css}</style>
-      <main className="r-wrap">
-        <div className="r-card" id="resultado-card">
-
-          {/* ── tudo isso vai para a imagem capturada ── */}
-          <div className="r-header">
-            <span className="r-diamond">◆</span>
-            <span className="r-brand">Maestria Social</span>
-          </div>
-
-          <p className="r-name">{lead.nome}</p>
-          <h1 className="r-title">Quociente Social</h1>
-
-          <div className="r-score-wrap">
-            <div className="r-score">
-              <span className="r-score-num">{lead.qs_total}</span>
-              <span className="r-score-den">/250</span>
-            </div>
-            <p className="r-nivel">Nível {lead.nivel_qs} · {lead.qs_percentual}%</p>
-          </div>
-
-          {lead.pilar_fraco && (
-            <p className="r-pilar">Pilar com maior oportunidade: <strong>{lead.pilar_fraco}</strong></p>
-          )}
-
-          <div className="r-pilares">
-            {PILARES.map((p) => {
-              const score = scores[p.key] ?? 0
-              const pct = Math.round((score / 50) * 100)
-              const isFraco = lead.pilar_fraco === p.name
-              return (
-                <div key={p.key} className={`r-pilar-row${isFraco ? ' is-fraco' : ''}`}>
-                  <div className="r-pilar-info">
-                    <span className="r-pilar-name">{p.name}</span>
-                    <span className="r-pilar-pct">{pct}%</span>
-                  </div>
-                  <div className="r-pilar-bar">
-                    <div className="r-pilar-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="r-cta-block">
-            <p className="r-cta-text">Quer descobrir o seu?</p>
-            <Link href="/" className="r-cta-btn">
-              Fazer o teste agora →
-            </Link>
-            <p className="r-cta-url">maestriasocial.com</p>
-          </div>
-          {/* ── fim da área capturada ── */}
-
-          {/* botões ficam fora da imagem */}
-          <div data-nocapture="true">
-            <BaixarImagem nome={lead.nome} leadId={id} />
-          </div>
-
-        </div>
-      </main>
-    </>
+    <ResultadoCompleto
+      lead={leadResult}
+      leadId={id}
+      fromQuiz={fromQuiz}
+      whatsappLink={whatsappLink}
+    />
   )
 }
-
-const css = `
-  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0e0f09; color: #fff9e6; font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
-  .r-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
-  .r-card { width: 100%; max-width: 680px; background: #1a1410; border: 1px solid #2a1f18; border-radius: 22px; padding: 44px 36px; position: relative; overflow: hidden; }
-  .r-card::before { content: ''; position: absolute; top: -120px; right: -120px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(194,144,77,.1) 0%, transparent 65%); pointer-events: none; }
-  .r-header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-  .r-diamond { font-size: 8px; color: #c2904d; }
-  .r-brand { font-size: 11px; color: #c2904d; letter-spacing: 4px; text-transform: uppercase; font-weight: 700; }
-  .r-name { font-size: 14px; color: #7a6e5e; margin-bottom: 6px; }
-  .r-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 38px; font-style: italic; color: #fff9e6; margin-bottom: 18px; }
-  .r-score-wrap { margin-bottom: 0; }
-  .r-score { display: flex; align-items: baseline; gap: 8px; }
-  .r-score-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 96px; font-weight: 700; color: #c2904d; line-height: 1; }
-  .r-score-den { font-size: 22px; color: #7a6e5e; }
-  .r-nivel { font-size: 16px; color: #fff9e6; margin-top: 48px; margin-bottom: 8px; }
-  .r-pilar { font-size: 13px; color: #7a6e5e; margin-bottom: 28px; }
-  .r-pilar strong { color: #c2904d; }
-  .r-pilares { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
-  .r-pilar-row { display: flex; flex-direction: column; gap: 4px; }
-  .r-pilar-info { display: flex; justify-content: space-between; }
-  .r-pilar-name { font-size: 13px; color: #7a6e5e; }
-  .r-pilar-pct { font-size: 13px; color: #7a6e5e; font-weight: 600; }
-  .r-pilar-bar { height: 4px; background: #2a1f18; border-radius: 99px; overflow: hidden; }
-  .r-pilar-fill { height: 100%; background: #3d3328; border-radius: 99px; }
-  .r-pilar-row.is-fraco .r-pilar-name,
-  .r-pilar-row.is-fraco .r-pilar-pct { color: #c2904d; font-weight: 700; }
-  .r-pilar-row.is-fraco .r-pilar-fill { background: linear-gradient(90deg, #c2904d, #fee69d); }
-  .r-cta-block { text-align: center; padding-top: 24px; border-top: 1px solid #2a1f18; }
-  .r-cta-text { font-size: 14px; color: #7a6e5e; margin-bottom: 14px; }
-  .r-cta-btn { display: inline-block; background: linear-gradient(135deg, #c2904d, #d4a055); color: #0e0f09; text-decoration: none; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; }
-  .r-cta-btn:hover { filter: brightness(1.08); }
-  .r-cta-url { font-size: 11px; color: #4a3e30; margin-top: 10px; letter-spacing: 1px; }
-  .r-download { display: inline-block; margin-top: 12px; font-size: 13px; color: #c2904d; text-decoration: none; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
-  .r-download:hover { text-decoration: underline; }
-  .r-download:disabled { opacity: .6; cursor: default; }
-`

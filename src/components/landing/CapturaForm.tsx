@@ -63,7 +63,7 @@ export default function CapturaForm() {
       sessionStorage.setItem("lead_id", data.id);
       sessionStorage.setItem("lead_nome", fields.nome.trim());
       sessionStorage.setItem("lead_whatsapp", fields.whatsapp.replace(/\D/g, ""));
-      router.push("/quiz");
+      router.push("/intro");
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : "Erro inesperado. Tente novamente.");
     } finally {
