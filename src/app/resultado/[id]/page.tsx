@@ -66,13 +66,13 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
   if (!lead || !lead.qs_total) notFound()
 
   const scores = (lead.scores ?? {}) as Record<string, number>
-  const ogImage = `/api/og/resultado/${id}`
 
   return (
     <>
       <style>{css}</style>
       <main className="r-wrap">
         <div className="r-card" id="resultado-card">
+          <div id="capture-card" style={{ background: '#1a1410', padding: '44px 36px', borderRadius: 16 }}>
           <div className="r-header">
             <span className="r-diamond">◆</span>
             <span className="r-brand">Maestria Social</span>
@@ -110,13 +110,9 @@ export default async function ResultadoPublicoPage({ params }: { params: Promise
             })}
           </div>
 
-          {/* Imagem do resultado para download */}
-          <div className="r-image-wrap">
-            <p className="r-image-label">Imagem para compartilhar</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={ogImage} alt={`Resultado de ${lead.nome}`} className="r-image" />
-            <BaixarImagem nome={lead.nome} leadId={id} />
-          </div>
+          </div>{/* fim capture-card */}
+
+          <BaixarImagem nome={lead.nome} leadId={id} />
 
           <div className="r-cta-block">
             <p className="r-cta-text">Quer descobrir o seu?</p>

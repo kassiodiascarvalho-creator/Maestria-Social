@@ -11,9 +11,24 @@ export default function BaixarImagem({ nome, leadId }: { nome: string; leadId: s
     if (baixando) return;
     setBaixando(true);
     try {
-      // Abre a imagem OG em nova aba — usuário usa "Salvar imagem como"
-      // (funciona em 100% dos browsers, desktop e mobile)
-      window.open(`/api/og/resultado/${leadId}`, "_blank");
+      const card = document.getElementById("capture-card");
+      if (!card) return;
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(card, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#1a1410",
+        logging: false,
+      });
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `maestria-social-${nome}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, "image/png");
     } catch (err) {
       console.error("[BaixarImagem]", err);
     } finally {
