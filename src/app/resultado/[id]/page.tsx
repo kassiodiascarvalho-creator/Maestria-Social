@@ -145,9 +145,9 @@ const css = `
   .r-name { font-size: 14px; color: #7a6e5e; margin-bottom: 6px; }
   .r-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 38px; font-style: italic; color: #fff9e6; margin-bottom: 18px; }
   .r-score-wrap { margin-bottom: 12px; }
-  .r-score { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
-  .r-score-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 96px; font-weight: 700; color: #c2904d; line-height: 0.85; }
-  .r-score-den { font-size: 22px; color: #7a6e5e; padding-bottom: 8px; }
+  .r-score { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 18px; }
+  .r-score-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 96px; font-weight: 700; color: #c2904d; line-height: 1; }
+  .r-score-den { font-size: 22px; color: #7a6e5e; padding-bottom: 12px; }
   .r-nivel { font-size: 16px; color: #fff9e6; margin-bottom: 8px; }
   .r-pilar { font-size: 13px; color: #7a6e5e; margin-bottom: 28px; }
   .r-pilar strong { color: #c2904d; }
