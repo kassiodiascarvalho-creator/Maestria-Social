@@ -64,8 +64,10 @@ export async function GET(
       ? rows[0] as { nome: string; qs_total: number; qs_percentual: number; nivel_qs: string; pilar_fraco: string; scores: Record<string, number> }
       : null
 
-    if (debug) return Response.json({ rows, lead, temKey: !!key, keyInicio: key.substring(0, 10), supabaseUrl: SUPABASE_URL })
-    if (!lead?.qs_total) return new ImageResponse(fallback, { width: 1200, height: 630 })
+    if (!lead?.qs_total) {
+      if (debug) return Response.json({ erro: 'lead sem qs_total', rows, lead })
+      return new ImageResponse(fallback, { width: 1200, height: 630 })
+    }
 
     const scores = (lead.scores ?? {}) as Record<string, number>
 
@@ -136,6 +138,7 @@ export async function GET(
     )
   } catch (err) {
     console.error('[og/resultado]', err)
+    if (debug) return Response.json({ erro: String(err), stack: err instanceof Error ? err.stack : undefined })
     return new ImageResponse(fallback, { width: 1200, height: 630 })
   }
 }
