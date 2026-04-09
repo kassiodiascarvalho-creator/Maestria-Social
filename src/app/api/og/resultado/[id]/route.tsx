@@ -1,6 +1,11 @@
 import { ImageResponse } from 'next/og'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://dhudmbbgdyxdxypixyis.supabase.co'
+export const runtime = 'edge'
+
+// Trim obrigatório: NEXT_PUBLIC_SUPABASE_URL pode ter \n no final
+const SUPABASE_URL = (
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://dhudmbbgdyxdxypixyis.supabase.co'
+).trim()
 
 const PILARES = [
   { key: 'A', name: 'Sociabilidade' },
@@ -36,26 +41,27 @@ export async function GET(
   const debug = new URL(req.url).searchParams.get('debug') === '1'
 
   try {
+    // No edge runtime, SUPABASE_SERVICE_ROLE_KEY não está disponível;
+    // usamos a anon key que tem leitura pública dos leads.
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
     if (!key) {
-      if (debug) return Response.json({ erro: 'Nenhuma chave Supabase disponível', SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY })
+      if (debug) return Response.json({ erro: 'Nenhuma chave disponível' })
       return new ImageResponse(fallback, { width: 1200, height: 630 })
     }
 
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}&select=nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores&limit=1`,
-      {
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-          Accept: 'application/json',
-        },
-        cache: 'no-store',
-      }
-    )
+    const url = `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}&select=nome,qs_total,qs_percentual,nivel_qs,pilar_fraco,scores&limit=1`
+
+    const res = await fetch(url, {
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        Accept: 'application/json',
+      },
+    })
 
     if (!res.ok) {
-      if (debug) return Response.json({ erro: 'Supabase retornou erro', status: res.status, body: await res.text(), url: `${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, temKey: !!key, keyInicio: key.substring(0, 10) })
+      if (debug) return Response.json({ erro: 'Supabase erro', status: res.status, url, body: await res.text() })
       return new ImageResponse(fallback, { width: 1200, height: 630 })
     }
 
@@ -65,9 +71,11 @@ export async function GET(
       : null
 
     if (!lead?.qs_total) {
-      if (debug) return Response.json({ erro: 'lead sem qs_total', rows, lead })
+      if (debug) return Response.json({ erro: 'lead não encontrado ou sem qs_total', rows, url })
       return new ImageResponse(fallback, { width: 1200, height: 630 })
     }
+
+    if (debug) return Response.json({ ok: true, lead, url, keyInicio: key.substring(0, 10) })
 
     const scores = (lead.scores ?? {}) as Record<string, number>
 
@@ -83,16 +91,11 @@ export async function GET(
             color: '#fff9e6',
             padding: '60px 70px',
             fontFamily: 'sans-serif',
-            position: 'relative',
           }}
         >
-          {/* Glow */}
-          <div style={{ position: 'absolute', top: -200, right: -200, width: 600, height: 600, background: 'radial-gradient(circle, rgba(194,144,77,0.18) 0%, transparent 65%)', display: 'flex' }} />
-
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 30 }}>
-            <div style={{ fontSize: 14, color: '#c2904d', letterSpacing: 4 }}>◆</div>
-            <div style={{ fontSize: 16, color: '#c2904d', letterSpacing: 4, textTransform: 'uppercase', fontWeight: 700 }}>Maestria Social</div>
+            <div style={{ fontSize: 16, color: '#c2904d', letterSpacing: 4, textTransform: 'uppercase', fontWeight: 700 }}>◆ Maestria Social</div>
           </div>
 
           {/* Nome */}
@@ -103,7 +106,7 @@ export async function GET(
 
           {/* Pontuação */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 8 }}>
-            <div style={{ fontSize: 160, fontWeight: 700, color: '#c2904d', lineHeight: 1 }}>{lead.qs_total}</div>
+            <div style={{ fontSize: 160, fontWeight: 700, color: '#c2904d', lineHeight: '1' }}>{lead.qs_total}</div>
             <div style={{ fontSize: 40, color: '#7a6e5e' }}>/250</div>
           </div>
 
@@ -121,8 +124,8 @@ export async function GET(
               return (
                 <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{ display: 'flex', fontSize: 18, color: isFraco ? '#c2904d' : '#7a6e5e', width: 200, fontWeight: isFraco ? 700 : 400 }}>{p.name}</div>
-                  <div style={{ display: 'flex', flex: 1, height: 8, background: '#2a1f18', borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: isFraco ? '#c2904d' : '#3d3328', display: 'flex' }} />
+                  <div style={{ display: 'flex', flexGrow: 1, height: 8, background: '#2a1f18', borderRadius: '99px' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: isFraco ? '#c2904d' : '#3d3328', display: 'flex', borderRadius: '99px' }} />
                   </div>
                   <div style={{ display: 'flex', fontSize: 18, color: isFraco ? '#c2904d' : '#7a6e5e', width: 50, justifyContent: 'flex-end', fontWeight: isFraco ? 700 : 400 }}>{pct}%</div>
                 </div>
@@ -131,14 +134,14 @@ export async function GET(
           </div>
 
           {/* Footer */}
-          <div style={{ display: 'flex', position: 'absolute', bottom: 32, right: 70, fontSize: 16, color: '#7a6e5e', letterSpacing: 1 }}>maestriasocial.com</div>
+          <div style={{ display: 'flex', marginTop: 'auto', fontSize: 16, color: '#7a6e5e' }}>maestriasocial.com</div>
         </div>
       ),
       { width: 1200, height: 630 }
     )
   } catch (err) {
     console.error('[og/resultado]', err)
-    if (debug) return Response.json({ erro: String(err), stack: err instanceof Error ? err.stack : undefined })
+    if (debug) return Response.json({ erro: String(err) })
     return new ImageResponse(fallback, { width: 1200, height: 630 })
   }
 }
