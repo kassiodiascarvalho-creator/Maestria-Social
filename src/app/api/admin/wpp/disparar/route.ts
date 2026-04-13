@@ -317,14 +317,14 @@ export async function POST(req: NextRequest) {
           }
         }
       } else {
-        // Fora da janela 24h: precisa enviar template primeiro
-        // Verifica se já tem template na fila de mensagens
-        const temTemplate = mensagens.some(m => m.tipo === 'template')
+        // Fora da janela 24h: Meta NÃO aceita texto/mídia livre.
+        // Regra: enviar APENAS template. Template não abre a janela —
+        // só uma resposta do usuário abre. Portanto não enviamos msgs normais depois.
+        const templatesDaFila = mensagens.filter(m => m.tipo === 'template')
 
-        if (temTemplate) {
-          // Já tem template na fila — envia tudo normalmente
-          // (template abre a janela, msgs seguintes passam)
-          for (const msg of mensagens) {
+        if (templatesDaFila.length > 0) {
+          // Fila já tem template(s) — envia só os templates, ignora o resto
+          for (const msg of templatesDaFila) {
             try {
               await enviarMeta(phoneNumberId, accessToken, contato.telefone, msg)
             } catch (err) {
@@ -332,13 +332,12 @@ export async function POST(req: NextRequest) {
               erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
               break
             }
-            if (mensagens.length > 1) {
+            if (templatesDaFila.length > 1) {
               await new Promise(r => setTimeout(r, 200))
             }
           }
         } else if (templatePadrao) {
-          // Envia template padrão primeiro para abrir a janela, depois as mensagens
-          // maestria_resultado espera 3 params: nome, qs_total, pilar_fraco
+          // Usa template padrão configurado com variáveis do lead
           const templateVars: string[] = []
           if ('pilar_fraco' in contato) {
             templateVars.push(
@@ -354,40 +353,14 @@ export async function POST(req: NextRequest) {
               template_lang: 'pt_BR',
               template_vars: templateVars.length > 0 ? templateVars : undefined,
             })
-            // Aguarda um pouco para o template ser processado
-            await new Promise(r => setTimeout(r, 500))
-
-            // Agora envia as mensagens normais
-            for (const msg of mensagens) {
-              try {
-                await enviarMeta(phoneNumberId, accessToken, contato.telefone, msg)
-              } catch (err) {
-                // Se falhar após template, registra mas continua
-                erros.push(`${contato.telefone} (pós-template): ${err instanceof Error ? err.message : String(err)}`)
-              }
-              if (mensagens.length > 1) {
-                await new Promise(r => setTimeout(r, 200))
-              }
-            }
           } catch (err) {
             contatoOk = false
             erros.push(`${contato.telefone} (template): ${err instanceof Error ? err.message : String(err)}`)
           }
         } else {
-          // Sem template configurado — tenta enviar assim mesmo (Meta vai rejeitar msgs normais fora da janela)
-          // Mas pelo menos tenta, caso o usuário tenha templates inline
-          for (const msg of mensagens) {
-            try {
-              await enviarMeta(phoneNumberId, accessToken, contato.telefone, msg)
-            } catch (err) {
-              contatoOk = false
-              erros.push(`${contato.telefone} (fora 24h, sem template): ${err instanceof Error ? err.message : String(err)}`)
-              break
-            }
-            if (mensagens.length > 1) {
-              await new Promise(r => setTimeout(r, 200))
-            }
-          }
+          // Sem nenhum template disponível — falha honesta
+          contatoOk = false
+          erros.push(`${contato.telefone}: fora da janela 24h e nenhum template configurado. Configure META_TEMPLATE_NAME nas Integrações.`)
         }
       }
 
