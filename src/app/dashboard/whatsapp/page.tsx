@@ -172,10 +172,11 @@ export default function WhatsAppPage() {
       } else {
         // Excel
         const buf = await file.arrayBuffer()
-        const XLSX = await import("xlsx")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const XLSX = await import("xlsx") as any
         const wb = XLSX.read(buf)
         const ws = wb.Sheets[wb.SheetNames[0]]
-        const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" })
+        const json = XLSX.utils.sheet_to_json(ws, { defval: "" }) as Record<string, string>[]
         rows = json.map(row => {
           const keys = Object.keys(row)
           const telKey = keys.find(k => /tel|phone|fone|whats|celular|numero|número/i.test(k)) ?? keys[keys.length - 1]
