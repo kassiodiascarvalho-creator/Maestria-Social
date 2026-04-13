@@ -20,6 +20,7 @@ interface MsgItem {
   template_name: string
   template_lang: string
   template_vars: string[]
+  template_param_count: number // quantas variáveis o template realmente tem
 }
 
 interface TemplateInfo {
@@ -50,7 +51,7 @@ function normalizarDigito(tel: string, removerNono: boolean): string {
 }
 
 function criarMsgVazia(): MsgItem {
-  return { id: uid(), tipo: "text", conteudo: "", caption: "", filename: "", template_name: "", template_lang: "pt_BR", template_vars: [] }
+  return { id: uid(), tipo: "text", conteudo: "", caption: "", filename: "", template_name: "", template_lang: "pt_BR", template_vars: [], template_param_count: 0 }
 }
 
 // ── Componente principal ───────────────────────────────────────────────────────
@@ -331,6 +332,7 @@ export default function WhatsAppPage() {
           template_name: m.template_name,
           template_lang: m.template_lang || "pt_BR",
           template_vars: m.template_vars.filter(v => v.trim()),
+          template_param_count: m.template_param_count ?? 0,
         }
       }
       return {
@@ -628,7 +630,20 @@ export default function WhatsAppPage() {
                                     <select
                                       className="wpp-select wpp-select-full"
                                       value={msg.template_name}
-                                      onChange={e => atualizarMsg(msg.id, { template_name: e.target.value })}
+                                      onChange={e => {
+                                        const nome = e.target.value
+                                        const tpl = templates.find(t => t.name === nome)
+                                        // Conta quantas variáveis {{N}} o template tem no body
+                                        let paramCount = 0
+                                        if (tpl) {
+                                          const body = tpl.components.find(c => c.type === "BODY")
+                                          if (body?.text) {
+                                            const matches = body.text.match(/\{\{\d+\}\}/g)
+                                            paramCount = matches ? matches.length : 0
+                                          }
+                                        }
+                                        atualizarMsg(msg.id, { template_name: nome, template_param_count: paramCount, template_lang: tpl?.language || "pt_BR" })
+                                      }}
                                     >
                                       <option value="">Selecione um template...</option>
                                       {templates.map(t => (

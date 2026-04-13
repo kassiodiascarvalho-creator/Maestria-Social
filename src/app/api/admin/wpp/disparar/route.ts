@@ -19,6 +19,7 @@ interface MensagemItem {
   template_name?: string
   template_lang?: string
   template_vars?: string[]
+  template_param_count?: number // número real de {{N}} no template
 }
 
 interface Filtros {
@@ -126,21 +127,27 @@ async function enviarMeta(
   }
 }
 
-// Preenche variáveis vazias de um template com dados do contato como fallback
-// Se o usuário já preencheu template_vars manualmente, mantém os valores.
-// Se não preencheu, usa: [nome, qs_total, pilar_fraco] (padrão maestria_resultado/maestria_saudacao)
+// Preenche variáveis vazias de um template com dados do contato como fallback.
+// Usa template_param_count para saber quantas vars o template realmente tem.
+// Pool de vars disponíveis (na ordem): nome, qs_total, pilar_fraco
 function preencherVarsTemplate(
   msg: MensagemItem,
   contato: Record<string, unknown>
 ): MensagemItem {
   if (msg.tipo !== 'template') return msg
-  // Se já tem variáveis preenchidas, usa elas
+  // Se já tem variáveis preenchidas manualmente, usa elas
   if (msg.template_vars && msg.template_vars.some(v => v.trim() !== '')) return msg
-  // Fallback automático com dados do contato
+
   const nome = (contato.nome as string) || 'Lead'
   const qs_total = String(contato.qs_total ?? 0)
   const pilar = (contato.pilar_fraco as string) || 'N/A'
-  return { ...msg, template_vars: [nome, qs_total, pilar] }
+  const pool = [nome, qs_total, pilar]
+
+  // Quantas variáveis o template tem (0 = sem info, assume todas do pool)
+  const count = msg.template_param_count ?? 0
+  const vars = count > 0 ? pool.slice(0, count) : []
+
+  return { ...msg, template_vars: vars }
 }
 
 // POST — dispara sequência de mensagens para contatos filtrados de uma lista
