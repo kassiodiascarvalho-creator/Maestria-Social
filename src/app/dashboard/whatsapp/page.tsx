@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import * as XLSX from "xlsx"
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type Lista = { id: string; nome: string; criado_em: string; total_contatos: number }
@@ -173,6 +172,7 @@ export default function WhatsAppPage() {
       } else {
         // Excel
         const buf = await file.arrayBuffer()
+        const XLSX = await import("xlsx")
         const wb = XLSX.read(buf)
         const ws = wb.Sheets[wb.SheetNames[0]]
         const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" })
