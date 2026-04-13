@@ -5,25 +5,48 @@ import { useState, useEffect, useRef } from "react"
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type Lista = { id: string; nome: string; criado_em: string; total_contatos: number }
 type Contato = { id: string; nome: string | null; telefone: string }
-type TipoMsg = "text" | "image" | "audio" | "video" | "document"
+type TipoMsg = "text" | "image" | "audio" | "video" | "document" | "template"
+
+interface MsgItem {
+  id: string
+  tipo: TipoMsg
+  conteudo: string
+  caption: string
+  filename: string
+  template_name: string
+  template_lang: string
+  template_vars: string[]
+}
+
+interface TemplateInfo {
+  name: string
+  language: string
+  category: string
+  components: Array<{ type: string; text?: string; parameters?: Array<{ type: string }> }>
+}
 
 const TIPOS: { value: TipoMsg; label: string; icon: string; accept: string }[] = [
-  { value: "text",     label: "Texto",     icon: "✉",  accept: "" },
-  { value: "image",    label: "Foto",      icon: "🖼",  accept: "image/*" },
-  { value: "audio",    label: "Áudio",     icon: "🎵",  accept: "audio/*" },
-  { value: "video",    label: "Vídeo",     icon: "🎬",  accept: "video/*" },
-  { value: "document", label: "Documento", icon: "📄",  accept: ".pdf,.doc,.docx,.xls,.xlsx" },
+  { value: "template",  label: "Template", icon: "◈",  accept: "" },
+  { value: "text",      label: "Texto",    icon: "✉",  accept: "" },
+  { value: "image",     label: "Foto",     icon: "🖼",  accept: "image/*" },
+  { value: "audio",     label: "Áudio",    icon: "🎵",  accept: "audio/*" },
+  { value: "video",     label: "Vídeo",    icon: "🎬",  accept: "video/*" },
+  { value: "document",  label: "Documento",icon: "📄",  accept: ".pdf,.doc,.docx,.xls,.xlsx" },
 ]
+
+function uid() { return Math.random().toString(36).slice(2, 10) }
 
 function normalizarDigito(tel: string, removerNono: boolean): string {
   let d = tel.replace(/\D/g, "")
-  // garante DDI 55
   if (!d.startsWith("55")) d = "55" + d
-  // remove 9º dígito (após DDI+DDD = 4 dígitos)
   if (removerNono && d.length === 13) {
     d = d.slice(0, 4) + d.slice(5)
   }
   return d
+}
+
+function criarMsgVazia(): MsgItem {
+  return { id: uid(), tipo: "text", conteudo: "", caption: "", filename: "", template_name: "", template_lang: "pt_BR", template_vars: [] }
 }
 
 // ── Componente principal ───────────────────────────────────────────────────────
@@ -48,16 +71,18 @@ export default function WhatsAppPage() {
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState("")
 
+  // Templates
+  const [templates, setTemplates] = useState<TemplateInfo[]>([])
+  const [templateCarregando, setTemplateCarregando] = useState(false)
+
+  // Fila de mensagens
+  const [fila, setFila] = useState<MsgItem[]>([criarMsgVazia()])
+  const [uploadandoId, setUploadandoId] = useState<string | null>(null)
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
   // Disparo
-  const [tipoMsg, setTipoMsg] = useState<TipoMsg>("text")
-  const [texto, setTexto] = useState("")
-  const [caption, setCaption] = useState("")
-  const [mediaUrl, setMediaUrl] = useState("")
-  const [mediaFilename, setMediaFilename] = useState("")
-  const [uploadando, setUploadando] = useState(false)
-  const fileMediaRef = useRef<HTMLInputElement>(null)
   const [disparando, setDisparando] = useState(false)
-  const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number } | null>(null)
+  const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: string[] } | null>(null)
   const [disparoErro, setDisparoErro] = useState("")
 
   // ── Carrega listas ──
@@ -77,6 +102,16 @@ export default function WhatsAppPage() {
     setCarregando(false)
   }
 
+  async function fetchTemplates() {
+    setTemplateCarregando(true)
+    try {
+      const res = await fetch("/api/admin/wpp/templates")
+      const data = await res.json()
+      setTemplates(Array.isArray(data) ? data : [])
+    } catch { /* ignore */ }
+    setTemplateCarregando(false)
+  }
+
   function selecionarLista(lista: Lista) {
     setListaAtiva(lista)
     setImportMsg("")
@@ -85,7 +120,7 @@ export default function WhatsAppPage() {
     fetchContatos(lista.id)
   }
 
-  // ── Criar lista ──
+  // ── CRUD listas ──
   async function criarLista() {
     if (!nomeLista.trim()) return
     setCriandoLista(true)
@@ -103,7 +138,6 @@ export default function WhatsAppPage() {
     }
   }
 
-  // ── Remover lista ──
   async function removerLista(id: string) {
     if (!confirm("Remover esta lista e todos os contatos?")) return
     await fetch(`/api/admin/wpp/listas/${id}`, { method: "DELETE" })
@@ -111,7 +145,7 @@ export default function WhatsAppPage() {
     fetchListas()
   }
 
-  // ── Adicionar contato manual ──
+  // ── Contatos ──
   async function adicionarContato() {
     if (!listaAtiva || !novoTel.trim()) return
     setAdicionando(true)
@@ -128,7 +162,6 @@ export default function WhatsAppPage() {
     fetchListas()
   }
 
-  // ── Remover contato ──
   async function removerContato(contatoId: string) {
     if (!listaAtiva) return
     await fetch(`/api/admin/wpp/listas/${listaAtiva.id}/contatos`, {
@@ -154,15 +187,12 @@ export default function WhatsAppPage() {
       if (ext === "csv" || ext === "txt") {
         const text = await file.text()
         const lines = text.split(/\r?\n/).filter(l => l.trim())
-        // Detecta separador
         const sep = lines[0]?.includes(";") ? ";" : ","
-        // Detecta se tem header (primeira linha tem texto não numérico)
         const hasHeader = /[a-zA-Z]/.test(lines[0]?.split(sep)[0] ?? "")
         const dataLines = hasHeader ? lines.slice(1) : lines
         rows = dataLines
           .map(l => {
             const cols = l.split(sep).map(c => c.replace(/^"|"$/g, "").trim())
-            // Tenta detectar qual coluna é telefone (tem dígitos)
             const telIdx = cols.findIndex(c => /\d{8,}/.test(c.replace(/\D/g, "")))
             if (telIdx === -1) return null
             const nomeIdx = telIdx === 0 ? 1 : 0
@@ -170,7 +200,6 @@ export default function WhatsAppPage() {
           })
           .filter(Boolean) as Array<{ nome?: string; telefone: string }>
       } else {
-        // Excel
         const buf = await file.arrayBuffer()
         // @ts-ignore — xlsx types not resolved on Vercel build
         const XLSX = await import("xlsx")
@@ -187,7 +216,6 @@ export default function WhatsAppPage() {
 
       if (rows.length === 0) { setImportMsg("Nenhum telefone encontrado no arquivo."); setImportando(false); return }
 
-      // Normaliza telefones
       const contatosNorm = rows.map(r => ({
         nome: r.nome || null,
         telefone: normalizarDigito(r.telefone, removerNono),
@@ -214,61 +242,88 @@ export default function WhatsAppPage() {
     }
   }
 
-  // ── Upload de mídia ──
-  async function uploadMidia(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadando(true)
-    setMediaUrl("")
-    setMediaFilename("")
+  // ── Fila de mensagens ──
+  function atualizarMsg(id: string, patch: Partial<MsgItem>) {
+    setFila(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
+  }
+
+  function adicionarMsgNaFila() {
+    setFila(prev => [...prev, criarMsgVazia()])
+  }
+
+  function removerMsgDaFila(id: string) {
+    setFila(prev => prev.length <= 1 ? prev : prev.filter(m => m.id !== id))
+  }
+
+  function moverMsg(id: string, dir: -1 | 1) {
+    setFila(prev => {
+      const idx = prev.findIndex(m => m.id === id)
+      if (idx < 0) return prev
+      const novoIdx = idx + dir
+      if (novoIdx < 0 || novoIdx >= prev.length) return prev
+      const nova = [...prev]
+      ;[nova[idx], nova[novoIdx]] = [nova[novoIdx], nova[idx]]
+      return nova
+    })
+  }
+
+  async function uploadMidia(msgId: string, file: File) {
+    setUploadandoId(msgId)
     const form = new FormData()
     form.append("file", file)
     const res = await fetch("/api/admin/wpp/upload", { method: "POST", body: form })
     const data = await res.json()
-    setUploadando(false)
+    setUploadandoId(null)
     if (res.ok) {
-      setMediaUrl(data.url)
-      setMediaFilename(data.filename)
+      atualizarMsg(msgId, { conteudo: data.url, filename: data.filename })
     }
-    if (fileMediaRef.current) fileMediaRef.current.value = ""
   }
 
-  // ── Disparar mensagem ──
+  // ── Disparar ──
   async function disparar() {
-    if (!listaAtiva) return
-    if (tipoMsg === "text" && !texto.trim()) return
-    if (tipoMsg !== "text" && !mediaUrl) return
+    if (!listaAtiva || fila.length === 0) return
     setDisparando(true)
     setDisparoResult(null)
     setDisparoErro("")
 
+    const mensagens = fila.map(m => {
+      if (m.tipo === "template") {
+        return {
+          tipo: "template" as const,
+          template_name: m.template_name,
+          template_lang: m.template_lang || "pt_BR",
+          template_vars: m.template_vars.filter(v => v.trim()),
+        }
+      }
+      return {
+        tipo: m.tipo,
+        conteudo: m.tipo === "text" ? m.conteudo : m.conteudo,
+        caption: m.caption || undefined,
+        filename: m.filename || undefined,
+      }
+    })
+
     const res = await fetch("/api/admin/wpp/disparar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lista_id: listaAtiva.id,
-        tipo: tipoMsg,
-        conteudo: tipoMsg === "text" ? texto : mediaUrl,
-        caption: caption || undefined,
-        filename: mediaFilename || undefined,
-      }),
+      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens }),
     })
     const data = await res.json()
     setDisparando(false)
     if (res.ok) {
-      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas })
-      setTexto("")
-      setCaption("")
-      setMediaUrl("")
-      setMediaFilename("")
+      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas, erros: data.erros })
     } else {
       setDisparoErro(data.error || "Erro ao disparar")
     }
   }
 
-  const tipoAtual = TIPOS.find(t => t.value === tipoMsg)!
-  const podeDIsparar = listaAtiva && contatos.length > 0 &&
-    (tipoMsg === "text" ? texto.trim().length > 0 : mediaUrl.length > 0)
+  // Valida se a fila pode ser disparada
+  const filaValida = fila.every(m => {
+    if (m.tipo === "template") return !!m.template_name
+    if (m.tipo === "text") return m.conteudo.trim().length > 0
+    return m.conteudo.length > 0 // URL da mídia
+  })
+  const podeDisparar = listaAtiva && contatos.length > 0 && filaValida && !disparando
 
   return (
     <>
@@ -281,7 +336,6 @@ export default function WhatsAppPage() {
             <h2 className="wpp-sidebar-title">Listas de Contatos</h2>
           </div>
 
-          {/* Nova lista */}
           <div className="wpp-nova-lista">
             <input
               className="wpp-input"
@@ -295,11 +349,8 @@ export default function WhatsAppPage() {
             </button>
           </div>
 
-          {/* Lista de listas */}
           <div className="wpp-listas-list">
-            {listas.length === 0 && (
-              <p className="wpp-empty">Nenhuma lista criada</p>
-            )}
+            {listas.length === 0 && <p className="wpp-empty">Nenhuma lista criada</p>}
             {listas.map(l => (
               <div
                 key={l.id}
@@ -340,17 +391,14 @@ export default function WhatsAppPage() {
                 {/* ── Coluna esquerda: contatos ── */}
                 <div className="wpp-col">
 
-                  {/* Importar */}
                   <div className="wpp-card">
                     <div className="wpp-card-title">Importar Contatos</div>
-
                     <div className="wpp-opcao-remover">
                       <label className="wpp-check-label">
                         <input type="checkbox" checked={removerNono} onChange={e => setRemoverNono(e.target.checked)} />
-                        <span>Remover 9º dígito (números com 9 na frente)</span>
+                        <span>Remover 9o dígito (números com 9 na frente)</span>
                       </label>
                     </div>
-
                     <div className="wpp-import-btns">
                       <input
                         ref={fileImportRef}
@@ -364,18 +412,17 @@ export default function WhatsAppPage() {
                         onClick={() => fileImportRef.current?.click()}
                         disabled={importando}
                       >
-                        {importando ? "Importando..." : "↑ Importar CSV / Excel"}
+                        {importando ? "Importando..." : "Importar CSV / Excel"}
                       </button>
                     </div>
                     {importMsg && (
                       <p className={`wpp-import-msg${importMsg.startsWith("✓") ? " ok" : " erro"}`}>{importMsg}</p>
                     )}
                     <p className="wpp-import-hint">
-                      O arquivo deve ter colunas de nome e telefone. O sistema detecta automaticamente o formato (com ou sem cabeçalho).
+                      O arquivo deve ter colunas de nome e telefone. O sistema detecta automaticamente o formato.
                     </p>
                   </div>
 
-                  {/* Adicionar manual */}
                   <div className="wpp-card">
                     <div className="wpp-card-title">Adicionar Manualmente</div>
                     <div className="wpp-form-row">
@@ -402,7 +449,6 @@ export default function WhatsAppPage() {
                     </div>
                   </div>
 
-                  {/* Lista de contatos */}
                   <div className="wpp-card wpp-card-contatos">
                     <div className="wpp-card-title">Contatos da Lista</div>
                     {carregando && <p className="wpp-empty">Carregando...</p>}
@@ -429,94 +475,171 @@ export default function WhatsAppPage() {
                   </div>
                 </div>
 
-                {/* ── Coluna direita: disparo ── */}
+                {/* ── Coluna direita: fila de disparo ── */}
                 <div className="wpp-col">
                   <div className="wpp-card">
-                    <div className="wpp-card-title">Disparar Mensagem</div>
+                    <div className="wpp-card-title-row">
+                      <div className="wpp-card-title" style={{ marginBottom: 0 }}>Fila de Mensagens</div>
+                      <span className="wpp-fila-count">{fila.length} {fila.length === 1 ? "mensagem" : "mensagens"}</span>
+                    </div>
+                    <p className="wpp-fila-hint">
+                      Monte a sequência de mensagens. Cada contato receberá todas na ordem. Use <strong>Template</strong> para enviar fora da janela de 24h.
+                    </p>
 
-                    {/* Tipo de mensagem */}
-                    <div className="wpp-tipos">
-                      {TIPOS.map(t => (
-                        <button
-                          key={t.value}
-                          className={`wpp-tipo-btn${tipoMsg === t.value ? " active" : ""}`}
-                          onClick={() => { setTipoMsg(t.value); setMediaUrl(""); setMediaFilename(""); setCaption("") }}
-                        >
-                          <span>{t.icon}</span>
-                          <span>{t.label}</span>
-                        </button>
+                    {/* Mensagens da fila */}
+                    <div className="wpp-fila">
+                      {fila.map((msg, idx) => (
+                        <div key={msg.id} className="wpp-fila-item">
+                          <div className="wpp-fila-header">
+                            <span className="wpp-fila-num">{idx + 1}</span>
+
+                            {/* Tipo */}
+                            <select
+                              className="wpp-select"
+                              value={msg.tipo}
+                              onChange={e => atualizarMsg(msg.id, {
+                                tipo: e.target.value as TipoMsg,
+                                conteudo: "", caption: "", filename: "",
+                                template_name: "", template_vars: [],
+                              })}
+                            >
+                              {TIPOS.map(t => (
+                                <option key={t.value} value={t.value}>{t.icon} {t.label}</option>
+                              ))}
+                            </select>
+
+                            {/* Mover / Remover */}
+                            <div className="wpp-fila-actions">
+                              <button className="wpp-icon-btn-sm" onClick={() => moverMsg(msg.id, -1)} disabled={idx === 0} title="Mover acima">▲</button>
+                              <button className="wpp-icon-btn-sm" onClick={() => moverMsg(msg.id, 1)} disabled={idx === fila.length - 1} title="Mover abaixo">▼</button>
+                              <button className="wpp-icon-btn-sm wpp-icon-del" onClick={() => removerMsgDaFila(msg.id)} disabled={fila.length <= 1} title="Remover">✕</button>
+                            </div>
+                          </div>
+
+                          {/* Conteúdo por tipo */}
+                          <div className="wpp-fila-body">
+                            {msg.tipo === "template" && (
+                              <>
+                                <div className="wpp-field">
+                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <select
+                                      className="wpp-select wpp-select-full"
+                                      value={msg.template_name}
+                                      onChange={e => atualizarMsg(msg.id, { template_name: e.target.value })}
+                                    >
+                                      <option value="">Selecione um template...</option>
+                                      {templates.map(t => (
+                                        <option key={t.name} value={t.name}>{t.name} ({t.language})</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      className="wpp-btn wpp-btn-outline"
+                                      onClick={fetchTemplates}
+                                      disabled={templateCarregando}
+                                      style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                                    >
+                                      {templateCarregando ? "..." : "Carregar"}
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="wpp-field">
+                                  <label className="wpp-label">Idioma</label>
+                                  <input
+                                    className="wpp-input"
+                                    value={msg.template_lang}
+                                    onChange={e => atualizarMsg(msg.id, { template_lang: e.target.value })}
+                                    placeholder="pt_BR"
+                                  />
+                                </div>
+                                <div className="wpp-field">
+                                  <label className="wpp-label">Variáveis (separadas por vírgula)</label>
+                                  <input
+                                    className="wpp-input"
+                                    placeholder="Ex: João, 25/04"
+                                    value={msg.template_vars.join(", ")}
+                                    onChange={e => atualizarMsg(msg.id, { template_vars: e.target.value.split(",").map(v => v.trim()) })}
+                                  />
+                                </div>
+                              </>
+                            )}
+
+                            {msg.tipo === "text" && (
+                              <textarea
+                                className="wpp-textarea"
+                                rows={3}
+                                placeholder="Digite sua mensagem..."
+                                value={msg.conteudo}
+                                onChange={e => atualizarMsg(msg.id, { conteudo: e.target.value })}
+                              />
+                            )}
+
+                            {(msg.tipo === "image" || msg.tipo === "audio" || msg.tipo === "video" || msg.tipo === "document") && (
+                              <>
+                                <input
+                                  ref={el => { fileRefs.current[msg.id] = el }}
+                                  type="file"
+                                  accept={TIPOS.find(t => t.value === msg.tipo)?.accept ?? ""}
+                                  style={{ display: "none" }}
+                                  onChange={e => {
+                                    const f = e.target.files?.[0]
+                                    if (f) uploadMidia(msg.id, f)
+                                  }}
+                                />
+                                {msg.conteudo ? (
+                                  <div className="wpp-media-preview">
+                                    <span className="wpp-media-name">✓ {msg.filename || "Arquivo"}</span>
+                                    <button
+                                      className="wpp-icon-btn wpp-icon-del"
+                                      onClick={() => atualizarMsg(msg.id, { conteudo: "", filename: "" })}
+                                    >✕</button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="wpp-btn wpp-btn-outline wpp-btn-full"
+                                    onClick={() => fileRefs.current[msg.id]?.click()}
+                                    disabled={uploadandoId === msg.id}
+                                  >
+                                    {uploadandoId === msg.id ? "Enviando..." : `Selecionar ${TIPOS.find(t => t.value === msg.tipo)?.label}`}
+                                  </button>
+                                )}
+
+                                {(msg.tipo === "image" || msg.tipo === "video" || msg.tipo === "document") && (
+                                  <input
+                                    className="wpp-input"
+                                    placeholder="Legenda (opcional)"
+                                    value={msg.caption}
+                                    onChange={e => atualizarMsg(msg.id, { caption: e.target.value })}
+                                    style={{ marginTop: 8 }}
+                                  />
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
                       ))}
                     </div>
 
-                    {/* Conteúdo */}
-                    {tipoMsg === "text" ? (
-                      <div className="wpp-field">
-                        <label className="wpp-label">Mensagem</label>
-                        <textarea
-                          className="wpp-textarea"
-                          rows={6}
-                          placeholder="Digite sua mensagem..."
-                          value={texto}
-                          onChange={e => setTexto(e.target.value)}
-                        />
-                        <p className="wpp-char-count">{texto.length} caracteres</p>
-                      </div>
-                    ) : (
-                      <div className="wpp-field">
-                        <label className="wpp-label">{tipoAtual.label}</label>
-                        <input
-                          ref={fileMediaRef}
-                          type="file"
-                          accept={tipoAtual.accept}
-                          style={{ display: "none" }}
-                          onChange={uploadMidia}
-                        />
-                        {mediaUrl ? (
-                          <div className="wpp-media-preview">
-                            <span className="wpp-media-name">✓ {mediaFilename}</span>
-                            <button
-                              className="wpp-icon-btn wpp-icon-del"
-                              onClick={() => { setMediaUrl(""); setMediaFilename("") }}
-                            >✕</button>
-                          </div>
-                        ) : (
-                          <button
-                            className="wpp-btn wpp-btn-outline wpp-btn-full"
-                            onClick={() => fileMediaRef.current?.click()}
-                            disabled={uploadando}
-                          >
-                            {uploadando ? "Enviando arquivo..." : `↑ Selecionar ${tipoAtual.label}`}
-                          </button>
-                        )}
-
-                        {(tipoMsg === "image" || tipoMsg === "video" || tipoMsg === "document") && (
-                          <div className="wpp-field" style={{ marginTop: 12 }}>
-                            <label className="wpp-label">Legenda / Caption (opcional)</label>
-                            <input
-                              className="wpp-input"
-                              placeholder="Legenda da mídia..."
-                              value={caption}
-                              onChange={e => setCaption(e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Adicionar mais */}
+                    <button className="wpp-btn wpp-btn-outline wpp-btn-full" onClick={adicionarMsgNaFila} style={{ marginTop: 12 }}>
+                      + Adicionar outra mensagem
+                    </button>
 
                     {/* Resumo e botão de disparo */}
                     <div className="wpp-disparo-footer">
                       <div className="wpp-disparo-info">
                         <span className="wpp-disparo-tag">◈ {listaAtiva.nome}</span>
-                        <span className="wpp-disparo-count">{contatos.length} destinatário{contatos.length !== 1 ? "s" : ""}</span>
+                        <span className="wpp-disparo-count">
+                          {contatos.length} destinatário{contatos.length !== 1 ? "s" : ""} × {fila.length} msg{fila.length !== 1 ? "s" : ""}
+                        </span>
                       </div>
                       <button
                         className="wpp-btn wpp-btn-disparo"
                         onClick={disparar}
-                        disabled={!podeDIsparar || disparando}
+                        disabled={!podeDisparar}
                       >
                         {disparando
                           ? `Enviando... (pode demorar)`
-                          : `↗ Disparar para ${contatos.length} contato${contatos.length !== 1 ? "s" : ""}`}
+                          : `Disparar ${fila.length} mensagem${fila.length !== 1 ? "s" : ""} para ${contatos.length} contato${contatos.length !== 1 ? "s" : ""}`}
                       </button>
                     </div>
 
@@ -524,6 +647,14 @@ export default function WhatsAppPage() {
                       <div className="wpp-result ok">
                         <strong>Disparo concluído!</strong><br />
                         ✓ {disparoResult.enviados} enviados · {disparoResult.falhas} falhas · {disparoResult.total} total
+                        {disparoResult.erros && disparoResult.erros.length > 0 && (
+                          <details style={{ marginTop: 8 }}>
+                            <summary style={{ cursor: "pointer", fontSize: 12 }}>Ver erros ({disparoResult.erros.length})</summary>
+                            <pre style={{ fontSize: 11, marginTop: 6, whiteSpace: "pre-wrap", color: "#e07070" }}>
+                              {disparoResult.erros.join("\n")}
+                            </pre>
+                          </details>
+                        )}
                       </div>
                     )}
                     {disparoErro && (
@@ -579,6 +710,7 @@ const css = `
   /* Card */
   .wpp-card { background:#1a1410; border:1px solid #2a1f18; border-radius:14px; padding:20px; }
   .wpp-card-title { font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#c2904d; margin-bottom:14px; }
+  .wpp-card-title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   .wpp-card-contatos { max-height:380px; display:flex; flex-direction:column; }
   .wpp-contatos-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; margin-top:4px; }
   .wpp-contato-row { display:flex; align-items:center; gap:8px; padding:8px 10px; background:rgba(255,255,255,.02); border:1px solid #2a1f18; border-radius:8px; }
@@ -594,14 +726,25 @@ const css = `
   .wpp-input:focus { border-color:rgba(194,144,77,.35); }
   .wpp-textarea { background:#0e0f09; border:1px solid #2a1f18; border-radius:8px; padding:10px 12px; color:#fff9e6; font-size:14px; font-family:inherit; outline:none; width:100%; resize:vertical; line-height:1.6; transition:border-color .15s; }
   .wpp-textarea:focus { border-color:rgba(194,144,77,.35); }
-  .wpp-char-count { font-size:11px; color:#3a2e20; text-align:right; }
+  .wpp-select { background:#0e0f09; border:1px solid #2a1f18; border-radius:8px; padding:8px 10px; color:#fff9e6; font-size:12px; font-family:inherit; outline:none; cursor:pointer; }
+  .wpp-select:focus { border-color:rgba(194,144,77,.35); }
+  .wpp-select-full { width:100%; }
 
-  /* Tipo mensagem */
-  .wpp-tipos { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
-  .wpp-tipo-btn { display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 10px; min-width:64px; background:rgba(255,255,255,.02); border:1px solid #2a1f18; border-radius:10px; color:#7a6e5e; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
-  .wpp-tipo-btn:hover { border-color:rgba(194,144,77,.25); color:#c2904d; }
-  .wpp-tipo-btn.active { background:rgba(194,144,77,.1); border-color:rgba(194,144,77,.3); color:#c2904d; }
-  .wpp-tipo-btn span:first-child { font-size:18px; }
+  /* Fila de mensagens */
+  .wpp-fila-count { font-size:12px; color:#4a3e30; }
+  .wpp-fila-hint { font-size:12px; color:#5a4e3e; line-height:1.5; margin-bottom:14px; }
+  .wpp-fila-hint strong { color:#c2904d; }
+  .wpp-fila { display:flex; flex-direction:column; gap:10px; }
+  .wpp-fila-item { background:rgba(255,255,255,.02); border:1px solid #2a1f18; border-radius:10px; padding:12px; }
+  .wpp-fila-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .wpp-fila-num { width:22px; height:22px; display:flex; align-items:center; justify-content:center; background:rgba(194,144,77,.12); color:#c2904d; font-size:11px; font-weight:700; border-radius:6px; flex-shrink:0; }
+  .wpp-fila-actions { display:flex; gap:4px; margin-left:auto; }
+  .wpp-fila-body { display:flex; flex-direction:column; gap:8px; }
+
+  .wpp-icon-btn-sm { background:transparent; border:1px solid #2a1f18; color:#4a3e30; width:24px; height:24px; border-radius:5px; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; font-family:inherit; transition:all .15s; }
+  .wpp-icon-btn-sm:hover:not(:disabled) { border-color:rgba(194,144,77,.3); color:#c2904d; }
+  .wpp-icon-btn-sm:disabled { opacity:.3; cursor:default; }
+  .wpp-icon-btn-sm.wpp-icon-del:hover:not(:disabled) { border-color:rgba(224,100,80,.3); color:#e07070; }
 
   /* Upload mídia */
   .wpp-media-preview { display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(194,144,77,.06); border:1px solid rgba(194,144,77,.2); border-radius:8px; }

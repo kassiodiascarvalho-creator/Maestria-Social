@@ -9,7 +9,17 @@ function normalizarTelefone(tel: string): string {
   return digits.startsWith('55') ? digits : `55${digits}`
 }
 
-type TipoMensagem = 'text' | 'image' | 'audio' | 'video' | 'document'
+type TipoMensagem = 'text' | 'image' | 'audio' | 'video' | 'document' | 'template'
+
+interface MensagemItem {
+  tipo: TipoMensagem
+  conteudo?: string
+  caption?: string
+  filename?: string
+  template_name?: string
+  template_lang?: string
+  template_vars?: string[]
+}
 
 interface Contato {
   id: string
@@ -17,59 +27,88 @@ interface Contato {
   telefone: string
 }
 
-async function enviarMensagemMeta(
-  phoneNumberId: string,
-  accessToken: string,
+function buildPayload(
   telefone: string,
-  tipo: TipoMensagem,
-  conteudo: string,
-  caption?: string,
-  filename?: string
-): Promise<void> {
-  let body: Record<string, unknown>
+  msg: MensagemItem
+): Record<string, unknown> {
+  const to = normalizarTelefone(telefone)
 
-  if (tipo === 'text') {
-    body = {
+  if (msg.tipo === 'template') {
+    return {
       messaging_product: 'whatsapp',
-      to: normalizarTelefone(telefone),
-      type: 'text',
-      text: { body: conteudo },
-    }
-  } else if (tipo === 'audio') {
-    body = {
-      messaging_product: 'whatsapp',
-      to: normalizarTelefone(telefone),
-      type: 'audio',
-      audio: { link: conteudo },
-    }
-  } else if (tipo === 'image') {
-    body = {
-      messaging_product: 'whatsapp',
-      to: normalizarTelefone(telefone),
-      type: 'image',
-      image: { link: conteudo, ...(caption ? { caption } : {}) },
-    }
-  } else if (tipo === 'video') {
-    body = {
-      messaging_product: 'whatsapp',
-      to: normalizarTelefone(telefone),
-      type: 'video',
-      video: { link: conteudo, ...(caption ? { caption } : {}) },
-    }
-  } else {
-    // document
-    body = {
-      messaging_product: 'whatsapp',
-      to: normalizarTelefone(telefone),
-      type: 'document',
-      document: {
-        link: conteudo,
-        ...(filename ? { filename } : {}),
-        ...(caption ? { caption } : {}),
+      to,
+      type: 'template',
+      template: {
+        name: msg.template_name,
+        language: { code: msg.template_lang || 'pt_BR' },
+        ...(msg.template_vars && msg.template_vars.length > 0
+          ? {
+              components: [{
+                type: 'body',
+                parameters: msg.template_vars.map(v => ({ type: 'text', text: v })),
+              }],
+            }
+          : {}),
       },
     }
   }
 
+  if (msg.tipo === 'text') {
+    return {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'text',
+      text: { body: msg.conteudo },
+    }
+  }
+
+  if (msg.tipo === 'audio') {
+    return {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'audio',
+      audio: { link: msg.conteudo },
+    }
+  }
+
+  if (msg.tipo === 'image') {
+    return {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'image',
+      image: { link: msg.conteudo, ...(msg.caption ? { caption: msg.caption } : {}) },
+    }
+  }
+
+  if (msg.tipo === 'video') {
+    return {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'video',
+      video: { link: msg.conteudo, ...(msg.caption ? { caption: msg.caption } : {}) },
+    }
+  }
+
+  // document
+  return {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'document',
+    document: {
+      link: msg.conteudo,
+      ...(msg.filename ? { filename: msg.filename } : {}),
+      ...(msg.caption ? { caption: msg.caption } : {}),
+    },
+  }
+}
+
+async function enviarMeta(
+  phoneNumberId: string,
+  accessToken: string,
+  telefone: string,
+  msg: MensagemItem
+): Promise<void> {
+  const body = buildPayload(telefone, msg)
   const res = await fetch(`${META_API_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -85,21 +124,30 @@ async function enviarMensagemMeta(
   }
 }
 
-// POST — dispara mensagem para todos os contatos de uma lista
-// body: { lista_id, tipo, conteudo, caption?, filename? }
+// POST — dispara sequência de mensagens para todos os contatos de uma lista
+// body: { lista_id, mensagens: MensagemItem[] }
+// Compatibilidade: aceita formato antigo { lista_id, tipo, conteudo, ... }
 export async function POST(req: NextRequest) {
   try {
-    const { lista_id, tipo, conteudo, caption, filename } = await req.json() as {
-      lista_id: string
-      tipo: TipoMensagem
-      conteudo: string
-      caption?: string
-      filename?: string
+    const payload = await req.json()
+    const lista_id: string = payload.lista_id
+
+    // Compatibilidade com formato antigo (tipo + conteudo)
+    let mensagens: MensagemItem[]
+    if (Array.isArray(payload.mensagens) && payload.mensagens.length > 0) {
+      mensagens = payload.mensagens
+    } else if (payload.tipo && payload.conteudo) {
+      mensagens = [{
+        tipo: payload.tipo,
+        conteudo: payload.conteudo,
+        caption: payload.caption,
+        filename: payload.filename,
+      }]
+    } else {
+      return NextResponse.json({ error: 'mensagens[] obrigatório' }, { status: 400 })
     }
 
     if (!lista_id) return NextResponse.json({ error: 'lista_id obrigatório' }, { status: 400 })
-    if (!tipo) return NextResponse.json({ error: 'tipo obrigatório' }, { status: 400 })
-    if (!conteudo?.trim()) return NextResponse.json({ error: 'conteudo obrigatório' }, { status: 400 })
 
     const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
     const accessToken = await getConfig('META_ACCESS_TOKEN')
@@ -111,14 +159,12 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = supabase as any
 
-    // Busca dados da lista
     const { data: lista } = await db
       .from('wpp_listas')
       .select('nome')
       .eq('id', lista_id)
       .single()
 
-    // Busca contatos
     const { data: contatos, error: contatosErr } = await db
       .from('wpp_contatos')
       .select('id, nome, telefone')
@@ -133,27 +179,37 @@ export async function POST(req: NextRequest) {
     let falhas = 0
     const erros: string[] = []
 
-    // Envio sequencial com delay de 300ms para respeitar rate limits da Meta
+    // Para cada contato, envia todas as mensagens na ordem
     for (const contato of contatos as Contato[]) {
-      try {
-        await enviarMensagemMeta(phoneNumberId, accessToken, contato.telefone, tipo, conteudo, caption, filename)
-        enviados++
-      } catch (err) {
-        falhas++
-        erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
+      let contatoOk = true
+      for (const msg of mensagens) {
+        try {
+          await enviarMeta(phoneNumberId, accessToken, contato.telefone, msg)
+        } catch (err) {
+          contatoOk = false
+          erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
+          break // se uma msg falhar, pula pro próximo contato
+        }
+        // delay entre msgs do mesmo contato
+        if (mensagens.length > 1) {
+          await new Promise(r => setTimeout(r, 200))
+        }
       }
-      // delay entre envios para evitar bloqueio
+      if (contatoOk) enviados++
+      else falhas++
+      // delay entre contatos
       await new Promise(r => setTimeout(r, 300))
     }
 
-    // Registra disparo no histórico
+    // Registra disparo
+    const resumo = mensagens.map(m => m.tipo === 'template' ? `template:${m.template_name}` : m.tipo).join(' + ')
     await db.from('wpp_disparos').insert({
       lista_id,
       lista_nome: lista?.nome ?? '',
-      tipo,
-      conteudo,
-      caption: caption ?? null,
-      filename: filename ?? null,
+      tipo: mensagens.length === 1 ? mensagens[0].tipo : 'sequence',
+      conteudo: mensagens.length === 1 ? (mensagens[0].conteudo ?? mensagens[0].template_name ?? '') : resumo,
+      caption: mensagens[0]?.caption ?? null,
+      filename: mensagens[0]?.filename ?? null,
       total: contatos.length,
       enviados,
       falhas,
