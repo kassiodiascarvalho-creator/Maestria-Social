@@ -15,6 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const filtroNivel = url.searchParams.get('filtro_nivel')
   const filtroStatus = url.searchParams.get('filtro_status')
   const filtroJanela = url.searchParams.get('filtro_janela') // 'dentro' | 'fora'
+  const filtroRenda = url.searchParams.get('filtro_renda')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
@@ -32,12 +33,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Busca contatos com dados do lead via join
     let query = db
       .from('wpp_contatos')
-      .select('id, nome, telefone, criado_em, ultima_msg_user, lead_id, leads:lead_id(id, pilar_fraco, nivel_qs, status_lead)')
+      .select('id, nome, telefone, criado_em, ultima_msg_user, lead_id, leads:lead_id(id, pilar_fraco, nivel_qs, status_lead, renda_mensal)')
       .eq('lista_id', id)
       .order('criado_em', { ascending: true })
 
     const { data: contatos, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Fallback: para leads sem ultima_msg_user, busca última conversa role='user'
+    const leadIds = (contatos ?? [])
+      .filter((c: Record<string, unknown>) => c.lead_id && !c.ultima_msg_user)
+      .map((c: Record<string, unknown>) => c.lead_id as string)
+
+    let conversaFallback: Record<string, string> = {}
+    if (leadIds.length > 0) {
+      const supabaseTyped = createAdminClient()
+      const { data: convs } = await supabaseTyped
+        .from('conversas')
+        .select('lead_id, criado_em')
+        .in('lead_id', leadIds)
+        .eq('role', 'user')
+        .order('criado_em', { ascending: false })
+
+      if (convs) {
+        for (const cv of convs) {
+          if (!conversaFallback[cv.lead_id]) {
+            conversaFallback[cv.lead_id] = cv.criado_em
+          }
+        }
+      }
+    }
 
     const agora = Date.now()
     const VINTE_QUATRO_H = 24 * 60 * 60 * 1000
@@ -45,7 +70,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Aplica filtros no JS (porque os filtros são em campos da tabela leads via join)
     let resultado = (contatos ?? []).map((c: Record<string, unknown>) => {
       const lead = c.leads as Record<string, unknown> | null
-      const ultimaMsg = c.ultima_msg_user as string | null
+      let ultimaMsg = c.ultima_msg_user as string | null
+      // Fallback: usa última conversa role='user' se não tem ultima_msg_user
+      if (!ultimaMsg && c.lead_id) {
+        ultimaMsg = conversaFallback[c.lead_id as string] ?? null
+      }
       const dentroDa24h = ultimaMsg ? (agora - new Date(ultimaMsg).getTime()) < VINTE_QUATRO_H : false
 
       return {
@@ -59,6 +88,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         pilar_fraco: lead?.pilar_fraco ?? null,
         nivel_qs: lead?.nivel_qs ?? null,
         status_lead: lead?.status_lead ?? null,
+        renda_mensal: lead?.renda_mensal ?? null,
       }
     })
 
@@ -71,6 +101,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (filtroStatus) {
       resultado = resultado.filter((c: Record<string, unknown>) => c.status_lead === filtroStatus)
+    }
+    if (filtroRenda) {
+      resultado = resultado.filter((c: Record<string, unknown>) => c.renda_mensal === filtroRenda)
     }
     if (filtroJanela === 'dentro') {
       resultado = resultado.filter((c: Record<string, unknown>) => c.dentro_24h === true)

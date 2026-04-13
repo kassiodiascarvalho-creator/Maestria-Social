@@ -59,6 +59,7 @@ const FIELDS_CONFIG = [
       { label: "META_TEMPLATE_NAME", key: "META_TEMPLATE_NAME", type: "text", placeholder: "Template (opcional para 1º contato)" },
       { label: "META_TEMPLATE_LANGUAGE", key: "META_TEMPLATE_LANGUAGE", type: "text", placeholder: "pt_BR (opcional)" },
       { label: "META_FORWARD_WEBHOOK_URL", key: "META_FORWARD_WEBHOOK_URL", type: "text", placeholder: "URL da outra plataforma (coexistência)" },
+      { label: "META_WABA_ID", key: "META_WABA_ID", type: "text", placeholder: "ID da conta WhatsApp Business (para templates)" },
     ],
   },
 ];

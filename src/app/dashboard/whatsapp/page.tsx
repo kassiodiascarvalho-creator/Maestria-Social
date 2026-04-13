@@ -7,7 +7,7 @@ type Lista = { id: string; nome: string; criado_em: string; total_contatos: numb
 type Contato = {
   id: string; nome: string | null; telefone: string
   dentro_24h?: boolean; ultima_msg_user?: string | null
-  pilar_fraco?: string | null; nivel_qs?: string | null; status_lead?: string | null
+  pilar_fraco?: string | null; nivel_qs?: string | null; status_lead?: string | null; renda_mensal?: string | null
 }
 type TipoMsg = "text" | "image" | "audio" | "video" | "document" | "template"
 
@@ -80,7 +80,7 @@ export default function WhatsAppPage() {
   const [templateCarregando, setTemplateCarregando] = useState(false)
 
   // Filtros (só para lista Leads MS)
-  const [filtros, setFiltros] = useState({ pilar: "", nivel: "", status: "", janela: "" })
+  const [filtros, setFiltros] = useState({ pilar: "", nivel: "", status: "", janela: "", renda: "" })
   const [sincronizando, setSincronizando] = useState(false)
 
   // Fila de mensagens
@@ -109,6 +109,7 @@ export default function WhatsAppPage() {
     if (ff.pilar) p.set("filtro_pilar", ff.pilar)
     if (ff.nivel) p.set("filtro_nivel", ff.nivel)
     if (ff.status) p.set("filtro_status", ff.status)
+    if (ff.renda) p.set("filtro_renda", ff.renda)
     if (ff.janela) p.set("filtro_janela", ff.janela)
     const qs = p.toString() ? `?${p.toString()}` : ""
     const res = await fetch(`/api/admin/wpp/listas/${listaId}/contatos${qs}`)
@@ -142,7 +143,7 @@ export default function WhatsAppPage() {
     setImportMsg("")
     setDisparoResult(null)
     setDisparoErro("")
-    setFiltros({ pilar: "", nivel: "", status: "", janela: "" })
+    setFiltros({ pilar: "", nivel: "", status: "", janela: "", renda: "" })
     fetchContatos(lista.id)
   }
 
@@ -510,16 +511,20 @@ export default function WhatsAppPage() {
                             <option value="">Todos os status</option>
                             {["frio","morno","quente"].map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
+                          <select className="wpp-select" value={filtros.renda} onChange={e => { const f = { ...filtros, renda: e.target.value }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}>
+                            <option value="">Todas as rendas</option>
+                            {["Até R$ 3.000","R$ 3.000 – R$ 7.000","R$ 7.000 – R$ 15.000","R$ 15.000 – R$ 30.000","Acima de R$ 30.000"].map(r => <option key={r} value={r}>{r}</option>)}
+                          </select>
                           <select className="wpp-select" value={filtros.janela} onChange={e => { const f = { ...filtros, janela: e.target.value }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}>
                             <option value="">Janela 24h: todos</option>
                             <option value="dentro">- 24h (conversou recente)</option>
                             <option value="fora">+ 24h (sem conversa)</option>
                           </select>
                         </div>
-                        {(filtros.pilar || filtros.nivel || filtros.status || filtros.janela) && (
+                        {(filtros.pilar || filtros.nivel || filtros.status || filtros.janela || filtros.renda) && (
                           <button
                             className="wpp-btn-limpar"
-                            onClick={() => { const f = { pilar: "", nivel: "", status: "", janela: "" }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}
+                            onClick={() => { const f = { pilar: "", nivel: "", status: "", janela: "", renda: "" }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}
                           >Limpar filtros</button>
                         )}
                       </div>
@@ -547,6 +552,7 @@ export default function WhatsAppPage() {
                                 {c.pilar_fraco && <span className="wpp-contato-tag">{c.pilar_fraco}</span>}
                                 {c.nivel_qs && <span className="wpp-contato-tag">{c.nivel_qs}</span>}
                                 {c.status_lead && <span className="wpp-contato-tag st">{c.status_lead}</span>}
+                                {c.renda_mensal && <span className="wpp-contato-tag">{c.renda_mensal}</span>}
                               </div>
                             </div>
                             <button
@@ -761,6 +767,13 @@ export default function WhatsAppPage() {
 // ── CSS ────────────────────────────────────────────────────────────────────────
 const css = `
   *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+  /* Scrollbar elegante global */
+  .wpp-layout *::-webkit-scrollbar { width:4px; height:4px; }
+  .wpp-layout *::-webkit-scrollbar-track { background:transparent; }
+  .wpp-layout *::-webkit-scrollbar-thumb { background:rgba(194,144,77,.2); border-radius:99px; }
+  .wpp-layout *::-webkit-scrollbar-thumb:hover { background:rgba(194,144,77,.4); }
+  .wpp-layout * { scrollbar-width:thin; scrollbar-color:rgba(194,144,77,.2) transparent; }
 
   .wpp-layout { display:flex; height:calc(100vh - 0px); overflow:hidden; }
 

@@ -80,6 +80,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 const css = `
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:#0e0f09;color:#fff9e6;font-family:'Inter',system-ui,sans-serif;}
+  *::-webkit-scrollbar{width:4px;height:4px;}
+  *::-webkit-scrollbar-track{background:transparent;}
+  *::-webkit-scrollbar-thumb{background:rgba(194,144,77,.2);border-radius:99px;}
+  *::-webkit-scrollbar-thumb:hover{background:rgba(194,144,77,.4);}
+  *{scrollbar-width:thin;scrollbar-color:rgba(194,144,77,.2) transparent;}
   .shell{display:flex;min-height:100vh;}
   .sidebar{width:240px;flex-shrink:0;background:#111009;border-right:1px solid #2a1f18;display:flex;flex-direction:column;padding:32px 0;position:sticky;top:0;height:100vh;}
   .sidebar-logo{display:flex;align-items:center;gap:9px;padding:0 24px;margin-bottom:36px;}
