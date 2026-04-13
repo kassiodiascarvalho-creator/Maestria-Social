@@ -69,7 +69,15 @@ const FIELDS_CONFIG = [
     fields: [
       { label: "ZAPI_INSTANCE_ID", key: "ZAPI_INSTANCE_ID", type: "text", placeholder: "ID da instância Z-API" },
       { label: "ZAPI_TOKEN", key: "ZAPI_TOKEN", type: "password", placeholder: "Token da instância Z-API" },
-      { label: "ZAPI_CLIENT_TOKEN", key: "ZAPI_CLIENT_TOKEN", type: "password", placeholder: "Client Token (Security Token no painel Z-API)" },
+      { label: "ZAPI_CLIENT_TOKEN", key: "ZAPI_CLIENT_TOKEN", type: "password", placeholder: "Client Token (opcional)" },
+    ],
+  },
+  {
+    title: "Baileys (Local)",
+    badge: "WhatsApp (local)",
+    desc: "Servidor Baileys rodando na sua máquina. Inicie o servidor local (baileys-server/INICIAR.bat) e cole a URL pública gerada pelo ngrok aqui.",
+    fields: [
+      { label: "BAILEYS_API_URL", key: "BAILEYS_API_URL", type: "text", placeholder: "http://localhost:3001 ou URL do ngrok" },
     ],
   },
 ];

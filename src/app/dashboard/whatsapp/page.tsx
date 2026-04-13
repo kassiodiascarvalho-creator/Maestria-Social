@@ -94,7 +94,7 @@ export default function WhatsAppPage() {
   const [disparando, setDisparando] = useState(false)
   const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: string[] } | null>(null)
   const [disparoErro, setDisparoErro] = useState("")
-  const [apiProvider, setApiProvider] = useState<"meta" | "zapi">("meta")
+  const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
 
   // ── Carrega listas ──
   useEffect(() => { fetchListas() }, [])
@@ -348,6 +348,7 @@ export default function WhatsAppPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined, api_provider: apiProvider }),
+
     })
     const data = await res.json()
     setDisparando(false)
@@ -763,7 +764,14 @@ export default function WhatsAppPage() {
                       >
                         ⚡ Z-API
                       </button>
-                      {apiProvider === "zapi" && (
+                      <button
+                        className={`wpp-provider-btn ${apiProvider === "baileys" ? "active" : ""}`}
+                        onClick={() => setApiProvider("baileys")}
+                        title="Baileys local — servidor Node.js na sua máquina, sem restrição de janela 24h"
+                      >
+                        🟢 Baileys
+                      </button>
+                      {apiProvider !== "meta" && (
                         <span style={{ fontSize: 11, color: "#c2904d", marginLeft: 4 }}>Sem restrição 24h</span>
                       )}
                     </div>

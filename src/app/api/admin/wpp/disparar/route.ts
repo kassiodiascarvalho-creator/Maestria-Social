@@ -10,6 +10,34 @@ function normalizarTelefone(tel: string): string {
   return digits.startsWith('55') ? digits : `55${digits}`
 }
 
+// ── Baileys ────────────────────────────────────────────────────────────────────
+async function enviarBaileys(
+  apiUrl: string,
+  telefone: string,
+  msg: MensagemItem
+): Promise<void> {
+  if (msg.tipo === 'template') return // Baileys não usa templates Meta
+
+  const body: Record<string, unknown> = {
+    phone: normalizarTelefone(telefone),
+    type: msg.tipo,
+    content: msg.conteudo,
+  }
+  if (msg.caption) body.caption = msg.caption
+  if (msg.filename) body.filename = msg.filename
+
+  const url = apiUrl.replace(/\/$/, '') + '/disparar'
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Baileys: ${err}`)
+  }
+}
+
 // ── Z-API ──────────────────────────────────────────────────────────────────────
 async function enviarZApi(
   instanceId: string,
@@ -201,7 +229,9 @@ export async function POST(req: NextRequest) {
     const payload = await req.json()
     const lista_id: string = payload.lista_id
     const filtros: Filtros = payload.filtros ?? {}
-    const apiProvider: 'meta' | 'zapi' = payload.api_provider === 'zapi' ? 'zapi' : 'meta'
+    const apiProvider: 'meta' | 'zapi' | 'baileys' = ['zapi', 'baileys'].includes(payload.api_provider)
+      ? payload.api_provider
+      : 'meta'
 
     // Compatibilidade com formato antigo (tipo + conteudo)
     let mensagens: MensagemItem[]
@@ -227,12 +257,19 @@ export async function POST(req: NextRequest) {
     let zapiToken: string | null = null
     let zapiClientToken: string | null = null
 
+    let baileysApiUrl: string | null = null
+
     if (apiProvider === 'zapi') {
       zapiInstanceId = await getConfig('ZAPI_INSTANCE_ID')
       zapiToken = await getConfig('ZAPI_TOKEN')
       zapiClientToken = await getConfig('ZAPI_CLIENT_TOKEN')
       if (!zapiInstanceId || !zapiToken) {
         return NextResponse.json({ error: 'ZAPI_INSTANCE_ID ou ZAPI_TOKEN não configurados nas Integrações' }, { status: 500 })
+      }
+    } else if (apiProvider === 'baileys') {
+      baileysApiUrl = await getConfig('BAILEYS_API_URL')
+      if (!baileysApiUrl) {
+        return NextResponse.json({ error: 'BAILEYS_API_URL não configurada nas Integrações. Inicie o servidor local e configure a URL.' }, { status: 500 })
       }
     } else {
       phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
@@ -387,12 +424,16 @@ export async function POST(req: NextRequest) {
     for (const contato of contatosFiltrados) {
       let contatoOk = true
 
-      if (apiProvider === 'zapi') {
-        // ── Z-API: sem restrição de 24h, envia tudo diretamente ──
+      if (apiProvider === 'zapi' || apiProvider === 'baileys') {
+        // ── Z-API / Baileys: sem restrição de 24h, envia tudo diretamente ──
         for (const msg of mensagens) {
-          if (msg.tipo === 'template') continue // Z-API não usa templates Meta
+          if (msg.tipo === 'template') continue // não usam templates Meta
           try {
-            await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msg)
+            if (apiProvider === 'zapi') {
+              await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msg)
+            } else {
+              await enviarBaileys(baileysApiUrl!, contato.telefone, msg)
+            }
           } catch (err) {
             contatoOk = false
             erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
