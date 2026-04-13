@@ -337,21 +337,19 @@ export async function POST(req: NextRequest) {
             }
           }
         } else if (templatePadrao) {
-          // Usa template padrão configurado com variáveis do lead
-          const templateVars: string[] = []
-          if ('pilar_fraco' in contato) {
-            templateVars.push(
-              contato.nome || 'Lead',
-              String((contato as Record<string, unknown>).qs_total ?? 0),
-              (contato as Record<string, unknown>).pilar_fraco as string || 'N/A'
-            )
-          }
+          // Usa template padrão configurado com variáveis do lead (sempre envia os 3 params com fallback)
+          const c = contato as Record<string, unknown>
+          const templateVars: string[] = [
+            (contato.nome || 'Lead') as string,
+            String(c.qs_total ?? 0),
+            (c.pilar_fraco as string) || 'N/A',
+          ]
           try {
             await enviarMeta(phoneNumberId, accessToken, contato.telefone, {
               tipo: 'template',
               template_name: templatePadrao,
               template_lang: 'pt_BR',
-              template_vars: templateVars.length > 0 ? templateVars : undefined,
+              template_vars: templateVars,
             })
           } catch (err) {
             contatoOk = false
