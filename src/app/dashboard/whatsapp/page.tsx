@@ -333,7 +333,7 @@ export default function WhatsAppPage() {
     const res = await fetch("/api/admin/wpp/disparar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens }),
+      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined }),
     })
     const data = await res.json()
     setDisparando(false)
