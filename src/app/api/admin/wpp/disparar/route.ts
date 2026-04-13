@@ -3,10 +3,54 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig } from '@/lib/config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
+const ZAPI_BASE_URL = 'https://api.z-api.io/instances'
 
 function normalizarTelefone(tel: string): string {
   const digits = tel.replace(/\D/g, '')
   return digits.startsWith('55') ? digits : `55${digits}`
+}
+
+// ── Z-API ──────────────────────────────────────────────────────────────────────
+async function enviarZApi(
+  instanceId: string,
+  token: string,
+  clientToken: string | null,
+  telefone: string,
+  msg: MensagemItem
+): Promise<void> {
+  const phone = normalizarTelefone(telefone)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (clientToken) headers['Client-Token'] = clientToken
+
+  let endpoint: string
+  let body: Record<string, unknown>
+
+  if (msg.tipo === 'text') {
+    endpoint = 'send-text'
+    body = { phone, message: msg.conteudo }
+  } else if (msg.tipo === 'image') {
+    endpoint = 'send-image'
+    body = { phone, image: msg.conteudo, caption: msg.caption || '' }
+  } else if (msg.tipo === 'audio') {
+    endpoint = 'send-audio'
+    body = { phone, audio: msg.conteudo }
+  } else if (msg.tipo === 'video') {
+    endpoint = 'send-video'
+    body = { phone, video: msg.conteudo, caption: msg.caption || '' }
+  } else if (msg.tipo === 'document') {
+    endpoint = 'send-document'
+    body = { phone, document: msg.conteudo, fileName: msg.filename || 'arquivo' }
+  } else {
+    // Template não suportado na Z-API — pula
+    return
+  }
+
+  const url = `${ZAPI_BASE_URL}/${instanceId}/token/${token}/${endpoint}`
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Z-API: ${err}`)
+  }
 }
 
 type TipoMensagem = 'text' | 'image' | 'audio' | 'video' | 'document' | 'template'
@@ -151,12 +195,13 @@ function preencherVarsTemplate(
 }
 
 // POST — dispara sequência de mensagens para contatos filtrados de uma lista
-// body: { lista_id, mensagens: MensagemItem[], filtros?: Filtros }
+// body: { lista_id, mensagens: MensagemItem[], filtros?: Filtros, api_provider?: 'meta' | 'zapi' }
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json()
     const lista_id: string = payload.lista_id
     const filtros: Filtros = payload.filtros ?? {}
+    const apiProvider: 'meta' | 'zapi' = payload.api_provider === 'zapi' ? 'zapi' : 'meta'
 
     // Compatibilidade com formato antigo (tipo + conteudo)
     let mensagens: MensagemItem[]
@@ -175,10 +220,26 @@ export async function POST(req: NextRequest) {
 
     if (!lista_id) return NextResponse.json({ error: 'lista_id obrigatório' }, { status: 400 })
 
-    const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
-    const accessToken = await getConfig('META_ACCESS_TOKEN')
-    if (!phoneNumberId || !accessToken) {
-      return NextResponse.json({ error: 'META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
+    // Credenciais conforme provedor escolhido
+    let phoneNumberId: string | null = null
+    let accessToken: string | null = null
+    let zapiInstanceId: string | null = null
+    let zapiToken: string | null = null
+    let zapiClientToken: string | null = null
+
+    if (apiProvider === 'zapi') {
+      zapiInstanceId = await getConfig('ZAPI_INSTANCE_ID')
+      zapiToken = await getConfig('ZAPI_TOKEN')
+      zapiClientToken = await getConfig('ZAPI_CLIENT_TOKEN')
+      if (!zapiInstanceId || !zapiToken) {
+        return NextResponse.json({ error: 'ZAPI_INSTANCE_ID ou ZAPI_TOKEN não configurados nas Integrações' }, { status: 500 })
+      }
+    } else {
+      phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
+      accessToken = await getConfig('META_ACCESS_TOKEN')
+      if (!phoneNumberId || !accessToken) {
+        return NextResponse.json({ error: 'META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
+      }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -326,73 +387,78 @@ export async function POST(req: NextRequest) {
     for (const contato of contatosFiltrados) {
       let contatoOk = true
 
-      if (contato.dentro_24h) {
-        // Dentro da janela 24h: envia todas as mensagens; templates recebem vars automáticas
+      if (apiProvider === 'zapi') {
+        // ── Z-API: sem restrição de 24h, envia tudo diretamente ──
         for (const msg of mensagens) {
-          const msgFinal = msg.tipo === 'template'
-            ? preencherVarsTemplate(msg, contato as Record<string, unknown>)
-            : msg
+          if (msg.tipo === 'template') continue // Z-API não usa templates Meta
           try {
-            await enviarMeta(phoneNumberId, accessToken, contato.telefone, msgFinal)
+            await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msg)
           } catch (err) {
             contatoOk = false
             erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
             break
           }
-          if (mensagens.length > 1) {
-            await new Promise(r => setTimeout(r, 200))
-          }
+          if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200))
         }
       } else {
-        // Fora da janela 24h: Meta NÃO aceita texto/mídia livre.
-        // Regra: enviar APENAS template. Template não abre a janela —
-        // só uma resposta do usuário abre. Portanto não enviamos msgs normais depois.
-        const templatesDaFila = mensagens.filter(m => m.tipo === 'template')
-
-        if (templatesDaFila.length > 0) {
-          // Fila já tem template(s) — envia só os templates com vars do contato como fallback
-          for (const msg of templatesDaFila) {
-            const msgComVars = preencherVarsTemplate(msg, contato)
+        // ── Meta API: respeita janela 24h ──
+        if (contato.dentro_24h) {
+          for (const msg of mensagens) {
+            const msgFinal = msg.tipo === 'template'
+              ? preencherVarsTemplate(msg, contato as Record<string, unknown>)
+              : msg
             try {
-              await enviarMeta(phoneNumberId, accessToken, contato.telefone, msgComVars)
+              await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, msgFinal)
             } catch (err) {
               contatoOk = false
               erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
               break
             }
-            if (templatesDaFila.length > 1) {
-              await new Promise(r => setTimeout(r, 200))
-            }
-          }
-        } else if (templatePadrao) {
-          // Usa template padrão configurado com variáveis do lead (sempre envia os 3 params com fallback)
-          const c = contato as Record<string, unknown>
-          const templateVars: string[] = [
-            (contato.nome || 'Lead') as string,
-            String(c.qs_total ?? 0),
-            (c.pilar_fraco as string) || 'N/A',
-          ]
-          try {
-            await enviarMeta(phoneNumberId, accessToken, contato.telefone, {
-              tipo: 'template',
-              template_name: templatePadrao,
-              template_lang: 'pt_BR',
-              template_vars: templateVars,
-            })
-          } catch (err) {
-            contatoOk = false
-            erros.push(`${contato.telefone} (template): ${err instanceof Error ? err.message : String(err)}`)
+            if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200))
           }
         } else {
-          // Sem nenhum template disponível — falha honesta
-          contatoOk = false
-          erros.push(`${contato.telefone}: fora da janela 24h e nenhum template configurado. Configure META_TEMPLATE_NAME nas Integrações.`)
+          // Fora da janela 24h: só templates
+          const templatesDaFila = mensagens.filter(m => m.tipo === 'template')
+
+          if (templatesDaFila.length > 0) {
+            for (const msg of templatesDaFila) {
+              const msgComVars = preencherVarsTemplate(msg, contato)
+              try {
+                await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, msgComVars)
+              } catch (err) {
+                contatoOk = false
+                erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
+                break
+              }
+              if (templatesDaFila.length > 1) await new Promise(r => setTimeout(r, 200))
+            }
+          } else if (templatePadrao) {
+            const c = contato as Record<string, unknown>
+            const templateVars = [
+              (contato.nome || 'Lead') as string,
+              String(c.qs_total ?? 0),
+              (c.pilar_fraco as string) || 'N/A',
+            ]
+            try {
+              await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, {
+                tipo: 'template',
+                template_name: templatePadrao,
+                template_lang: 'pt_BR',
+                template_vars: templateVars,
+              })
+            } catch (err) {
+              contatoOk = false
+              erros.push(`${contato.telefone} (template): ${err instanceof Error ? err.message : String(err)}`)
+            }
+          } else {
+            contatoOk = false
+            erros.push(`${contato.telefone}: fora da janela 24h e nenhum template configurado. Configure META_TEMPLATE_NAME nas Integrações.`)
+          }
         }
       }
 
       if (contatoOk) enviados++
       else falhas++
-      // delay entre contatos
       await new Promise(r => setTimeout(r, 300))
     }
 

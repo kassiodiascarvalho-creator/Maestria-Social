@@ -94,6 +94,7 @@ export default function WhatsAppPage() {
   const [disparando, setDisparando] = useState(false)
   const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: string[] } | null>(null)
   const [disparoErro, setDisparoErro] = useState("")
+  const [apiProvider, setApiProvider] = useState<"meta" | "zapi">("meta")
 
   // ── Carrega listas ──
   useEffect(() => { fetchListas() }, [])
@@ -346,7 +347,7 @@ export default function WhatsAppPage() {
     const res = await fetch("/api/admin/wpp/disparar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined }),
+      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined, api_provider: apiProvider }),
     })
     const data = await res.json()
     setDisparando(false)
@@ -745,6 +746,28 @@ export default function WhatsAppPage() {
                       + Adicionar outra mensagem
                     </button>
 
+                    {/* Seletor de provedor */}
+                    <div className="wpp-provider-selector">
+                      <span className="wpp-label" style={{ marginBottom: 0 }}>Enviar via:</span>
+                      <button
+                        className={`wpp-provider-btn ${apiProvider === "meta" ? "active" : ""}`}
+                        onClick={() => setApiProvider("meta")}
+                        title="Meta Cloud API (oficial) — requer janela 24h para msgs livres"
+                      >
+                        📱 Meta API
+                      </button>
+                      <button
+                        className={`wpp-provider-btn ${apiProvider === "zapi" ? "active" : ""}`}
+                        onClick={() => setApiProvider("zapi")}
+                        title="Z-API — sem restrição de janela 24h, envia qualquer tipo de mensagem"
+                      >
+                        ⚡ Z-API
+                      </button>
+                      {apiProvider === "zapi" && (
+                        <span style={{ fontSize: 11, color: "#c2904d", marginLeft: 4 }}>Sem restrição 24h</span>
+                      )}
+                    </div>
+
                     {/* Resumo e botão de disparo */}
                     <div className="wpp-disparo-footer">
                       <div className="wpp-disparo-info">
@@ -879,7 +902,11 @@ const css = `
   .wpp-media-name { flex:1; font-size:13px; color:#c2904d; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* Disparo footer */
-  .wpp-disparo-footer { margin-top:20px; padding-top:16px; border-top:1px solid #2a1f18; display:flex; flex-direction:column; gap:10px; }
+  .wpp-provider-selector { display:flex; align-items:center; gap:8px; margin-top:16px; padding:10px 12px; background:rgba(194,144,77,.04); border:1px solid rgba(194,144,77,.12); border-radius:8px; }
+  .wpp-provider-btn { padding:5px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid rgba(194,144,77,.25); background:transparent; color:#7a6a58; transition:all .15s; }
+  .wpp-provider-btn.active { background:rgba(194,144,77,.15); border-color:#c2904d; color:#c2904d; }
+  .wpp-provider-btn:hover:not(.active) { border-color:rgba(194,144,77,.4); color:#a07840; }
+  .wpp-disparo-footer { margin-top:12px; padding-top:16px; border-top:1px solid #2a1f18; display:flex; flex-direction:column; gap:10px; }
   .wpp-disparo-info { display:flex; align-items:center; gap:10px; }
   .wpp-disparo-tag { font-size:12px; color:#c2904d; background:rgba(194,144,77,.08); border:1px solid rgba(194,144,77,.15); padding:3px 10px; border-radius:20px; }
   .wpp-disparo-count { font-size:12px; color:#4a3e30; }

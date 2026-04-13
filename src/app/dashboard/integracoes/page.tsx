@@ -62,6 +62,16 @@ const FIELDS_CONFIG = [
       { label: "META_WABA_ID", key: "META_WABA_ID", type: "text", placeholder: "ID da conta WhatsApp Business (para templates)" },
     ],
   },
+  {
+    title: "Z-API",
+    badge: "WhatsApp (alternativo)",
+    desc: "API não-oficial para envio de mensagens WhatsApp sem restrição de janela 24h. Útil para disparos em massa.",
+    fields: [
+      { label: "ZAPI_INSTANCE_ID", key: "ZAPI_INSTANCE_ID", type: "text", placeholder: "ID da instância Z-API" },
+      { label: "ZAPI_TOKEN", key: "ZAPI_TOKEN", type: "password", placeholder: "Token da instância Z-API" },
+      { label: "ZAPI_CLIENT_TOKEN", key: "ZAPI_CLIENT_TOKEN", type: "password", placeholder: "Client Token (Security Token no painel Z-API)" },
+    ],
+  },
 ];
 
 const EVENTOS = [
