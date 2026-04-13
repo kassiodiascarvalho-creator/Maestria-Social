@@ -3,26 +3,33 @@ import { getConfig } from '@/lib/config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
 
-// GET — busca templates aprovados da conta WhatsApp Business
+// GET — busca templates da conta WhatsApp Business (todos os status)
 export async function GET() {
   try {
     const wabaId = await getConfig('META_WABA_ID')
     const accessToken = await getConfig('META_ACCESS_TOKEN')
+
     if (!wabaId || !accessToken) {
-      return NextResponse.json({ error: 'META_WABA_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
+      return NextResponse.json(
+        { error: 'META_WABA_ID ou META_ACCESS_TOKEN não configurados nas Integrações' },
+        { status: 500 }
+      )
     }
 
-    const res = await fetch(
-      `${META_API_URL}/${wabaId}/message_templates?status=APPROVED&limit=100`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    )
-
-    if (!res.ok) {
-      const err = await res.text()
-      return NextResponse.json({ error: `Meta API: ${err}` }, { status: 500 })
-    }
+    const url = `${META_API_URL}/${wabaId}/message_templates?limit=100&fields=name,language,category,status,components`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
 
     const json = await res.json()
+
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: `Meta API erro: ${json?.error?.message ?? res.statusText}`, waba_id_usado: wabaId },
+        { status: 500 }
+      )
+    }
+
     const templates = (json.data ?? []).map((t: Record<string, unknown>) => ({
       name: t.name,
       language: t.language,

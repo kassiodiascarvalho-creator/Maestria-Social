@@ -78,6 +78,7 @@ export default function WhatsAppPage() {
   // Templates
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [templateCarregando, setTemplateCarregando] = useState(false)
+  const [templateErro, setTemplateErro] = useState("")
 
   // Filtros (só para lista Leads MS)
   const [filtros, setFiltros] = useState({ pilar: "", nivel: "", status: "", janela: "", renda: "" })
@@ -130,11 +131,21 @@ export default function WhatsAppPage() {
 
   async function fetchTemplates() {
     setTemplateCarregando(true)
+    setTemplateErro("")
     try {
       const res = await fetch("/api/admin/wpp/templates")
       const data = await res.json()
-      setTemplates(Array.isArray(data) ? data : [])
-    } catch { /* ignore */ }
+      if (!res.ok) {
+        setTemplateErro(data.error ?? "Erro ao carregar templates")
+      } else {
+        setTemplates(Array.isArray(data) ? data : [])
+        if (Array.isArray(data) && data.length === 0) {
+          setTemplateErro("Nenhum template encontrado. Verifique o META_WABA_ID nas Integrações.")
+        }
+      }
+    } catch (e) {
+      setTemplateErro("Erro de conexão: " + String(e))
+    }
     setTemplateCarregando(false)
   }
 
@@ -633,6 +644,9 @@ export default function WhatsAppPage() {
                                       {templateCarregando ? "..." : "Carregar"}
                                     </button>
                                   </div>
+                                  {templateErro && (
+                                    <p style={{ fontSize: "11px", color: "#e07070", marginTop: "4px" }}>{templateErro}</p>
+                                  )}
                                 </div>
                                 <div className="wpp-field">
                                   <label className="wpp-label">Idioma</label>
