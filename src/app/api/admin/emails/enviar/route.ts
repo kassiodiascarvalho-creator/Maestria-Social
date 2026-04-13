@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarEmail } from '@/lib/email/enviar'
-import type { Lead } from '@/types/database'
+import type { Lead, NivelQS, StatusLead } from '@/types/database'
 
 const SITE_URL = 'https://maestriasocial.com'
 
@@ -29,11 +29,18 @@ function wrapHtml(titulo: string, corpo: string): string {
 </body></html>`
 }
 
-// POST — envio manual de um template para um lead específico ou para todos os leads
-// body: { template_id, lead_id? }  — se sem lead_id, envia para todos com qs_total preenchido
+// POST — envio manual de um template para um lead específico ou filtrado
+// body: { template_id, lead_id?, filtro_pilar?, filtro_nivel?, filtro_status? }
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { template_id, lead_id } = body as { template_id: string; lead_id?: string }
+  const { template_id, lead_id, filtro_pilar, filtro_nivel, filtro_status } =
+    body as {
+      template_id: string
+      lead_id?: string
+      filtro_pilar?: string
+      filtro_nivel?: string
+      filtro_status?: string
+    }
 
   if (!template_id) return NextResponse.json({ error: 'template_id obrigatório' }, { status: 400 })
 
@@ -53,10 +60,16 @@ export async function POST(req: NextRequest) {
     if (!data) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 })
     leads = [data as Lead]
   } else {
-    const { data } = await supabase
+    let query = supabase
       .from('leads')
       .select('*')
       .not('qs_total', 'is', null)
+
+    if (filtro_pilar) query = query.eq('pilar_fraco', filtro_pilar)
+    if (filtro_nivel) query = query.eq('nivel_qs', filtro_nivel as NivelQS)
+    if (filtro_status) query = query.eq('status_lead', filtro_status as StatusLead)
+
+    const { data } = await query
     leads = (data ?? []) as Lead[]
   }
 
