@@ -179,6 +179,8 @@ export async function POST(req: NextRequest) {
       telefone: string
       dentro_24h: boolean
       lead_id?: string
+      pilar_fraco?: string | null
+      qs_total?: number | null
     }>
 
     const agora = Date.now()
@@ -188,7 +190,7 @@ export async function POST(req: NextRequest) {
       // Busca com join de leads (mesma lógica do GET contatos)
       const { data: contatos, error: contatosErr } = await db
         .from('wpp_contatos')
-        .select('id, nome, telefone, criado_em, ultima_msg_user, lead_id, leads:lead_id(id, pilar_fraco, nivel_qs, status_lead, renda_mensal)')
+        .select('id, nome, telefone, criado_em, ultima_msg_user, lead_id, leads:lead_id(id, pilar_fraco, nivel_qs, status_lead, renda_mensal, qs_total)')
         .eq('lista_id', lista_id)
         .order('criado_em', { ascending: true })
 
@@ -222,7 +224,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Mapeia e calcula dentro_24h
-      type ContatoLead = { id: string; nome: string | null; telefone: string; dentro_24h: boolean; lead_id?: string; pilar_fraco: string | null; nivel_qs: string | null; status_lead: string | null; renda_mensal: string | null }
+      type ContatoLead = { id: string; nome: string | null; telefone: string; dentro_24h: boolean; lead_id?: string; pilar_fraco: string | null; nivel_qs: string | null; status_lead: string | null; renda_mensal: string | null; qs_total: number | null }
       let resultado: ContatoLead[] = (contatos ?? []).map((c: Record<string, unknown>) => {
         const lead = c.leads as Record<string, unknown> | null
         let ultimaMsg = c.ultima_msg_user as string | null
@@ -241,6 +243,7 @@ export async function POST(req: NextRequest) {
           nivel_qs: lead?.nivel_qs as string | null ?? null,
           status_lead: lead?.status_lead as string | null ?? null,
           renda_mensal: lead?.renda_mensal as string | null ?? null,
+          qs_total: lead?.qs_total as number | null ?? null,
         }
       })
 
@@ -335,11 +338,21 @@ export async function POST(req: NextRequest) {
           }
         } else if (templatePadrao) {
           // Envia template padrão primeiro para abrir a janela, depois as mensagens
+          // maestria_resultado espera 3 params: nome, qs_total, pilar_fraco
+          const templateVars: string[] = []
+          if ('pilar_fraco' in contato) {
+            templateVars.push(
+              contato.nome || 'Lead',
+              String((contato as Record<string, unknown>).qs_total ?? 0),
+              (contato as Record<string, unknown>).pilar_fraco as string || 'N/A'
+            )
+          }
           try {
             await enviarMeta(phoneNumberId, accessToken, contato.telefone, {
               tipo: 'template',
               template_name: templatePadrao,
               template_lang: 'pt_BR',
+              template_vars: templateVars.length > 0 ? templateVars : undefined,
             })
             // Aguarda um pouco para o template ser processado
             await new Promise(r => setTimeout(r, 500))
