@@ -172,8 +172,8 @@ export default function WhatsAppPage() {
       } else {
         // Excel
         const buf = await file.arrayBuffer()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const XLSX = await import("xlsx") as any
+        // @ts-ignore — xlsx types not resolved on Vercel build
+        const XLSX = await import("xlsx")
         const wb = XLSX.read(buf)
         const ws = wb.Sheets[wb.SheetNames[0]]
         const json = XLSX.utils.sheet_to_json(ws, { defval: "" }) as Record<string, string>[]
