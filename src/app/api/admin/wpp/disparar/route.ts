@@ -126,6 +126,23 @@ async function enviarMeta(
   }
 }
 
+// Preenche variáveis vazias de um template com dados do contato como fallback
+// Se o usuário já preencheu template_vars manualmente, mantém os valores.
+// Se não preencheu, usa: [nome, qs_total, pilar_fraco] (padrão maestria_resultado/maestria_saudacao)
+function preencherVarsTemplate(
+  msg: MensagemItem,
+  contato: Record<string, unknown>
+): MensagemItem {
+  if (msg.tipo !== 'template') return msg
+  // Se já tem variáveis preenchidas, usa elas
+  if (msg.template_vars && msg.template_vars.some(v => v.trim() !== '')) return msg
+  // Fallback automático com dados do contato
+  const nome = (contato.nome as string) || 'Lead'
+  const qs_total = String(contato.qs_total ?? 0)
+  const pilar = (contato.pilar_fraco as string) || 'N/A'
+  return { ...msg, template_vars: [nome, qs_total, pilar] }
+}
+
 // POST — dispara sequência de mensagens para contatos filtrados de uma lista
 // body: { lista_id, mensagens: MensagemItem[], filtros?: Filtros }
 export async function POST(req: NextRequest) {
@@ -303,10 +320,13 @@ export async function POST(req: NextRequest) {
       let contatoOk = true
 
       if (contato.dentro_24h) {
-        // Dentro da janela 24h: envia mensagens normais
+        // Dentro da janela 24h: envia todas as mensagens; templates recebem vars automáticas
         for (const msg of mensagens) {
+          const msgFinal = msg.tipo === 'template'
+            ? preencherVarsTemplate(msg, contato as Record<string, unknown>)
+            : msg
           try {
-            await enviarMeta(phoneNumberId, accessToken, contato.telefone, msg)
+            await enviarMeta(phoneNumberId, accessToken, contato.telefone, msgFinal)
           } catch (err) {
             contatoOk = false
             erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
@@ -323,10 +343,11 @@ export async function POST(req: NextRequest) {
         const templatesDaFila = mensagens.filter(m => m.tipo === 'template')
 
         if (templatesDaFila.length > 0) {
-          // Fila já tem template(s) — envia só os templates, ignora o resto
+          // Fila já tem template(s) — envia só os templates com vars do contato como fallback
           for (const msg of templatesDaFila) {
+            const msgComVars = preencherVarsTemplate(msg, contato)
             try {
-              await enviarMeta(phoneNumberId, accessToken, contato.telefone, msg)
+              await enviarMeta(phoneNumberId, accessToken, contato.telefone, msgComVars)
             } catch (err) {
               contatoOk = false
               erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
