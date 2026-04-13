@@ -3,8 +3,12 @@
 import { useState, useEffect, useRef } from "react"
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
-type Lista = { id: string; nome: string; criado_em: string; total_contatos: number }
-type Contato = { id: string; nome: string | null; telefone: string }
+type Lista = { id: string; nome: string; criado_em: string; total_contatos: number; is_leads?: boolean }
+type Contato = {
+  id: string; nome: string | null; telefone: string
+  dentro_24h?: boolean; ultima_msg_user?: string | null
+  pilar_fraco?: string | null; nivel_qs?: string | null; status_lead?: string | null
+}
 type TipoMsg = "text" | "image" | "audio" | "video" | "document" | "template"
 
 interface MsgItem {
@@ -75,6 +79,10 @@ export default function WhatsAppPage() {
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [templateCarregando, setTemplateCarregando] = useState(false)
 
+  // Filtros (só para lista Leads MS)
+  const [filtros, setFiltros] = useState({ pilar: "", nivel: "", status: "", janela: "" })
+  const [sincronizando, setSincronizando] = useState(false)
+
   // Fila de mensagens
   const [fila, setFila] = useState<MsgItem[]>([criarMsgVazia()])
   const [uploadandoId, setUploadandoId] = useState<string | null>(null)
@@ -94,12 +102,29 @@ export default function WhatsAppPage() {
     setListas(Array.isArray(data) ? data : [])
   }
 
-  async function fetchContatos(listaId: string) {
+  async function fetchContatos(listaId: string, f?: typeof filtros) {
     setCarregando(true)
-    const res = await fetch(`/api/admin/wpp/listas/${listaId}/contatos`)
+    const p = new URLSearchParams()
+    const ff = f ?? filtros
+    if (ff.pilar) p.set("filtro_pilar", ff.pilar)
+    if (ff.nivel) p.set("filtro_nivel", ff.nivel)
+    if (ff.status) p.set("filtro_status", ff.status)
+    if (ff.janela) p.set("filtro_janela", ff.janela)
+    const qs = p.toString() ? `?${p.toString()}` : ""
+    const res = await fetch(`/api/admin/wpp/listas/${listaId}/contatos${qs}`)
     const data = await res.json()
     setContatos(Array.isArray(data) ? data : [])
     setCarregando(false)
+  }
+
+  async function sincronizarLeads() {
+    setSincronizando(true)
+    try {
+      await fetch("/api/admin/wpp/sync-leads", { method: "POST" })
+      await fetchListas()
+      if (listaAtiva?.is_leads) fetchContatos(listaAtiva.id)
+    } catch { /* ignore */ }
+    setSincronizando(false)
   }
 
   async function fetchTemplates() {
@@ -117,6 +142,7 @@ export default function WhatsAppPage() {
     setImportMsg("")
     setDisparoResult(null)
     setDisparoErro("")
+    setFiltros({ pilar: "", nivel: "", status: "", janela: "" })
     fetchContatos(lista.id)
   }
 
@@ -349,6 +375,17 @@ export default function WhatsAppPage() {
             </button>
           </div>
 
+          <div style={{ padding: "8px 12px 0" }}>
+            <button
+              className="wpp-btn wpp-btn-outline wpp-btn-full"
+              onClick={sincronizarLeads}
+              disabled={sincronizando}
+              style={{ fontSize: 11 }}
+            >
+              {sincronizando ? "Sincronizando..." : "Sincronizar Leads"}
+            </button>
+          </div>
+
           <div className="wpp-listas-list">
             {listas.length === 0 && <p className="wpp-empty">Nenhuma lista criada</p>}
             {listas.map(l => (
@@ -358,14 +395,19 @@ export default function WhatsAppPage() {
                 onClick={() => selecionarLista(l)}
               >
                 <div className="wpp-lista-info">
-                  <span className="wpp-lista-nome">{l.nome}</span>
+                  <span className="wpp-lista-nome">
+                    {l.nome}
+                    {l.is_leads && <span className="wpp-badge-leads">AUTO</span>}
+                  </span>
                   <span className="wpp-lista-total">{l.total_contatos} contato{l.total_contatos !== 1 ? "s" : ""}</span>
                 </div>
-                <button
-                  className="wpp-icon-btn wpp-icon-del"
-                  onClick={e => { e.stopPropagation(); removerLista(l.id) }}
-                  title="Remover lista"
-                >✕</button>
+                {!l.is_leads && (
+                  <button
+                    className="wpp-icon-btn wpp-icon-del"
+                    onClick={e => { e.stopPropagation(); removerLista(l.id) }}
+                    title="Remover lista"
+                  >✕</button>
+                )}
               </div>
             ))}
           </div>
@@ -450,18 +492,62 @@ export default function WhatsAppPage() {
                   </div>
 
                   <div className="wpp-card wpp-card-contatos">
-                    <div className="wpp-card-title">Contatos da Lista</div>
+                    <div className="wpp-card-title">Contatos da Lista ({contatos.length})</div>
+
+                    {/* Filtros — só para lista de leads */}
+                    {listaAtiva.is_leads && (
+                      <div className="wpp-filtros">
+                        <div className="wpp-filtros-row">
+                          <select className="wpp-select" value={filtros.pilar} onChange={e => { const f = { ...filtros, pilar: e.target.value }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}>
+                            <option value="">Todos os pilares</option>
+                            {["Sociabilidade","Comunicação","Relacionamento","Persuasão","Influência"].map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                          <select className="wpp-select" value={filtros.nivel} onChange={e => { const f = { ...filtros, nivel: e.target.value }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}>
+                            <option value="">Todos os níveis</option>
+                            {["Negligente","Iniciante","Intermediário","Avançado","Mestre"].map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                          <select className="wpp-select" value={filtros.status} onChange={e => { const f = { ...filtros, status: e.target.value }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}>
+                            <option value="">Todos os status</option>
+                            {["frio","morno","quente"].map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <select className="wpp-select" value={filtros.janela} onChange={e => { const f = { ...filtros, janela: e.target.value }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}>
+                            <option value="">Janela 24h: todos</option>
+                            <option value="dentro">- 24h (conversou recente)</option>
+                            <option value="fora">+ 24h (sem conversa)</option>
+                          </select>
+                        </div>
+                        {(filtros.pilar || filtros.nivel || filtros.status || filtros.janela) && (
+                          <button
+                            className="wpp-btn-limpar"
+                            onClick={() => { const f = { pilar: "", nivel: "", status: "", janela: "" }; setFiltros(f); fetchContatos(listaAtiva.id, f) }}
+                          >Limpar filtros</button>
+                        )}
+                      </div>
+                    )}
+
                     {carregando && <p className="wpp-empty">Carregando...</p>}
                     {!carregando && contatos.length === 0 && (
-                      <p className="wpp-empty">Nenhum contato ainda. Importe ou adicione manualmente.</p>
+                      <p className="wpp-empty">Nenhum contato encontrado{(filtros.pilar || filtros.nivel || filtros.status || filtros.janela) ? " com esses filtros" : ". Importe ou adicione manualmente."}.</p>
                     )}
                     {!carregando && contatos.length > 0 && (
                       <div className="wpp-contatos-list">
                         {contatos.map(c => (
                           <div key={c.id} className="wpp-contato-row">
                             <div className="wpp-contato-info">
-                              {c.nome && <span className="wpp-contato-nome">{c.nome}</span>}
-                              <span className="wpp-contato-tel">{c.telefone}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                {c.nome && <span className="wpp-contato-nome">{c.nome}</span>}
+                                {c.dentro_24h !== undefined && (
+                                  <span className={`wpp-badge-24h ${c.dentro_24h ? "dentro" : "fora"}`}>
+                                    {c.dentro_24h ? "- 24h" : "+ 24h"}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                <span className="wpp-contato-tel">{c.telefone}</span>
+                                {c.pilar_fraco && <span className="wpp-contato-tag">{c.pilar_fraco}</span>}
+                                {c.nivel_qs && <span className="wpp-contato-tag">{c.nivel_qs}</span>}
+                                {c.status_lead && <span className="wpp-contato-tag st">{c.status_lead}</span>}
+                              </div>
                             </div>
                             <button
                               className="wpp-icon-btn wpp-icon-del"
@@ -786,6 +872,24 @@ const css = `
   .wpp-result { margin-top:14px; padding:12px 14px; border-radius:8px; font-size:13px; line-height:1.6; }
   .wpp-result.ok { background:rgba(100,180,100,.08); border:1px solid rgba(100,180,100,.2); color:#7ab87a; }
   .wpp-result.erro { background:rgba(224,112,112,.08); border:1px solid rgba(224,112,112,.2); color:#e07070; }
+
+  /* Badge Leads AUTO */
+  .wpp-badge-leads { font-size:9px; font-weight:700; letter-spacing:1px; background:rgba(194,144,77,.15); color:#c2904d; padding:1px 5px; border-radius:4px; margin-left:6px; vertical-align:middle; }
+
+  /* Filtros */
+  .wpp-filtros { margin-bottom:12px; }
+  .wpp-filtros-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+  .wpp-filtros-row .wpp-select { flex:1; min-width:120px; font-size:11px; }
+  .wpp-btn-limpar { background:transparent; border:none; color:#c2904d; font-size:11px; cursor:pointer; font-family:inherit; text-decoration:underline; }
+
+  /* Badge 24h */
+  .wpp-badge-24h { font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; letter-spacing:0.5px; flex-shrink:0; }
+  .wpp-badge-24h.dentro { background:rgba(100,180,100,.15); color:#7ab87a; }
+  .wpp-badge-24h.fora { background:rgba(224,160,80,.12); color:#c2904d; }
+
+  /* Tags de lead nos contatos */
+  .wpp-contato-tag { font-size:9px; background:rgba(255,255,255,.04); border:1px solid #2a1f18; color:#5a4e3e; padding:1px 5px; border-radius:4px; }
+  .wpp-contato-tag.st { text-transform:capitalize; }
 
   @media(max-width:1100px) {
     .wpp-content-grid { grid-template-columns:1fr; }

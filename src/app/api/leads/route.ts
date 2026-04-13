@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dispararWebhookSaida } from '@/lib/webhooks'
 import { agendarTarefa, emMinutos } from '@/lib/tarefas/agendar'
+import { adicionarLeadNaListaWpp } from '@/lib/wpp-leads'
 
 function sanitizeWhatsApp(raw: string): string {
   return raw.replace(/\D/g, '')
@@ -59,6 +60,13 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Garante que lead existente também está na lista WPP
+      try {
+        await adicionarLeadNaListaWpp(existing.id, nome.trim(), wppNorm)
+      } catch (e) {
+        console.error('[leads] erro ao sync wpp (existente):', e)
+      }
+
       return NextResponse.json({ id: existing.id, existing: true }, { status: 200 })
     }
 
@@ -97,6 +105,13 @@ export async function POST(req: NextRequest) {
       email: emailNorm,
       whatsapp: wppNorm,
     })
+
+    // Auto-adiciona na lista "Leads MS" do WhatsApp
+    try {
+      await adicionarLeadNaListaWpp(data.id, nome.trim(), wppNorm)
+    } catch (e) {
+      console.error('[leads] erro ao adicionar na lista wpp:', e)
+    }
 
     return NextResponse.json({ id: data.id }, { status: 201 })
   } catch (err) {

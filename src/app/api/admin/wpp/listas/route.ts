@@ -7,7 +7,7 @@ export async function GET() {
   const db = createAdminClient() as any
   const { data, error } = await db
     .from('wpp_listas')
-    .select('id, nome, criado_em, wpp_contatos(count)')
+    .select('id, nome, criado_em, is_leads, wpp_contatos(count)')
     .order('criado_em', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -16,6 +16,7 @@ export async function GET() {
     id: l.id,
     nome: l.nome,
     criado_em: l.criado_em,
+    is_leads: l.is_leads ?? false,
     total_contatos: Array.isArray(l.wpp_contatos) ? (l.wpp_contatos[0] as { count: number })?.count ?? 0 : 0,
   }))
 

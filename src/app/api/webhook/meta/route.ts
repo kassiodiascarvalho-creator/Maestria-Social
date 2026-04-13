@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig, setConfig } from '@/lib/config'
 import { responderAgenteParaLead } from '@/lib/agente/service'
 import { marcarMensagemComoLida } from '@/lib/meta'
+import { atualizarUltimaMsgUser } from '@/lib/wpp-leads'
 
 async function saveDebug(etapa: string, detalhes: unknown) {
   try {
@@ -182,6 +183,11 @@ export async function POST(req: NextRequest) {
         console.error('[webhook/meta] erro ao marcar lida:', err)
       )
     }
+
+    // Atualiza timestamp de última mensagem recebida (janela 24h)
+    atualizarUltimaMsgUser(from).catch(err =>
+      console.error('[webhook/meta] erro ao atualizar ultima_msg_user:', err)
+    )
 
     const lead = await buscarLeadPorTelefone(from)
     if (!lead) {
