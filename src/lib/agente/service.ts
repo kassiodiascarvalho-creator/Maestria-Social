@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { buildPrimeiraMsg, buildSystemPrompt } from '@/lib/agente/prompts'
 import { createOpenAIClient, MODEL } from '@/lib/openai'
 import { enviarMensagemInicialWhatsApp, enviarMensagemWhatsApp } from '@/lib/meta'
+import { enviarViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 import { dispararWebhookSaida } from '@/lib/webhooks'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
@@ -82,15 +83,26 @@ export async function iniciarAgenteParaLead(leadId: string, force = false): Prom
 
   let erroWhatsApp: string | undefined
   if (lead.whatsapp) {
+    // Tenta Baileys primeiro (sem restrição de janela 24h — ideal pós-resultado)
+    let enviado = false
     try {
-      await enviarMensagemInicialWhatsApp(lead.whatsapp, primeiraMsg, {
-        nome: lead.nome,
-        qs_total: lead.qs_total ?? 0,
-        pilar_fraco: lead.pilar_fraco ?? 'Comunicação',
-      })
-    } catch (err) {
-      erroWhatsApp = String(err)
-      console.error('[agente] Falha ao enviar mensagem inicial via WhatsApp:', err)
+      await enviarViaBaileys(lead.whatsapp, primeiraMsg)
+      enviado = true
+    } catch {
+      // fallback para Meta abaixo
+    }
+
+    if (!enviado) {
+      try {
+        await enviarMensagemInicialWhatsApp(lead.whatsapp, primeiraMsg, {
+          nome: lead.nome,
+          qs_total: lead.qs_total ?? 0,
+          pilar_fraco: lead.pilar_fraco ?? 'Comunicação',
+        })
+      } catch (err) {
+        erroWhatsApp = String(err)
+        console.error('[agente] Falha ao enviar mensagem inicial via WhatsApp:', err)
+      }
     }
   }
 

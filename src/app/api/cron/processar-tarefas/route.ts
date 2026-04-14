@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarMensagemWhatsApp, enviarTemplateWhatsApp } from '@/lib/meta'
+import { enviarViaBaileys } from '@/lib/baileys'
 import { enviarEmail } from '@/lib/email/enviar'
 import { getConfig } from '@/lib/config'
 import type { Lead } from '@/types/database'
@@ -137,7 +138,16 @@ async function executar(t: Tarefa): Promise<void> {
     const nomeTemplate = templateCustom || templatePadrao
 
     let enviado = false
-    if (nomeTemplate) {
+
+    // Tenta Baileys primeiro (sem restrição de janela 24h)
+    try {
+      await enviarViaBaileys(lead.whatsapp, textoResolvido)
+      enviado = true
+    } catch {
+      // fallback para Meta abaixo
+    }
+
+    if (!enviado && nomeTemplate) {
       try {
         const params = [lead.nome, String(lead.qs_total ?? 0), lead.pilar_fraco ?? 'Comunicação']
         await enviarTemplateWhatsApp(lead.whatsapp, nomeTemplate, params)
@@ -189,10 +199,29 @@ async function executar(t: Tarefa): Promise<void> {
     const texto = String(t.payload.texto || '')
       || `Oi ${lead.nome}! Vi que você começou o Teste de Quociente Social mas não terminou. Leva uns 4 minutos e o resultado te mostra exatamente onde mirar primeiro: ${linkBase}`
     const numeroWpp = (await getConfig('META_WHATSAPP_NUMBER')) || '5533984522635'
+
+    let enviado = false
+
+    // Tenta Baileys primeiro (não tem restrição de janela 24h)
     try {
-      await enviarMensagemWhatsApp(lead.whatsapp, texto)
-      await supabase.from('conversas').insert({ lead_id: lead.id, role: 'assistant', mensagem: texto })
+      await enviarViaBaileys(lead.whatsapp, texto)
+      enviado = true
     } catch {
+      // fallback abaixo
+    }
+
+    if (!enviado) {
+      try {
+        await enviarMensagemWhatsApp(lead.whatsapp, texto)
+        enviado = true
+      } catch {
+        // fallback para email
+      }
+    }
+
+    if (enviado) {
+      await supabase.from('conversas').insert({ lead_id: lead.id, role: 'assistant', mensagem: texto })
+    } else {
       const wppLink = `https://wa.me/${numeroWpp.replace(/\D/g, '')}`
       await enviarEmail({
         para: lead.email,
