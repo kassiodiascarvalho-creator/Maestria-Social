@@ -541,7 +541,15 @@ export async function POST(req: NextRequest) {
 
       if (contatoOk) enviados++
       else falhas++
-      await new Promise(r => setTimeout(r, 300))
+
+      // Delay entre contatos: Baileys usa espera aleatória (2-8s) para parecer humano
+      // Meta/Z-API mantém 300ms pois não há risco de ban por velocidade
+      if (apiProvider === 'baileys') {
+        const delay = 2000 + Math.random() * 6000
+        await new Promise(r => setTimeout(r, delay))
+      } else {
+        await new Promise(r => setTimeout(r, 300))
+      }
     }
 
     // Registra disparo
