@@ -467,6 +467,45 @@ export default function WhatsAppPage() {
     }
   }
 
+  // ── Exportar resultado como CSV ──
+  function exportarResultadoCSV(
+    total: number,
+    enviados: number,
+    falhas: number,
+    erros: { phone: string; msg: string }[] | string[]
+  ) {
+    const linhas: string[] = []
+    linhas.push("Resumo")
+    linhas.push(`Total,${total}`)
+    linhas.push(`Enviados,${enviados}`)
+    linhas.push(`Falhas,${falhas}`)
+    linhas.push("")
+
+    if (erros.length > 0) {
+      linhas.push("Erros")
+      linhas.push("Telefone,Motivo")
+      for (const e of erros) {
+        if (typeof e === "string") {
+          // formato "phone: mensagem"
+          const sep = e.indexOf(": ")
+          const phone = sep > -1 ? e.slice(0, sep) : e
+          const msg = sep > -1 ? e.slice(sep + 2) : ""
+          linhas.push(`"${phone}","${msg.replace(/"/g, '""')}"`)
+        } else {
+          linhas.push(`"${e.phone}","${e.msg.replace(/"/g, '""')}"`)
+        }
+      }
+    }
+
+    const blob = new Blob([linhas.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `disparo_${new Date().toISOString().slice(0, 16).replace("T", "_")}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ── Disparar ──
   async function disparar() {
     if (!listaAtiva || fila.length === 0) return
@@ -1161,6 +1200,13 @@ export default function WhatsAppPage() {
                             </pre>
                           </details>
                         )}
+                        <button
+                          className="wpp-btn wpp-btn-outline"
+                          style={{ alignSelf: "flex-start", fontSize: 12, padding: "5px 12px" }}
+                          onClick={() => exportarResultadoCSV(disparoResult.total, disparoResult.enviados, disparoResult.falhas, disparoResult.erros ?? [])}
+                        >
+                          ↓ Exportar CSV
+                        </button>
                       </div>
                     )}
 
@@ -1197,6 +1243,13 @@ export default function WhatsAppPage() {
                                 </pre>
                               </details>
                             )}
+                            <button
+                              className="wpp-btn wpp-btn-outline"
+                              style={{ alignSelf: "flex-start", fontSize: 12, padding: "5px 12px" }}
+                              onClick={() => exportarResultadoCSV(baileysJob.total, baileysJob.enviados, baileysJob.falhas, baileysJob.erros)}
+                            >
+                              ↓ Exportar CSV
+                            </button>
                           </>
                         )}
                       </div>
