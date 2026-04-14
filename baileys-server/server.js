@@ -248,6 +248,108 @@ app.post('/instancia/:id/disparar', async (req, res) => {
   }
 })
 
+// ── Disparo em lote com jobs ───────────────────────────────────────────────────
+// Estrutura de um job:
+// { total, enviados, falhas, erros: [{phone, msg}], status: 'rodando'|'concluido'|'erro', iniciadoEm }
+
+const jobs = {}
+
+// Limpa jobs com mais de 2h para não acumular memória
+setInterval(() => {
+  const limite = Date.now() - 2 * 60 * 60 * 1000
+  for (const id of Object.keys(jobs)) {
+    if (jobs[id].iniciadoEm < limite) delete jobs[id]
+  }
+}, 30 * 60 * 1000)
+
+// POST /disparar-lista — recebe lista já personalizada, processa em background
+app.post('/disparar-lista', (req, res) => {
+  const { instanceId, contatos } = req.body
+  // contatos: [{ phone, mensagens: [{ type, content, caption, filename }] }]
+
+  const instId = String(instanceId || '1')
+  const inst = instances[instId]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  if (inst.status !== 'conectado') {
+    return res.status(503).json({ error: `Instância ${instId} não conectada (${inst.status})` })
+  }
+  if (!Array.isArray(contatos) || contatos.length === 0) {
+    return res.status(400).json({ error: '"contatos" obrigatório e não pode estar vazio' })
+  }
+
+  const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+  jobs[jobId] = {
+    total: contatos.length,
+    enviados: 0,
+    falhas: 0,
+    erros: [],
+    status: 'rodando',
+    iniciadoEm: Date.now(),
+  }
+
+  // Responde imediatamente com o jobId
+  res.json({ ok: true, jobId, total: contatos.length })
+
+  // Processa em background (sem await na resposta)
+  processarLista(jobId, instId, contatos).catch(err => {
+    if (jobs[jobId]) {
+      jobs[jobId].status = 'erro'
+      jobs[jobId].erroGeral = err.message
+    }
+  })
+})
+
+// GET /job/:jobId — retorna progresso do job
+app.get('/job/:jobId', (req, res) => {
+  const job = jobs[req.params.jobId]
+  if (!job) return res.status(404).json({ error: 'Job não encontrado ou expirado' })
+  res.json(job)
+})
+
+// Processa a lista em background
+async function processarLista(jobId, instId, contatos) {
+  const job = jobs[jobId]
+
+  for (const contato of contatos) {
+    const inst = instances[instId]
+    // Se instância desconectou no meio do caminho, aborta
+    if (!inst || inst.status !== 'conectado') {
+      job.status = 'erro'
+      job.erroGeral = 'Instância desconectou durante o disparo'
+      return
+    }
+
+    let contatoOk = true
+
+    for (const msg of contato.mensagens) {
+      try {
+        await enviarMensagem(inst, msg.type, contato.phone, msg.content, msg.caption, msg.filename)
+      } catch (err) {
+        contatoOk = false
+        job.erros.push({ phone: contato.phone, msg: err?.message || String(err) })
+        console.error(`❌ [Job ${jobId}] Erro ao enviar para ${contato.phone}:`, err?.message)
+        break
+      }
+      // Delay entre mensagens do mesmo contato: 200-400ms
+      if (contato.mensagens.length > 1) {
+        await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
+      }
+    }
+
+    if (contatoOk) job.enviados++
+    else job.falhas++
+
+    // Delay entre contatos: 2-8s (anti-ban)
+    if (contatos.indexOf(contato) < contatos.length - 1) {
+      const delay = 2000 + Math.random() * 6000
+      await new Promise(r => setTimeout(r, delay))
+    }
+  }
+
+  job.status = 'concluido'
+  console.log(`\n✅ [Job ${jobId}] Concluído — ${job.enviados} enviados, ${job.falhas} falhas`)
+}
+
 // ── Rotas de compatibilidade (usa instância "1") ───────────────────────────────
 app.get('/', (req, res) => {
   const inst = instances['1']

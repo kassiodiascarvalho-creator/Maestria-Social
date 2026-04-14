@@ -101,6 +101,28 @@ export default function WhatsAppPage() {
   const [disparoErro, setDisparoErro] = useState("")
   const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
 
+  // Baileys job — progresso em tempo real
+  type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "concluido" | "erro"; erroGeral?: string }
+  const [baileysJob, setBaileysJob] = useState<BaileysJob | null>(null)
+  const baileysJobIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  function iniciarPollingJob(jobId: string, total: number) {
+    if (baileysJobIntervalRef.current) clearInterval(baileysJobIntervalRef.current)
+    baileysJobIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/wpp/baileys-job?jobId=${jobId}`)
+        if (res.ok) {
+          const job = await res.json()
+          setBaileysJob({ jobId, total, ...job })
+          if (job.status === "concluido" || job.status === "erro") {
+            clearInterval(baileysJobIntervalRef.current!)
+            baileysJobIntervalRef.current = null
+          }
+        }
+      } catch { /* servidor temporariamente inacessível — tenta novamente */ }
+    }, 2000)
+  }
+
   // Baileys — instâncias
   type BaileysInstancia = { id: string; label: string; status: string; phone: string | null; connected: boolean; qr?: string | null }
   const [baileysInstancias, setBaileysInstancias] = useState<BaileysInstancia[]>([])
@@ -451,6 +473,8 @@ export default function WhatsAppPage() {
     setDisparando(true)
     setDisparoResult(null)
     setDisparoErro("")
+    setBaileysJob(null)
+    if (baileysJobIntervalRef.current) { clearInterval(baileysJobIntervalRef.current); baileysJobIntervalRef.current = null }
 
     const mensagens = fila.map(m => {
       if (m.tipo === "template") {
@@ -475,14 +499,22 @@ export default function WhatsAppPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined, api_provider: apiProvider, baileys_instance_id: baileysInstSelecionada }),
-
     })
     const data = await res.json()
     setDisparando(false)
-    if (res.ok) {
-      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas, erros: data.erros })
-    } else {
+
+    if (!res.ok) {
       setDisparoErro(data.error || "Erro ao disparar")
+      return
+    }
+
+    if (data.jobId) {
+      // Baileys: processa em background — inicia polling de progresso
+      setBaileysJob({ jobId: data.jobId, total: data.total, enviados: 0, falhas: 0, erros: [], status: "rodando" })
+      iniciarPollingJob(data.jobId, data.total)
+    } else {
+      // Meta / Z-API: resultado imediato
+      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas, erros: data.erros })
     }
   }
 
@@ -492,7 +524,7 @@ export default function WhatsAppPage() {
     if (m.tipo === "text") return m.conteudo.trim().length > 0
     return m.conteudo.length > 0 // URL da mídia
   })
-  const podeDisparar = listaAtiva && contatos.length > 0 && filaValida && !disparando
+  const podeDisparar = listaAtiva && contatos.length > 0 && filaValida && !disparando && baileysJob?.status !== "rodando"
 
   return (
     <>
@@ -1109,11 +1141,14 @@ export default function WhatsAppPage() {
                         disabled={!podeDisparar}
                       >
                         {disparando
-                          ? `Enviando... (pode demorar)`
+                          ? "Preparando disparo..."
+                          : baileysJob?.status === "rodando"
+                          ? `Aguardando... ${baileysJob.enviados + baileysJob.falhas}/${baileysJob.total}`
                           : `Disparar ${fila.length} mensagem${fila.length !== 1 ? "s" : ""} para ${contatos.length} contato${contatos.length !== 1 ? "s" : ""}`}
                       </button>
                     </div>
 
+                    {/* Resultado Meta/Z-API — imediato */}
                     {disparoResult && (
                       <div className="wpp-result ok">
                         <strong>Disparo concluído!</strong><br />
@@ -1128,6 +1163,45 @@ export default function WhatsAppPage() {
                         )}
                       </div>
                     )}
+
+                    {/* Progresso Baileys — tempo real */}
+                    {baileysJob && (
+                      <div className={`wpp-result ${baileysJob.status === "erro" ? "erro" : "ok"}`}>
+                        {baileysJob.status === "rodando" ? (
+                          <>
+                            <strong>Disparando via Baileys...</strong>
+                            <div className="wpp-progress-bar">
+                              <div
+                                className="wpp-progress-fill"
+                                style={{ width: `${Math.round(((baileysJob.enviados + baileysJob.falhas) / baileysJob.total) * 100)}%` }}
+                              />
+                            </div>
+                            <span>
+                              ✓ {baileysJob.enviados} enviados &nbsp;·&nbsp;
+                              {baileysJob.falhas > 0 && <span style={{ color: "#e07070" }}>✕ {baileysJob.falhas} falhas &nbsp;·&nbsp;</span>}
+                              {baileysJob.total - baileysJob.enviados - baileysJob.falhas} restantes de {baileysJob.total}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <strong>{baileysJob.status === "concluido" ? "Disparo concluído!" : "Erro no disparo"}</strong><br />
+                            ✓ {baileysJob.enviados} enviados · {baileysJob.falhas} falhas · {baileysJob.total} total
+                            {baileysJob.erroGeral && (
+                              <div style={{ marginTop: 6, color: "#e07070", fontSize: 12 }}>{baileysJob.erroGeral}</div>
+                            )}
+                            {baileysJob.erros.length > 0 && (
+                              <details style={{ marginTop: 8 }}>
+                                <summary style={{ cursor: "pointer", fontSize: 12 }}>Ver erros ({baileysJob.erros.length})</summary>
+                                <pre style={{ fontSize: 11, marginTop: 6, whiteSpace: "pre-wrap", color: "#e07070" }}>
+                                  {baileysJob.erros.map(e => `${e.phone}: ${e.msg}`).join("\n")}
+                                </pre>
+                              </details>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     {disparoErro && (
                       <div className="wpp-result erro">{disparoErro}</div>
                     )}
@@ -1296,9 +1370,13 @@ const css = `
   .wpp-check-label input { accent-color:#c2904d; }
 
   /* Resultado */
-  .wpp-result { margin-top:14px; padding:12px 14px; border-radius:8px; font-size:13px; line-height:1.6; }
+  .wpp-result { margin-top:14px; padding:12px 14px; border-radius:8px; font-size:13px; line-height:1.6; display:flex; flex-direction:column; gap:8px; }
   .wpp-result.ok { background:rgba(100,180,100,.08); border:1px solid rgba(100,180,100,.2); color:#7ab87a; }
   .wpp-result.erro { background:rgba(224,112,112,.08); border:1px solid rgba(224,112,112,.2); color:#e07070; }
+
+  /* Barra de progresso Baileys */
+  .wpp-progress-bar { width:100%; height:6px; background:rgba(255,255,255,.06); border-radius:99px; overflow:hidden; }
+  .wpp-progress-fill { height:100%; background:linear-gradient(90deg,#4caf50,#7ab87a); border-radius:99px; transition:width .4s ease; }
 
   /* Badge Leads AUTO */
   .wpp-badge-leads { font-size:9px; font-weight:700; letter-spacing:1px; background:rgba(194,144,77,.15); color:#c2904d; padding:1px 5px; border-radius:4px; margin-left:6px; vertical-align:middle; }

@@ -445,7 +445,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nenhum contato encontrado com os filtros aplicados' }, { status: 400 })
     }
 
-    // ── Envia mensagens ──
+    // ── Baileys: envia lista ao servidor local e retorna jobId para polling ──
+    if (apiProvider === 'baileys') {
+      // Monta lista personalizada por contato (Vercel faz a personalização, Baileys só envia)
+      const listaParaBaileys = contatosFiltrados.map(contato => ({
+        phone: contato.telefone,
+        mensagens: mensagens
+          .filter(m => m.tipo !== 'template')
+          .map(msg => {
+            if (msg.tipo === 'text') {
+              return { type: 'text', content: substituirVariaveis(sortearTexto(msg), contato as Record<string, unknown>) }
+            }
+            return {
+              type: msg.tipo,
+              content: msg.conteudo,
+              caption: msg.caption ? substituirVariaveis(msg.caption, contato as Record<string, unknown>) : undefined,
+              filename: msg.filename,
+            }
+          }),
+      }))
+
+      const base = baileysApiUrl!.replace(/\/$/, '')
+      const baileysRes = await fetch(`${base}/disparar-lista`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys }),
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!baileysRes.ok) {
+        const err = await baileysRes.json().catch(() => ({}))
+        return NextResponse.json({ error: err.error || 'Erro ao iniciar disparo no servidor Baileys' }, { status: 502 })
+      }
+
+      const { jobId } = await baileysRes.json()
+
+      // Registra disparo no Supabase (totais serão 0 — atualizados quando o job concluir)
+      const resumoBaileys = mensagens.map(m => m.tipo).join(' + ')
+      await db.from('wpp_disparos').insert({
+        lista_id,
+        lista_nome: listaInfo?.nome ?? '',
+        tipo: mensagens.length === 1 ? mensagens[0].tipo : 'sequence',
+        conteudo: resumoBaileys,
+        caption: null,
+        filename: null,
+        total: contatosFiltrados.length,
+        enviados: 0,
+        falhas: 0,
+      })
+
+      return NextResponse.json({ ok: true, jobId, total: contatosFiltrados.length, provider: 'baileys' })
+    }
+
+    // ── Meta / Z-API: processa no Vercel (sem timeout para listas razoáveis) ──
     let enviados = 0
     let falhas = 0
     const erros: string[] = []
@@ -453,21 +505,16 @@ export async function POST(req: NextRequest) {
     for (const contato of contatosFiltrados) {
       let contatoOk = true
 
-      if (apiProvider === 'zapi' || apiProvider === 'baileys') {
-        // ── Z-API / Baileys: sem restrição de 24h, envia tudo diretamente ──
+      if (apiProvider === 'zapi') {
         for (const msg of mensagens) {
-          if (msg.tipo === 'template') continue // não usam templates Meta
+          if (msg.tipo === 'template') continue
           const msgPersonalizada: MensagemItem = msg.tipo === 'text'
             ? { ...msg, conteudo: substituirVariaveis(sortearTexto(msg), contato as Record<string, unknown>) }
             : msg.caption
               ? { ...msg, caption: substituirVariaveis(msg.caption, contato as Record<string, unknown>) }
               : msg
           try {
-            if (apiProvider === 'zapi') {
-              await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msgPersonalizada)
-            } else {
-              await enviarBaileys(baileysApiUrl!, contato.telefone, msgPersonalizada, baileysInstanceId)
-            }
+            await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msgPersonalizada)
           } catch (err) {
             contatoOk = false
             erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
@@ -499,9 +546,7 @@ export async function POST(req: NextRequest) {
             if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
           }
         } else {
-          // Fora da janela 24h: só templates
           const templatesDaFila = mensagens.filter(m => m.tipo === 'template')
-
           if (templatesDaFila.length > 0) {
             for (const msg of templatesDaFila) {
               const msgComVars = preencherVarsTemplate(msg, contato)
@@ -516,17 +561,12 @@ export async function POST(req: NextRequest) {
             }
           } else if (templatePadrao) {
             const c = contato as Record<string, unknown>
-            const templateVars = [
-              (contato.nome || 'Lead') as string,
-              String(c.qs_total ?? 0),
-              (c.pilar_fraco as string) || 'N/A',
-            ]
             try {
               await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, {
                 tipo: 'template',
                 template_name: templatePadrao,
                 template_lang: 'pt_BR',
-                template_vars: templateVars,
+                template_vars: [(contato.nome || 'Lead') as string, String(c.qs_total ?? 0), (c.pilar_fraco as string) || 'N/A'],
               })
             } catch (err) {
               contatoOk = false
@@ -534,22 +574,14 @@ export async function POST(req: NextRequest) {
             }
           } else {
             contatoOk = false
-            erros.push(`${contato.telefone}: fora da janela 24h e nenhum template configurado. Configure META_TEMPLATE_NAME nas Integrações.`)
+            erros.push(`${contato.telefone}: fora da janela 24h e nenhum template configurado.`)
           }
         }
       }
 
       if (contatoOk) enviados++
       else falhas++
-
-      // Delay entre contatos: Baileys usa espera aleatória (2-8s) para parecer humano
-      // Meta/Z-API mantém 300ms pois não há risco de ban por velocidade
-      if (apiProvider === 'baileys') {
-        const delay = 2000 + Math.random() * 6000
-        await new Promise(r => setTimeout(r, delay))
-      } else {
-        await new Promise(r => setTimeout(r, 300))
-      }
+      await new Promise(r => setTimeout(r, 300))
     }
 
     // Registra disparo
