@@ -1,145 +1,144 @@
 /**
- * Maestria Social — Servidor Baileys Local
- * ─────────────────────────────────────────
- * Roda na sua máquina e expõe uma API HTTP para o Maestria enviar mensagens.
- *
+ * Maestria Social — Servidor WhatsApp Local (whatsapp-web.js)
+ * ─────────────────────────────────────────────────────────────
  * 1ª vez: npm install → npm start → escaneie o QR code
- * Próximas vezes: npm start (sessão já salva)
+ * Próximas vezes: npm start (sessão já salva automaticamente)
  */
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys')
-const { Boom } = require('@hapi/boom')
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
+const qrcode = require('qrcode-terminal')
 const express = require('express')
-const P = require('pino')
 
 const app = express()
 app.use(express.json())
 
-let sock = null
 let isConnected = false
+let client = null
 
-// ── Conexão com WhatsApp ───────────────────────────────────────────────────────
-async function conectar() {
-  const { state, saveCreds } = await useMultiFileAuthState('sessao_whatsapp')
+// ── Cliente WhatsApp ───────────────────────────────────────────────────────────
+client = new Client({
+  authStrategy: new LocalAuth({ dataPath: './sessao_whatsapp' }),
+  puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  },
+})
 
-  sock = makeWASocket({
-    auth: state,
-    logger: P({ level: 'silent' }),
-    printQRInTerminal: true,
-    browser: ['Maestria Social', 'Chrome', '1.0.0'],
-  })
+client.on('qr', (qr) => {
+  console.log('\n📱 Escaneie o QR code abaixo com seu WhatsApp:\n')
+  qrcode.generate(qr, { small: true })
+  console.log('\n(WhatsApp > Dispositivos conectados > Conectar dispositivo)\n')
+})
 
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update
+client.on('ready', () => {
+  isConnected = true
+  console.log('\n✅ WhatsApp conectado com sucesso!')
+  console.log(`🚀 API pronta em http://localhost:${PORT}\n`)
+})
 
-    if (connection === 'close') {
-      isConnected = false
-      const codigo = lastDisconnect?.error instanceof Boom
-        ? lastDisconnect.error.output?.statusCode
-        : null
-      const deslogado = codigo === DisconnectReason.loggedOut
+client.on('authenticated', () => {
+  console.log('🔐 Autenticado — salvando sessão...')
+})
 
-      if (deslogado) {
-        console.log('\n❌ Deslogado do WhatsApp.')
-        console.log('   Delete a pasta "sessao_whatsapp" e reinicie o servidor para reconectar.\n')
-      } else {
-        console.log('🔄 Conexão perdida. Reconectando...')
-        await conectar()
-      }
-    } else if (connection === 'open') {
-      isConnected = true
-      console.log('\n✅ WhatsApp conectado com sucesso!')
-      console.log(`🚀 API pronta em http://localhost:${PORT}\n`)
-    }
-  })
+client.on('auth_failure', () => {
+  console.log('❌ Falha na autenticação. Delete "sessao_whatsapp" e reinicie.')
+  isConnected = false
+})
 
-  sock.ev.on('creds.update', saveCreds)
-}
+client.on('disconnected', (reason) => {
+  isConnected = false
+  console.log('🔌 Desconectado:', reason)
+  console.log('🔄 Reiniciando...')
+  client.initialize()
+})
 
 // ── Utilitários ────────────────────────────────────────────────────────────────
 function formatarTelefone(phone) {
   const digits = phone.replace(/\D/g, '')
   const normalized = digits.startsWith('55') ? digits : `55${digits}`
-  return `${normalized}@s.whatsapp.net`
+  return `${normalized}@c.us`
+}
+
+async function baixarMidia(url) {
+  const media = await MessageMedia.fromUrl(url, {
+    unsafeMime: true,
+    reqheaders: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
+  })
+  return media
+}
+
+// Resolve o ID correto do número no WhatsApp (evita erro "No LID for user")
+async function resolverChatId(phone) {
+  const formatted = formatarTelefone(phone)
+  const numberId = await client.getNumberId(formatted)
+  if (!numberId) throw new Error(`Número ${phone} não encontrado no WhatsApp`)
+  return numberId._serialized
 }
 
 // ── Rotas ──────────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({ status: isConnected ? 'conectado' : 'aguardando QR', servidor: 'Maestria WhatsApp' })
+})
 
-// GET /status — verifica se está conectado
 app.get('/status', (req, res) => {
   res.json({ connected: isConnected })
 })
 
-// POST /disparar — envia uma mensagem para um número
-// Body: { phone, type, content, caption?, filename? }
 app.post('/disparar', async (req, res) => {
-  if (!isConnected || !sock) {
-    return res.status(503).json({ error: 'WhatsApp não conectado. Inicie o servidor e escaneie o QR.' })
+  if (!isConnected || !client) {
+    return res.status(503).json({ error: 'WhatsApp não conectado. Escaneie o QR code no terminal.' })
   }
 
   const { phone, type, content, caption, filename } = req.body
 
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
-  if (!content && type !== 'text') return res.status(400).json({ error: '"content" é obrigatório' })
-
-  const jid = formatarTelefone(phone)
 
   try {
+    const chatId = await resolverChatId(phone)
+
     if (type === 'text') {
-      await sock.sendMessage(jid, { text: content || '' })
+      await client.sendMessage(chatId, content || '')
 
     } else if (type === 'image') {
-      await sock.sendMessage(jid, {
-        image: { url: content },
-        caption: caption || '',
-      })
+      const media = await baixarMidia(content)
+      await client.sendMessage(chatId, media, { caption: caption || '' })
 
     } else if (type === 'audio') {
-      await sock.sendMessage(jid, {
-        audio: { url: content },
-        mimetype: 'audio/mp4',
-        ptt: false,
-      })
+      const media = await baixarMidia(content)
+      await client.sendMessage(chatId, media, { sendAudioAsVoice: false })
 
     } else if (type === 'video') {
-      await sock.sendMessage(jid, {
-        video: { url: content },
-        caption: caption || '',
-      })
+      const media = await baixarMidia(content)
+      await client.sendMessage(chatId, media, { caption: caption || '' })
 
     } else if (type === 'document') {
-      await sock.sendMessage(jid, {
-        document: { url: content },
-        fileName: filename || 'arquivo',
-        mimetype: 'application/octet-stream',
-      })
+      const media = await baixarMidia(content)
+      if (filename) media.filename = filename
+      await client.sendMessage(chatId, media)
 
     } else {
-      return res.status(400).json({ error: `Tipo "${type}" não suportado. Use: text, image, audio, video, document` })
+      return res.status(400).json({ error: `Tipo "${type}" não suportado` })
     }
 
     res.json({ ok: true })
   } catch (err) {
-    console.error('Erro ao enviar:', err)
-    res.status(500).json({ error: String(err) })
+    const msg = err?.message || String(err)
+    console.error(`❌ Erro ao enviar [${type}] para ${phone}:`, msg)
+    res.status(500).json({ error: msg })
   }
 })
 
 // ── Inicia servidor ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001
 
-conectar().then(() => {
-  app.listen(PORT, () => {
-    console.log('\n══════════════════════════════════════════')
-    console.log('   Maestria Social — Servidor Baileys')
-    console.log('══════════════════════════════════════════')
-    console.log(`\n🌐 API rodando em: http://localhost:${PORT}`)
-    console.log('📱 Aguardando conexão com WhatsApp...')
-    console.log('\n   → Escaneie o QR code com seu WhatsApp')
-    console.log('   → Após conectar, configure no Maestria:')
-    console.log(`     BAILEYS_API_URL = http://localhost:${PORT}`)
-    console.log('\n   Use um túnel (ex: ngrok) para acessar de fora:')
-    console.log('   npx ngrok http 3001\n')
-  })
+app.listen(PORT, () => {
+  console.log('\n══════════════════════════════════════════')
+  console.log('   Maestria Social — Servidor WhatsApp')
+  console.log('══════════════════════════════════════════')
+  console.log(`\n🌐 API rodando em: http://localhost:${PORT}`)
+  console.log('📱 Inicializando WhatsApp...\n')
+  client.initialize()
 })

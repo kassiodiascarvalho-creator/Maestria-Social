@@ -199,6 +199,21 @@ async function enviarMeta(
   }
 }
 
+// Substitui variáveis de personalização em texto livre.
+// Suporta: {{nome}}, {{pilar}}, {{nivel}}, {{renda}}, {{score}}, {{status}}
+function substituirVariaveis(
+  texto: string,
+  contato: Record<string, unknown>
+): string {
+  return texto
+    .replace(/\{\{nome\}\}/gi, (contato.nome as string) || 'Lead')
+    .replace(/\{\{pilar\}\}/gi, (contato.pilar_fraco as string) || 'N/A')
+    .replace(/\{\{nivel\}\}/gi, (contato.nivel_qs as string) || 'N/A')
+    .replace(/\{\{renda\}\}/gi, (contato.renda_mensal as string) || 'N/A')
+    .replace(/\{\{score\}\}/gi, String(contato.qs_total ?? 0))
+    .replace(/\{\{status\}\}/gi, (contato.status_lead as string) || 'N/A')
+}
+
 // Preenche variáveis vazias de um template com dados do contato como fallback.
 // Usa template_param_count para saber quantas vars o template realmente tem.
 // Pool de vars disponíveis (na ordem): nome, qs_total, pilar_fraco
@@ -428,11 +443,16 @@ export async function POST(req: NextRequest) {
         // ── Z-API / Baileys: sem restrição de 24h, envia tudo diretamente ──
         for (const msg of mensagens) {
           if (msg.tipo === 'template') continue // não usam templates Meta
+          const msgPersonalizada: MensagemItem = msg.tipo === 'text'
+            ? { ...msg, conteudo: substituirVariaveis(msg.conteudo ?? '', contato as Record<string, unknown>) }
+            : msg.caption
+              ? { ...msg, caption: substituirVariaveis(msg.caption, contato as Record<string, unknown>) }
+              : msg
           try {
             if (apiProvider === 'zapi') {
-              await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msg)
+              await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msgPersonalizada)
             } else {
-              await enviarBaileys(baileysApiUrl!, contato.telefone, msg)
+              await enviarBaileys(baileysApiUrl!, contato.telefone, msgPersonalizada)
             }
           } catch (err) {
             contatoOk = false
@@ -445,9 +465,16 @@ export async function POST(req: NextRequest) {
         // ── Meta API: respeita janela 24h ──
         if (contato.dentro_24h) {
           for (const msg of mensagens) {
-            const msgFinal = msg.tipo === 'template'
-              ? preencherVarsTemplate(msg, contato as Record<string, unknown>)
-              : msg
+            let msgFinal: MensagemItem
+            if (msg.tipo === 'template') {
+              msgFinal = preencherVarsTemplate(msg, contato as Record<string, unknown>)
+            } else if (msg.tipo === 'text') {
+              msgFinal = { ...msg, conteudo: substituirVariaveis(msg.conteudo ?? '', contato as Record<string, unknown>) }
+            } else if (msg.caption) {
+              msgFinal = { ...msg, caption: substituirVariaveis(msg.caption, contato as Record<string, unknown>) }
+            } else {
+              msgFinal = msg
+            }
             try {
               await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, msgFinal)
             } catch (err) {

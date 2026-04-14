@@ -89,6 +89,7 @@ export default function WhatsAppPage() {
   const [fila, setFila] = useState<MsgItem[]>([criarMsgVazia()])
   const [uploadandoId, setUploadandoId] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
 
   // Disparo
   const [disparando, setDisparando] = useState(false)
@@ -285,6 +286,25 @@ export default function WhatsAppPage() {
   // ── Fila de mensagens ──
   function atualizarMsg(id: string, patch: Partial<MsgItem>) {
     setFila(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
+  }
+
+  function inserirVariavel(msgId: string, variavel: string) {
+    const el = textareaRefs.current[msgId]
+    const msg = fila.find(m => m.id === msgId)
+    if (!msg) return
+    if (el) {
+      const start = el.selectionStart ?? msg.conteudo.length
+      const end = el.selectionEnd ?? msg.conteudo.length
+      const novo = msg.conteudo.slice(0, start) + variavel + msg.conteudo.slice(end)
+      atualizarMsg(msgId, { conteudo: novo })
+      // Reposiciona cursor após a variável inserida
+      setTimeout(() => {
+        el.setSelectionRange(start + variavel.length, start + variavel.length)
+        el.focus()
+      }, 0)
+    } else {
+      atualizarMsg(msgId, { conteudo: msg.conteudo + variavel })
+    }
   }
 
   function adicionarMsgNaFila() {
@@ -687,13 +707,36 @@ export default function WhatsAppPage() {
                             )}
 
                             {msg.tipo === "text" && (
-                              <textarea
-                                className="wpp-textarea"
-                                rows={3}
-                                placeholder="Digite sua mensagem..."
-                                value={msg.conteudo}
-                                onChange={e => atualizarMsg(msg.id, { conteudo: e.target.value })}
-                              />
+                              <>
+                                <textarea
+                                  ref={el => { textareaRefs.current[msg.id] = el }}
+                                  className="wpp-textarea"
+                                  rows={3}
+                                  placeholder="Digite sua mensagem..."
+                                  value={msg.conteudo}
+                                  onChange={e => atualizarMsg(msg.id, { conteudo: e.target.value })}
+                                />
+                                <div className="wpp-vars-row">
+                                  {[
+                                    { label: "Nome", var: "{{nome}}" },
+                                    { label: "Pilar", var: "{{pilar}}" },
+                                    { label: "Nível", var: "{{nivel}}" },
+                                    { label: "Renda", var: "{{renda}}" },
+                                    { label: "Score", var: "{{score}}" },
+                                    { label: "Status", var: "{{status}}" },
+                                  ].map(v => (
+                                    <button
+                                      key={v.var}
+                                      type="button"
+                                      className="wpp-var-chip"
+                                      onClick={() => inserirVariavel(msg.id, v.var)}
+                                      title={`Inserir ${v.var}`}
+                                    >
+                                      {v.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
                             )}
 
                             {(msg.tipo === "image" || msg.tipo === "audio" || msg.tipo === "video" || msg.tipo === "document") && (
@@ -885,6 +928,9 @@ const css = `
   .wpp-input:focus { border-color:rgba(194,144,77,.35); }
   .wpp-textarea { background:#0e0f09; border:1px solid #2a1f18; border-radius:8px; padding:10px 12px; color:#fff9e6; font-size:14px; font-family:inherit; outline:none; width:100%; resize:vertical; line-height:1.6; transition:border-color .15s; }
   .wpp-textarea:focus { border-color:rgba(194,144,77,.35); }
+  .wpp-vars-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .wpp-var-chip { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid rgba(194,144,77,.3); background:rgba(194,144,77,.06); color:#c2904d; transition:all .15s; letter-spacing:.3px; }
+  .wpp-var-chip:hover { background:rgba(194,144,77,.15); border-color:#c2904d; }
   .wpp-select { background:#0e0f09; border:1px solid #2a1f18; border-radius:8px; padding:8px 10px; color:#fff9e6; font-size:12px; font-family:inherit; outline:none; cursor:pointer; }
   .wpp-select:focus { border-color:rgba(194,144,77,.35); }
   .wpp-select-full { width:100%; }
