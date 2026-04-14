@@ -112,6 +112,9 @@ export default function WhatsAppPage() {
   const [baileysNovoPhone, setBaileysNovoPhone] = useState("")
   const [baileysFormAberto, setBaileysFormAberto] = useState(false)
 
+  // Mobile sidebar
+  const [sidebarAberta, setSidebarAberta] = useState(false)
+
   // ── Baileys: busca instâncias quando provedor muda ──
   useEffect(() => {
     if (apiProvider !== "baileys") {
@@ -497,9 +500,12 @@ export default function WhatsAppPage() {
       <div className="wpp-layout">
 
         {/* ── Sidebar: listas ── */}
-        <aside className="wpp-sidebar">
+        <aside className={`wpp-sidebar${sidebarAberta ? " aberta" : ""}`}>
           <div className="wpp-sidebar-header">
-            <h2 className="wpp-sidebar-title">Listas de Contatos</h2>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h2 className="wpp-sidebar-title">Listas de Contatos</h2>
+              <button className="wpp-sidebar-close" onClick={() => setSidebarAberta(false)}>✕</button>
+            </div>
           </div>
 
           <div className="wpp-nova-lista">
@@ -532,7 +538,7 @@ export default function WhatsAppPage() {
               <div
                 key={l.id}
                 className={`wpp-lista-item${listaAtiva?.id === l.id ? " active" : ""}`}
-                onClick={() => selecionarLista(l)}
+                onClick={() => { selecionarLista(l); setSidebarAberta(false) }}
               >
                 <div className="wpp-lista-info">
                   <span className="wpp-lista-nome">
@@ -553,8 +559,18 @@ export default function WhatsAppPage() {
           </div>
         </aside>
 
+        {/* Overlay mobile */}
+        {sidebarAberta && (
+          <div className="wpp-sidebar-overlay" onClick={() => setSidebarAberta(false)} />
+        )}
+
         {/* ── Main ── */}
         <main className="wpp-main">
+          {/* Botão hamburguer — só visível no mobile */}
+          <button className="wpp-hamburger" onClick={() => setSidebarAberta(true)}>
+            ☰ Listas de Contatos
+          </button>
+
           {!listaAtiva ? (
             <div className="wpp-empty-state">
               <div className="wpp-empty-icon">◈</div>
@@ -1302,11 +1318,79 @@ const css = `
   .wpp-contato-tag { font-size:9px; background:rgba(255,255,255,.04); border:1px solid #2a1f18; color:#5a4e3e; padding:1px 5px; border-radius:4px; }
   .wpp-contato-tag.st { text-transform:capitalize; }
 
+  /* Elementos mobile — escondidos no desktop */
+  .wpp-hamburger { display:none; }
+  .wpp-sidebar-close { display:none; }
+  .wpp-sidebar-overlay { display:none; }
+
   @media(max-width:1100px) {
     .wpp-content-grid { grid-template-columns:1fr; }
   }
   @media(max-width:768px) {
-    .wpp-sidebar { width:200px; }
-    .wpp-main { padding:20px; }
+    .wpp-layout { position:relative; }
+
+    /* Sidebar vira gaveta lateral */
+    .wpp-sidebar {
+      position:absolute;
+      left:0; top:0; bottom:0;
+      z-index:100;
+      width:280px;
+      transform:translateX(-100%);
+      transition:transform .25s ease;
+      box-shadow:4px 0 24px rgba(0,0,0,.6);
+    }
+    .wpp-sidebar.aberta { transform:translateX(0); }
+
+    /* Overlay escurece o fundo quando sidebar aberta */
+    .wpp-sidebar-overlay {
+      display:block;
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.5);
+      z-index:99;
+    }
+
+    /* Botão fechar dentro da sidebar */
+    .wpp-sidebar-close {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:26px; height:26px;
+      background:transparent;
+      border:1px solid #2a1f18;
+      border-radius:6px;
+      color:#4a3e30;
+      cursor:pointer;
+      font-size:14px;
+      font-family:inherit;
+      flex-shrink:0;
+    }
+    .wpp-sidebar-close:hover { border-color:rgba(194,144,77,.3); color:#c2904d; }
+
+    /* Botão hamburguer no main */
+    .wpp-hamburger {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 14px;
+      margin-bottom:16px;
+      background:rgba(194,144,77,.06);
+      border:1px solid rgba(194,144,77,.2);
+      border-radius:8px;
+      color:#c2904d;
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      font-family:inherit;
+      width:100%;
+      transition:background .15s;
+    }
+    .wpp-hamburger:hover { background:rgba(194,144,77,.12); }
+
+    .wpp-main { padding:16px; }
+    .wpp-provider-selector { flex-wrap:wrap; gap:6px; }
+    .wpp-variacoes-row { flex-direction:column; }
+    .wpp-variacao-col { min-width:unset; }
+    .wpp-main-title { font-size:22px; }
   }
 `

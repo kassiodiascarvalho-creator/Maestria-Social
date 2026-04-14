@@ -488,5 +488,20 @@ const css = `
   .action-cell{display:flex;gap:8px;}
   .url-cell{max-width:340px;word-break:break-all;color:#7a6e5e;}
   .empty{font-size:13px;color:#7a6e5e;padding:12px;}
-  @media(max-width:768px){.int-page{padding:20px;}.int-card{padding:20px;}.int-row{flex-direction:column;}.action-cell{flex-direction:column;}}
+  @media(max-width:768px){
+    .int-page{padding:16px;}
+    .int-card{padding:18px 16px;}
+    .int-title{font-size:24px;}
+    .int-row{flex-direction:column;}
+    .int-row .int-input{width:100%;}
+    .int-save-btn{width:100%;}
+    .action-cell{flex-direction:column;}
+    .url-cell{max-width:none;word-break:break-all;}
+    .table{font-size:12px;}
+    .table th,.table td{padding:8px;}
+    .table-wrap{border-radius:8px;}
+    .webhook-url{flex-direction:column;gap:8px;}
+    .webhook-url code{word-break:break-all;}
+    .copy-btn{align-self:flex-start;}
+  }
 `;
