@@ -107,6 +107,10 @@ export default function WhatsAppPage() {
   const [baileysInstSelecionada, setBaileysInstSelecionada] = useState<string>("1")
   const [baileysCarregando, setBaileysCarregando] = useState(false)
   const baileysIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [baileysAdicionando, setBaileysAdicionando] = useState(false)
+  const [baileysNovoLabel, setBaileysNovoLabel] = useState("")
+  const [baileysNovoPhone, setBaileysNovoPhone] = useState("")
+  const [baileysFormAberto, setBaileysFormAberto] = useState(false)
 
   // ── Baileys: busca instâncias quando provedor muda ──
   useEffect(() => {
@@ -136,6 +140,35 @@ export default function WhatsAppPage() {
       }
     } catch { /* servidor offline */ }
     setBaileysCarregando(false)
+  }
+
+  async function adicionarInstancia() {
+    if (!baileysNovoLabel.trim()) return
+    setBaileysAdicionando(true)
+    try {
+      const res = await fetch("/api/admin/wpp/baileys-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: baileysNovoLabel.trim(), phone: baileysNovoPhone.trim() || undefined }),
+      })
+      if (res.ok) {
+        setBaileysFormAberto(false)
+        setBaileysNovoLabel("")
+        setBaileysNovoPhone("")
+        await fetchBaileysInstancias(false)
+      }
+    } catch {}
+    setBaileysAdicionando(false)
+  }
+
+  async function removerInstancia(id: string) {
+    if (!confirm("Remover este número? A sessão será encerrada.")) return
+    await fetch("/api/admin/wpp/baileys-status", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    await fetchBaileysInstancias(false)
   }
 
   // ── Carrega listas ──
@@ -939,15 +972,60 @@ export default function WhatsAppPage() {
                       <div className="wpp-baileys-panel">
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                           <span className="wpp-label" style={{ marginBottom: 0 }}>Número para disparar:</span>
-                          <button
-                            className="wpp-btn wpp-btn-outline"
-                            style={{ padding: "3px 10px", fontSize: 11 }}
-                            onClick={() => fetchBaileysInstancias(false)}
-                            disabled={baileysCarregando}
-                          >
-                            {baileysCarregando ? "..." : "↻ Atualizar"}
-                          </button>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              className="wpp-btn wpp-btn-outline"
+                              style={{ padding: "3px 10px", fontSize: 11 }}
+                              onClick={() => setBaileysFormAberto(v => !v)}
+                            >
+                              + Número
+                            </button>
+                            <button
+                              className="wpp-btn wpp-btn-outline"
+                              style={{ padding: "3px 10px", fontSize: 11 }}
+                              onClick={() => fetchBaileysInstancias(false)}
+                              disabled={baileysCarregando}
+                            >
+                              {baileysCarregando ? "..." : "↻ Atualizar"}
+                            </button>
+                          </div>
                         </div>
+
+                        {/* Formulário de novo número */}
+                        {baileysFormAberto && (
+                          <div className="wpp-inst-form">
+                            <input
+                              className="wpp-input"
+                              placeholder="Nome do número (ex: Vendas SP)"
+                              value={baileysNovoLabel}
+                              onChange={e => setBaileysNovoLabel(e.target.value)}
+                              style={{ marginBottom: 6 }}
+                            />
+                            <input
+                              className="wpp-input"
+                              placeholder="Telefone (opcional, ex: 11999990000)"
+                              value={baileysNovoPhone}
+                              onChange={e => setBaileysNovoPhone(e.target.value)}
+                              style={{ marginBottom: 8 }}
+                            />
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                className="wpp-btn wpp-btn-primary"
+                                style={{ flex: 1 }}
+                                onClick={adicionarInstancia}
+                                disabled={baileysAdicionando || !baileysNovoLabel.trim()}
+                              >
+                                {baileysAdicionando ? "Adicionando..." : "Adicionar e gerar QR"}
+                              </button>
+                              <button
+                                className="wpp-btn wpp-btn-outline"
+                                onClick={() => { setBaileysFormAberto(false); setBaileysNovoLabel(""); setBaileysNovoPhone("") }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         {baileysInstancias.length === 0 ? (
                           <p style={{ fontSize: 12, color: "#5a4e3e" }}>
@@ -976,9 +1054,18 @@ export default function WhatsAppPage() {
                                     </div>
                                   </div>
                                 </div>
-                                {inst.connected && (
-                                  <div className={`wpp-inst-radio ${baileysInstSelecionada === inst.id ? "checked" : ""}`} />
-                                )}
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                                  {inst.connected && (
+                                    <div className={`wpp-inst-radio ${baileysInstSelecionada === inst.id ? "checked" : ""}`} />
+                                  )}
+                                  {inst.id !== "1" && (
+                                    <button
+                                      className="wpp-icon-btn-sm wpp-icon-del"
+                                      onClick={e => { e.stopPropagation(); removerInstancia(inst.id) }}
+                                      title="Remover número"
+                                    >✕</button>
+                                  )}
+                                </div>
                                 {inst.qr && (
                                   <div className="wpp-inst-qr">
                                     <p style={{ fontSize: 11, color: "#c2904d", marginBottom: 6 }}>Escaneie com o WhatsApp:</p>
@@ -1156,6 +1243,10 @@ const css = `
   .wpp-inst-radio { width:14px; height:14px; border-radius:50%; border:2px solid #4a3e30; margin-left:auto; flex-shrink:0; transition:all .15s; }
   .wpp-inst-radio.checked { border-color:#c2904d; background:#c2904d; }
   .wpp-inst-qr { margin-top:10px; padding-top:10px; border-top:1px solid #2a1f18; }
+  .wpp-inst-form { padding:12px; background:rgba(194,144,77,.04); border:1px solid rgba(194,144,77,.15); border-radius:8px; margin-bottom:10px; }
+  .wpp-btn-primary { background:rgba(194,144,77,.15); border:1px solid #c2904d; color:#c2904d; font-weight:700; }
+  .wpp-btn-primary:hover:not(:disabled) { background:rgba(194,144,77,.25); }
+  .wpp-btn-primary:disabled { opacity:.5; cursor:default; }
   .wpp-provider-btn:hover:not(.active) { border-color:rgba(194,144,77,.4); color:#a07840; }
   .wpp-disparo-footer { margin-top:12px; padding-top:16px; border-top:1px solid #2a1f18; display:flex; flex-direction:column; gap:10px; }
   .wpp-disparo-info { display:flex; align-items:center; gap:10px; }

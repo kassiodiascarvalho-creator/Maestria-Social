@@ -60,3 +60,57 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Servidor Baileys offline ou inacessível' }, { status: 502 })
   }
 }
+
+// POST — adiciona nova instância
+export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+
+  const apiUrl = await getConfig('BAILEYS_API_URL')
+  if (!apiUrl) return NextResponse.json({ error: 'BAILEYS_API_URL não configurada' }, { status: 400 })
+
+  const { label, phone } = await req.json()
+  if (!label?.trim()) return NextResponse.json({ error: '"label" é obrigatório' }, { status: 400 })
+
+  const base = apiUrl.replace(/\/$/, '')
+  try {
+    const res = await fetch(`${base}/instancias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: label.trim(), phone: phone?.trim() || undefined }),
+      signal: AbortSignal.timeout(8000),
+    })
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json({ error: data.error || 'Erro no servidor Baileys' }, { status: res.status })
+    return NextResponse.json(data)
+  } catch {
+    return NextResponse.json({ error: 'Servidor Baileys offline ou inacessível' }, { status: 502 })
+  }
+}
+
+// DELETE — remove instância
+export async function DELETE(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+
+  const apiUrl = await getConfig('BAILEYS_API_URL')
+  if (!apiUrl) return NextResponse.json({ error: 'BAILEYS_API_URL não configurada' }, { status: 400 })
+
+  const { id } = await req.json()
+  if (!id) return NextResponse.json({ error: '"id" é obrigatório' }, { status: 400 })
+
+  const base = apiUrl.replace(/\/$/, '')
+  try {
+    const res = await fetch(`${base}/instancia/${id}`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(8000),
+    })
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json({ error: data.error || 'Erro no servidor Baileys' }, { status: res.status })
+    return NextResponse.json(data)
+  } catch {
+    return NextResponse.json({ error: 'Servidor Baileys offline ou inacessível' }, { status: 502 })
+  }
+}

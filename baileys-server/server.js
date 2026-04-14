@@ -143,6 +143,19 @@ function criarInstancia(id, label) {
   client.initialize()
 }
 
+// ── Salva config.json ──────────────────────────────────────────────────────────
+function salvarConfig() {
+  const configPath = path.join(__dirname, 'config.json')
+  const data = {
+    instances: Object.entries(instances).map(([id, inst]) => ({
+      id,
+      label: inst.label,
+      phone: inst.phone || undefined,
+    }))
+  }
+  fs.writeFileSync(configPath, JSON.stringify(data, null, 2), 'utf8')
+}
+
 // ── Rotas multi-instância ──────────────────────────────────────────────────────
 
 // Lista todas as instâncias
@@ -156,6 +169,39 @@ app.get('/instancias', (req, res) => {
     temQr: !!inst.qrDataUrl,
   }))
   res.json(lista)
+})
+
+// Adiciona nova instância dinamicamente
+app.post('/instancias', (req, res) => {
+  const { label, phone } = req.body
+  if (!label || !label.trim()) return res.status(400).json({ error: '"label" é obrigatório' })
+
+  // Gera próximo ID disponível
+  const ids = Object.keys(instances).map(Number).filter(n => !isNaN(n))
+  const novoId = String((ids.length > 0 ? Math.max(...ids) : 0) + 1)
+
+  if (instances[novoId]) return res.status(409).json({ error: `Instância ${novoId} já existe` })
+
+  criarInstancia(novoId, label.trim())
+  if (phone) instances[novoId].phone = phone.trim()
+  salvarConfig()
+
+  console.log(`\n➕ Nova instância adicionada: [${novoId}] ${label.trim()}`)
+  res.json({ ok: true, id: novoId, label: label.trim() })
+})
+
+// Remove instância
+app.delete('/instancia/:id', async (req, res) => {
+  const inst = instances[req.params.id]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  if (req.params.id === '1') return res.status(400).json({ error: 'Instância principal não pode ser removida' })
+
+  try { await inst.client.destroy() } catch {}
+  delete instances[req.params.id]
+  salvarConfig()
+
+  console.log(`\n➖ Instância removida: [${req.params.id}]`)
+  res.json({ ok: true })
 })
 
 // Status de uma instância
