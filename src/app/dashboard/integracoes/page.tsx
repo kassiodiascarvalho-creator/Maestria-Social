@@ -495,13 +495,20 @@ const css = `
     .int-row{flex-direction:column;}
     .int-row .int-input{width:100%;}
     .int-save-btn{width:100%;}
-    .action-cell{flex-direction:column;}
-    .url-cell{max-width:none;word-break:break-all;}
-    .table{font-size:12px;}
-    .table th,.table td{padding:8px;}
-    .table-wrap{border-radius:8px;}
     .webhook-url{flex-direction:column;gap:8px;}
     .webhook-url code{word-break:break-all;}
     .copy-btn{align-self:flex-start;}
+
+    /* Tabelas viram cards no mobile */
+    .table-wrap{overflow-x:hidden;border:none;background:transparent;border-radius:0;}
+    .table{display:block;}
+    .table thead{display:none;}
+    .table tbody{display:flex;flex-direction:column;gap:8px;}
+    .table tr{display:flex;flex-direction:column;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:12px 14px;gap:6px;}
+    .table td{display:block;border-top:none;padding:0;font-size:13px;color:#7a6e5e;}
+    .table td:first-child{font-weight:600;color:#fff9e6;}
+    .table code{color:#c2904d;font-size:12px;}
+    .url-cell{max-width:none;word-break:break-all;font-size:11px;color:#5a4e3e;}
+    .action-cell{display:flex;flex-direction:row;gap:6px;margin-top:4px;}
   }
 `;
