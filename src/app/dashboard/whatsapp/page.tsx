@@ -101,6 +101,41 @@ export default function WhatsAppPage() {
   const [disparoErro, setDisparoErro] = useState("")
   const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
 
+  // Baileys — instâncias
+  type BaileysInstancia = { id: string; label: string; status: string; phone: string | null; connected: boolean; qr?: string | null }
+  const [baileysInstancias, setBaileysInstancias] = useState<BaileysInstancia[]>([])
+  const [baileysInstSelecionada, setBaileysInstSelecionada] = useState<string>("1")
+  const [baileysCarregando, setBaileysCarregando] = useState(false)
+  const baileysIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ── Baileys: busca instâncias quando provedor muda ──
+  useEffect(() => {
+    if (apiProvider !== "baileys") {
+      if (baileysIntervalRef.current) clearInterval(baileysIntervalRef.current)
+      return
+    }
+    fetchBaileysInstancias()
+    // Polling a cada 5s para atualizar status e QR
+    baileysIntervalRef.current = setInterval(fetchBaileysInstancias, 5000)
+    return () => { if (baileysIntervalRef.current) clearInterval(baileysIntervalRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiProvider])
+
+  async function fetchBaileysInstancias() {
+    setBaileysCarregando(true)
+    try {
+      const res = await fetch("/api/admin/wpp/baileys-status")
+      if (res.ok) {
+        const data = await res.json()
+        setBaileysInstancias(data)
+        // Auto-seleciona a primeira conectada
+        const conectada = data.find((i: BaileysInstancia) => i.connected)
+        if (conectada) setBaileysInstSelecionada(conectada.id)
+      }
+    } catch { /* servidor offline */ }
+    setBaileysCarregando(false)
+  }
+
   // ── Carrega listas ──
   useEffect(() => { fetchListas() }, [])
 
@@ -401,7 +436,7 @@ export default function WhatsAppPage() {
     const res = await fetch("/api/admin/wpp/disparar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined, api_provider: apiProvider }),
+      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined, api_provider: apiProvider, baileys_instance_id: baileysInstSelecionada }),
 
     })
     const data = await res.json()
@@ -897,6 +932,64 @@ export default function WhatsAppPage() {
                       )}
                     </div>
 
+                    {/* Seletor de instância Baileys */}
+                    {apiProvider === "baileys" && (
+                      <div className="wpp-baileys-panel">
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <span className="wpp-label" style={{ marginBottom: 0 }}>Número para disparar:</span>
+                          <button
+                            className="wpp-btn wpp-btn-outline"
+                            style={{ padding: "3px 10px", fontSize: 11 }}
+                            onClick={fetchBaileysInstancias}
+                            disabled={baileysCarregando}
+                          >
+                            {baileysCarregando ? "..." : "↻ Atualizar"}
+                          </button>
+                        </div>
+
+                        {baileysInstancias.length === 0 ? (
+                          <p style={{ fontSize: 12, color: "#5a4e3e" }}>
+                            {baileysCarregando ? "Verificando servidor..." : "Servidor Baileys offline ou BAILEYS_API_URL não configurada."}
+                          </p>
+                        ) : (
+                          <div className="wpp-inst-list">
+                            {baileysInstancias.map(inst => (
+                              <div
+                                key={inst.id}
+                                className={`wpp-inst-row ${baileysInstSelecionada === inst.id ? "selected" : ""} ${!inst.connected ? "disabled" : ""}`}
+                                onClick={() => inst.connected && setBaileysInstSelecionada(inst.id)}
+                              >
+                                <div className="wpp-inst-info">
+                                  <span className={`wpp-inst-dot ${inst.connected ? "on" : inst.status === "aguardando_qr" ? "qr" : "off"}`} />
+                                  <div>
+                                    <div className="wpp-inst-label">{inst.label}</div>
+                                    <div className="wpp-inst-sub">
+                                      {inst.connected
+                                        ? `+${inst.phone}`
+                                        : inst.status === "aguardando_qr"
+                                          ? "Aguardando QR code"
+                                          : inst.status === "iniciando"
+                                            ? "Iniciando..."
+                                            : "Desconectado"}
+                                    </div>
+                                  </div>
+                                </div>
+                                {inst.connected && (
+                                  <div className={`wpp-inst-radio ${baileysInstSelecionada === inst.id ? "checked" : ""}`} />
+                                )}
+                                {inst.qr && (
+                                  <div className="wpp-inst-qr">
+                                    <p style={{ fontSize: 11, color: "#c2904d", marginBottom: 6 }}>Escaneie com o WhatsApp:</p>
+                                    <img src={inst.qr} alt="QR Code" style={{ width: 160, height: 160, borderRadius: 8 }} />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Resumo e botão de disparo */}
                     <div className="wpp-disparo-footer">
                       <div className="wpp-disparo-info">
@@ -1043,6 +1136,24 @@ const css = `
   .wpp-provider-selector { display:flex; align-items:center; gap:8px; margin-top:16px; padding:10px 12px; background:rgba(194,144,77,.04); border:1px solid rgba(194,144,77,.12); border-radius:8px; }
   .wpp-provider-btn { padding:5px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid rgba(194,144,77,.25); background:transparent; color:#7a6a58; transition:all .15s; }
   .wpp-provider-btn.active { background:rgba(194,144,77,.15); border-color:#c2904d; color:#c2904d; }
+
+  /* Baileys instâncias */
+  .wpp-baileys-panel { margin-top:10px; padding:12px 14px; background:rgba(255,255,255,.02); border:1px solid #2a1f18; border-radius:10px; }
+  .wpp-inst-list { display:flex; flex-direction:column; gap:8px; }
+  .wpp-inst-row { padding:10px 12px; border:1px solid #2a1f18; border-radius:8px; cursor:pointer; transition:all .15s; }
+  .wpp-inst-row:hover:not(.disabled) { border-color:rgba(194,144,77,.3); background:rgba(194,144,77,.04); }
+  .wpp-inst-row.selected { border-color:#c2904d; background:rgba(194,144,77,.08); }
+  .wpp-inst-row.disabled { cursor:default; opacity:.7; }
+  .wpp-inst-info { display:flex; align-items:center; gap:10px; }
+  .wpp-inst-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .wpp-inst-dot.on { background:#4caf50; box-shadow:0 0 6px rgba(76,175,80,.5); }
+  .wpp-inst-dot.qr { background:#c2904d; box-shadow:0 0 6px rgba(194,144,77,.5); }
+  .wpp-inst-dot.off { background:#4a3e30; }
+  .wpp-inst-label { font-size:13px; font-weight:600; color:#fff9e6; }
+  .wpp-inst-sub { font-size:11px; color:#5a4e3e; margin-top:1px; font-family:monospace; }
+  .wpp-inst-radio { width:14px; height:14px; border-radius:50%; border:2px solid #4a3e30; margin-left:auto; flex-shrink:0; transition:all .15s; }
+  .wpp-inst-radio.checked { border-color:#c2904d; background:#c2904d; }
+  .wpp-inst-qr { margin-top:10px; padding-top:10px; border-top:1px solid #2a1f18; }
   .wpp-provider-btn:hover:not(.active) { border-color:rgba(194,144,77,.4); color:#a07840; }
   .wpp-disparo-footer { margin-top:12px; padding-top:16px; border-top:1px solid #2a1f18; display:flex; flex-direction:column; gap:10px; }
   .wpp-disparo-info { display:flex; align-items:center; gap:10px; }

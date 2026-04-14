@@ -14,7 +14,8 @@ function normalizarTelefone(tel: string): string {
 async function enviarBaileys(
   apiUrl: string,
   telefone: string,
-  msg: MensagemItem
+  msg: MensagemItem,
+  instanceId = '1'
 ): Promise<void> {
   if (msg.tipo === 'template') return // Baileys não usa templates Meta
 
@@ -26,7 +27,9 @@ async function enviarBaileys(
   if (msg.caption) body.caption = msg.caption
   if (msg.filename) body.filename = msg.filename
 
-  const url = apiUrl.replace(/\/$/, '') + '/disparar'
+  // Usa rota de instância específica se disponível, senão rota legada
+  const base = apiUrl.replace(/\/$/, '')
+  const url = `${base}/instancia/${instanceId}/disparar`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -257,6 +260,7 @@ export async function POST(req: NextRequest) {
     const apiProvider: 'meta' | 'zapi' | 'baileys' = ['zapi', 'baileys'].includes(payload.api_provider)
       ? payload.api_provider
       : 'meta'
+    const baileysInstanceId: string = payload.baileys_instance_id || '1'
 
     // Compatibilidade com formato antigo (tipo + conteudo)
     let mensagens: MensagemItem[]
@@ -462,7 +466,7 @@ export async function POST(req: NextRequest) {
             if (apiProvider === 'zapi') {
               await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msgPersonalizada)
             } else {
-              await enviarBaileys(baileysApiUrl!, contato.telefone, msgPersonalizada)
+              await enviarBaileys(baileysApiUrl!, contato.telefone, msgPersonalizada, baileysInstanceId)
             }
           } catch (err) {
             contatoOk = false

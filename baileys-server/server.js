@@ -1,56 +1,37 @@
 /**
- * Maestria Social — Servidor WhatsApp Local (whatsapp-web.js)
- * ─────────────────────────────────────────────────────────────
- * 1ª vez: npm install → npm start → escaneie o QR code
- * Próximas vezes: npm start (sessão já salva automaticamente)
+ * Maestria Social — Servidor WhatsApp Multi-Instância
+ * ─────────────────────────────────────────────────────
+ * Suporta múltiplos números WhatsApp simultaneamente.
+ * Configure as instâncias em config.json.
+ *
+ * 1ª vez: npm install → node server.js → escaneie o QR no terminal ou no Maestria
+ * Próximas vezes: node server.js (sessão salva automaticamente por instância)
  */
 
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
-const qrcode = require('qrcode-terminal')
+const qrcodeTerminal = require('qrcode-terminal')
+const QRCode = require('qrcode')
 const express = require('express')
+const fs = require('fs')
+const path = require('path')
 
 const app = express()
 app.use(express.json())
 
-let isConnected = false
-let client = null
+// ── Config ─────────────────────────────────────────────────────────────────────
+let config = { instances: [{ id: '1', label: 'Número 1' }] }
+try {
+  const configPath = path.join(__dirname, 'config.json')
+  if (fs.existsSync(configPath)) {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+  }
+} catch (e) {
+  console.warn('⚠️  config.json não encontrado — usando instância padrão (1 número)')
+}
 
-// ── Cliente WhatsApp ───────────────────────────────────────────────────────────
-client = new Client({
-  authStrategy: new LocalAuth({ dataPath: './sessao_whatsapp' }),
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  },
-})
-
-client.on('qr', (qr) => {
-  console.log('\n📱 Escaneie o QR code abaixo com seu WhatsApp:\n')
-  qrcode.generate(qr, { small: true })
-  console.log('\n(WhatsApp > Dispositivos conectados > Conectar dispositivo)\n')
-})
-
-client.on('ready', () => {
-  isConnected = true
-  console.log('\n✅ WhatsApp conectado com sucesso!')
-  console.log(`🚀 API pronta em http://localhost:${PORT}\n`)
-})
-
-client.on('authenticated', () => {
-  console.log('🔐 Autenticado — salvando sessão...')
-})
-
-client.on('auth_failure', () => {
-  console.log('❌ Falha na autenticação. Delete "sessao_whatsapp" e reinicie.')
-  isConnected = false
-})
-
-client.on('disconnected', (reason) => {
-  isConnected = false
-  console.log('🔌 Desconectado:', reason)
-  console.log('🔄 Reiniciando...')
-  client.initialize()
-})
+// ── Estado das instâncias ──────────────────────────────────────────────────────
+const instances = {}
+// estrutura: { client, status, phone, qrDataUrl, label }
 
 // ── Utilitários ────────────────────────────────────────────────────────────────
 function formatarTelefone(phone) {
@@ -60,73 +41,195 @@ function formatarTelefone(phone) {
 }
 
 async function baixarMidia(url) {
-  const media = await MessageMedia.fromUrl(url, {
+  return await MessageMedia.fromUrl(url, {
     unsafeMime: true,
     reqheaders: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
   })
-  return media
 }
 
-// Resolve o ID correto do número no WhatsApp (evita erro "No LID for user")
-async function resolverChatId(phone) {
+async function resolverChatId(client, phone) {
   const formatted = formatarTelefone(phone)
   const numberId = await client.getNumberId(formatted)
   if (!numberId) throw new Error(`Número ${phone} não encontrado no WhatsApp`)
   return numberId._serialized
 }
 
-// ── Rotas ──────────────────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.json({ status: isConnected ? 'conectado' : 'aguardando QR', servidor: 'Maestria WhatsApp' })
+async function enviarMensagem(inst, type, phone, content, caption, filename) {
+  const chatId = await resolverChatId(inst.client, phone)
+
+  if (type === 'text') {
+    await inst.client.sendMessage(chatId, content || '')
+  } else if (type === 'image') {
+    const media = await baixarMidia(content)
+    await inst.client.sendMessage(chatId, media, { caption: caption || '' })
+  } else if (type === 'audio') {
+    const media = await baixarMidia(content)
+    await inst.client.sendMessage(chatId, media, { sendAudioAsVoice: false })
+  } else if (type === 'video') {
+    const media = await baixarMidia(content)
+    await inst.client.sendMessage(chatId, media, { caption: caption || '' })
+  } else if (type === 'document') {
+    const media = await baixarMidia(content)
+    if (filename) media.filename = filename
+    await inst.client.sendMessage(chatId, media)
+  } else {
+    throw new Error(`Tipo "${type}" não suportado`)
+  }
+}
+
+// ── Criar instância ────────────────────────────────────────────────────────────
+function criarInstancia(id, label) {
+  const sessaoDir = path.join(__dirname, 'sessoes', `instancia_${id}`)
+
+  instances[id] = {
+    client: null,
+    status: 'iniciando',
+    phone: null,
+    qrDataUrl: null,
+    label: label || `Número ${id}`,
+  }
+
+  const client = new Client({
+    authStrategy: new LocalAuth({ dataPath: sessaoDir }),
+    puppeteer: {
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    },
+  })
+  instances[id].client = client
+
+  client.on('qr', async (qr) => {
+    console.log(`\n📱 [Instância ${id} — ${instances[id].label}] Escaneie o QR:`)
+    qrcodeTerminal.generate(qr, { small: true })
+    try {
+      instances[id].qrDataUrl = await QRCode.toDataURL(qr)
+    } catch (e) {
+      console.error(`[${id}] Erro ao gerar QR base64:`, e.message)
+    }
+    instances[id].status = 'aguardando_qr'
+  })
+
+  client.on('ready', async () => {
+    instances[id].status = 'conectado'
+    instances[id].qrDataUrl = null
+    try {
+      const info = client.info
+      instances[id].phone = info?.wid?.user || null
+    } catch (e) {}
+    console.log(`\n✅ [Instância ${id} — ${instances[id].label}] Conectado! Número: +${instances[id].phone}`)
+  })
+
+  client.on('authenticated', () => {
+    instances[id].status = 'autenticando'
+    console.log(`🔐 [Instância ${id}] Autenticado — salvando sessão...`)
+  })
+
+  client.on('auth_failure', () => {
+    instances[id].status = 'erro_auth'
+    instances[id].phone = null
+    console.log(`❌ [Instância ${id}] Falha na autenticação. Delete a pasta sessoes/instancia_${id} e reinicie.`)
+  })
+
+  client.on('disconnected', (reason) => {
+    instances[id].status = 'desconectado'
+    instances[id].phone = null
+    instances[id].qrDataUrl = null
+    console.log(`🔌 [Instância ${id}] Desconectado: ${reason}. Reiniciando em 5s...`)
+    setTimeout(() => client.initialize(), 5000)
+  })
+
+  client.initialize()
+}
+
+// ── Rotas multi-instância ──────────────────────────────────────────────────────
+
+// Lista todas as instâncias
+app.get('/instancias', (req, res) => {
+  const lista = Object.entries(instances).map(([id, inst]) => ({
+    id,
+    label: inst.label,
+    status: inst.status,
+    phone: inst.phone,
+    connected: inst.status === 'conectado',
+    temQr: !!inst.qrDataUrl,
+  }))
+  res.json(lista)
 })
 
-app.get('/status', (req, res) => {
-  res.json({ connected: isConnected })
+// Status de uma instância
+app.get('/instancia/:id/status', (req, res) => {
+  const inst = instances[req.params.id]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  res.json({
+    id: req.params.id,
+    label: inst.label,
+    status: inst.status,
+    phone: inst.phone,
+    connected: inst.status === 'conectado',
+    temQr: !!inst.qrDataUrl,
+  })
 })
 
-app.post('/disparar', async (req, res) => {
-  if (!isConnected || !client) {
-    return res.status(503).json({ error: 'WhatsApp não conectado. Escaneie o QR code no terminal.' })
+// QR code de uma instância (como data URL base64 PNG)
+app.get('/instancia/:id/qr', (req, res) => {
+  const inst = instances[req.params.id]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  if (!inst.qrDataUrl) return res.status(204).end()
+  res.json({ qr: inst.qrDataUrl })
+})
+
+// Disparar mensagem por instância específica
+app.post('/instancia/:id/disparar', async (req, res) => {
+  const inst = instances[req.params.id]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  if (inst.status !== 'conectado') {
+    return res.status(503).json({ error: `Instância ${req.params.id} não conectada (${inst.status})` })
   }
 
   const { phone, type, content, caption, filename } = req.body
-
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
 
   try {
-    const chatId = await resolverChatId(phone)
-
-    if (type === 'text') {
-      await client.sendMessage(chatId, content || '')
-
-    } else if (type === 'image') {
-      const media = await baixarMidia(content)
-      await client.sendMessage(chatId, media, { caption: caption || '' })
-
-    } else if (type === 'audio') {
-      const media = await baixarMidia(content)
-      await client.sendMessage(chatId, media, { sendAudioAsVoice: false })
-
-    } else if (type === 'video') {
-      const media = await baixarMidia(content)
-      await client.sendMessage(chatId, media, { caption: caption || '' })
-
-    } else if (type === 'document') {
-      const media = await baixarMidia(content)
-      if (filename) media.filename = filename
-      await client.sendMessage(chatId, media)
-
-    } else {
-      return res.status(400).json({ error: `Tipo "${type}" não suportado` })
-    }
-
+    await enviarMensagem(inst, type, phone, content, caption, filename)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)
-    console.error(`❌ Erro ao enviar [${type}] para ${phone}:`, msg)
+    console.error(`❌ [Instância ${req.params.id}] Erro ao enviar [${type}] para ${phone}:`, msg)
+    res.status(500).json({ error: msg })
+  }
+})
+
+// ── Rotas de compatibilidade (usa instância "1") ───────────────────────────────
+app.get('/', (req, res) => {
+  const inst = instances['1']
+  res.json({
+    status: inst?.status === 'conectado' ? 'conectado' : 'aguardando QR',
+    servidor: 'Maestria WhatsApp Multi-Instância',
+    instancias: Object.keys(instances).length,
+  })
+})
+
+app.get('/status', (req, res) => {
+  const inst = instances['1']
+  res.json({ connected: inst?.status === 'conectado', phone: inst?.phone || null })
+})
+
+app.post('/disparar', async (req, res) => {
+  const inst = instances['1']
+  if (!inst || inst.status !== 'conectado') {
+    return res.status(503).json({ error: 'WhatsApp não conectado. Escaneie o QR code.' })
+  }
+  const { phone, type, content, caption, filename } = req.body
+  if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
+  if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
+  try {
+    await enviarMensagem(inst, type, phone, content, caption, filename)
+    res.json({ ok: true })
+  } catch (err) {
+    const msg = err?.message || String(err)
     res.status(500).json({ error: msg })
   }
 })
@@ -135,10 +238,16 @@ app.post('/disparar', async (req, res) => {
 const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
-  console.log('\n══════════════════════════════════════════')
-  console.log('   Maestria Social — Servidor WhatsApp')
-  console.log('══════════════════════════════════════════')
+  console.log('\n══════════════════════════════════════════════')
+  console.log('   Maestria Social — WhatsApp Multi-Instância')
+  console.log('══════════════════════════════════════════════')
   console.log(`\n🌐 API rodando em: http://localhost:${PORT}`)
-  console.log('📱 Inicializando WhatsApp...\n')
-  client.initialize()
+  console.log(`📱 Iniciando ${config.instances.length} instância(s):\n`)
+
+  for (const inst of config.instances) {
+    console.log(`   • [${inst.id}] ${inst.label}`)
+    criarInstancia(String(inst.id), inst.label)
+  }
+
+  console.log('\n(QR codes aparecerão abaixo quando prontos)\n')
 })
