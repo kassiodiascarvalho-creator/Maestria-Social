@@ -114,23 +114,25 @@ export default function WhatsAppPage() {
       if (baileysIntervalRef.current) clearInterval(baileysIntervalRef.current)
       return
     }
-    fetchBaileysInstancias()
-    // Polling a cada 5s para atualizar status e QR
-    baileysIntervalRef.current = setInterval(fetchBaileysInstancias, 5000)
+    fetchBaileysInstancias(true) // primeira carga: auto-seleciona
+    // Polling a cada 5s — sem auto-selecionar para não mudar a escolha do usuário
+    baileysIntervalRef.current = setInterval(() => fetchBaileysInstancias(false), 5000)
     return () => { if (baileysIntervalRef.current) clearInterval(baileysIntervalRef.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiProvider])
 
-  async function fetchBaileysInstancias() {
+  async function fetchBaileysInstancias(autoSelect = false) {
     setBaileysCarregando(true)
     try {
       const res = await fetch("/api/admin/wpp/baileys-status")
       if (res.ok) {
         const data = await res.json()
         setBaileysInstancias(data)
-        // Auto-seleciona a primeira conectada
-        const conectada = data.find((i: BaileysInstancia) => i.connected)
-        if (conectada) setBaileysInstSelecionada(conectada.id)
+        // Auto-seleciona só na primeira carga (quando não há seleção ainda)
+        if (autoSelect) {
+          const conectada = data.find((i: BaileysInstancia) => i.connected)
+          if (conectada) setBaileysInstSelecionada(conectada.id)
+        }
       }
     } catch { /* servidor offline */ }
     setBaileysCarregando(false)
