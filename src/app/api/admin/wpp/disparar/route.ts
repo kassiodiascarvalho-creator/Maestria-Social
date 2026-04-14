@@ -473,7 +473,7 @@ export async function POST(req: NextRequest) {
             erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
             break
           }
-          if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200))
+          if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
         }
       } else {
         // ── Meta API: respeita janela 24h ──
@@ -496,7 +496,7 @@ export async function POST(req: NextRequest) {
               erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
               break
             }
-            if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200))
+            if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
           }
         } else {
           // Fora da janela 24h: só templates
