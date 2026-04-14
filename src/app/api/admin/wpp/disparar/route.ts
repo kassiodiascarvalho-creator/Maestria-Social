@@ -86,12 +86,22 @@ type TipoMensagem = 'text' | 'image' | 'audio' | 'video' | 'document' | 'templat
 interface MensagemItem {
   tipo: TipoMensagem
   conteudo?: string
+  variacoes?: string[] // variações adicionais de texto para sortear por contato
   caption?: string
   filename?: string
   template_name?: string
   template_lang?: string
   template_vars?: string[]
   template_param_count?: number // número real de {{N}} no template
+}
+
+// Sorteia aleatoriamente uma variação de texto por contato.
+// Pool = [conteudo, ...variacoes] — filtra vazios.
+function sortearTexto(msg: MensagemItem): string {
+  if (msg.tipo !== 'text') return msg.conteudo ?? ''
+  const opcoes = [msg.conteudo ?? '', ...(msg.variacoes ?? [])].filter(v => v.trim() !== '')
+  if (opcoes.length === 0) return ''
+  return opcoes[Math.floor(Math.random() * opcoes.length)]
 }
 
 interface Filtros {
@@ -444,7 +454,7 @@ export async function POST(req: NextRequest) {
         for (const msg of mensagens) {
           if (msg.tipo === 'template') continue // não usam templates Meta
           const msgPersonalizada: MensagemItem = msg.tipo === 'text'
-            ? { ...msg, conteudo: substituirVariaveis(msg.conteudo ?? '', contato as Record<string, unknown>) }
+            ? { ...msg, conteudo: substituirVariaveis(sortearTexto(msg), contato as Record<string, unknown>) }
             : msg.caption
               ? { ...msg, caption: substituirVariaveis(msg.caption, contato as Record<string, unknown>) }
               : msg
@@ -469,7 +479,7 @@ export async function POST(req: NextRequest) {
             if (msg.tipo === 'template') {
               msgFinal = preencherVarsTemplate(msg, contato as Record<string, unknown>)
             } else if (msg.tipo === 'text') {
-              msgFinal = { ...msg, conteudo: substituirVariaveis(msg.conteudo ?? '', contato as Record<string, unknown>) }
+              msgFinal = { ...msg, conteudo: substituirVariaveis(sortearTexto(msg), contato as Record<string, unknown>) }
             } else if (msg.caption) {
               msgFinal = { ...msg, caption: substituirVariaveis(msg.caption, contato as Record<string, unknown>) }
             } else {
