@@ -942,7 +942,7 @@ export default function WhatsAppPage() {
                           <button
                             className="wpp-btn wpp-btn-outline"
                             style={{ padding: "3px 10px", fontSize: 11 }}
-                            onClick={fetchBaileysInstancias}
+                            onClick={() => fetchBaileysInstancias(false)}
                             disabled={baileysCarregando}
                           >
                             {baileysCarregando ? "..." : "↻ Atualizar"}
