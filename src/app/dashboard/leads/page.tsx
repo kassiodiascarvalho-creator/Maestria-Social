@@ -120,7 +120,7 @@ export default async function LeadsPage({
               </tr>
             </thead>
             <tbody>
-              {leads && leads.length > 0 ? leads.map((lead) => (
+              {leads && leads.length > 0 ? leads.map((lead: Record<string, string>) => (
                 <tr key={lead.id}>
                   <td className="td-nome">
                     <span className="lead-avatar">{lead.nome.charAt(0).toUpperCase()}</span>
