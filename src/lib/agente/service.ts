@@ -160,6 +160,13 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
+  // Salva mensagem do lead SEMPRE — independente de o agente responder ou não
+  await supabase.from('conversas').insert({
+    lead_id: leadId,
+    role: 'user',
+    mensagem,
+  })
+
   // Regra de pausa: se um humano enviou mensagem nos últimos 5 minutos, o agente não responde
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const leadAny = lead as any
@@ -227,12 +234,6 @@ export async function responderAgenteParaLead(
     }
   }
   mensagensOpenAI.push({ role: 'user', content: mensagem })
-
-  await supabase.from('conversas').insert({
-    lead_id: leadId,
-    role: 'user',
-    mensagem,
-  })
 
   await dispararWebhookSaida('mensagem_recebida', {
     lead_id: lead.id,
