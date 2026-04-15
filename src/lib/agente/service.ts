@@ -168,7 +168,8 @@ export async function responderAgenteParaLead(
       return { ok: true, resposta: '' } // agente em pausa — humano está atendendo
     }
     // Pausa expirou: retorna etiqueta para 'ia_atendendo'
-    await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
       .from('leads')
       .update({ ultima_atividade_humana: null, etiqueta: 'ia_atendendo' })
       .eq('id', leadId)

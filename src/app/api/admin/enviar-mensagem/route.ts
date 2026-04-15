@@ -88,7 +88,8 @@ export async function POST(req: NextRequest) {
     await supabase.from('conversas').insert({ lead_id: leadId, role: 'assistant', mensagem: mensagemSalva })
 
     // Registra atividade humana: agente pausa por 5 min
-    await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
       .from('leads')
       .update({
         ultima_atividade_humana: new Date().toISOString(),

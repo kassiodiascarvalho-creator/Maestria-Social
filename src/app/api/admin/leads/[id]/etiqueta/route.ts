@@ -32,7 +32,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     updates.ultima_atividade_humana = null
   }
 
-  const { error } = await admin.from('leads').update(updates).eq('id', id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin as any).from('leads').update(updates).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ ok: true })
