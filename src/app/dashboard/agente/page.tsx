@@ -2,6 +2,16 @@
 
 import { useState, useEffect } from "react";
 
+type CanalDisponivel = {
+  provider: 'meta' | 'baileys'
+  id: string
+  label: string
+  phone?: string | null
+  conectado: boolean
+}
+
+type CanalSelecionado = { provider: 'meta' | 'baileys'; id: string }
+
 const MODELS = [
   { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", desc: "Rápido, eficiente e econômico. Ideal para volume alto de conversas.", cost: "Baixo custo" },
   { id: "gpt-4.1", name: "GPT-4.1", desc: "Alta capacidade de raciocínio e contexto longo. Melhor qualidade.", cost: "Custo médio" },
@@ -41,6 +51,8 @@ export default function AgentePage() {
   const [ativo, setAtivo] = useState(true);
   const [modelo, setModelo] = useState("gpt-4.1-mini");
   const [phoneId, setPhoneId] = useState("");
+  const [canaisDisponiveis, setCanaisDisponiveis] = useState<CanalDisponivel[]>([]);
+  const [canaisSelecionados, setCanaisSelecionados] = useState<CanalSelecionado[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -49,21 +61,51 @@ export default function AgentePage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const keys = ["AGENT_SYSTEM_PROMPT", "AGENT_TEMPERATURE", "AGENT_ATIVO", "AGENT_MODEL", "META_PHONE_NUMBER_ID"];
-      // Buscar valores reais via endpoint GET com valor
-      const vals = await Promise.all(
-        keys.map((k) =>
-          fetch(`/api/admin/env/value?key=${k}`)
-            .then((r) => r.json())
-            .catch(() => ({ value: null }))
-        )
-      );
-      if (vals[0].value) setPrompt(vals[0].value);
+      const keys = ["AGENT_SYSTEM_PROMPT", "AGENT_TEMPERATURE", "AGENT_ATIVO", "AGENT_MODEL", "META_PHONE_NUMBER_ID", "AGENT_CANAIS"];
+      const [envVals, baileysRes] = await Promise.all([
+        Promise.all(
+          keys.map((k) =>
+            fetch(`/api/admin/env/value?key=${k}`)
+              .then((r) => r.json())
+              .catch(() => ({ value: null }))
+          )
+        ),
+        fetch("/api/admin/wpp/baileys-status").then((r) => r.json()).catch(() => []),
+      ]);
+
+      if (envVals[0].value) setPrompt(envVals[0].value);
       else setPrompt(DEFAULT_PROMPT);
-      if (vals[1].value) setTemperature(vals[1].value);
-      if (vals[2].value) setAtivo(vals[2].value !== "false");
-      if (vals[3].value) setModelo(vals[3].value);
-      if (vals[4].value) setPhoneId(vals[4].value);
+      if (envVals[1].value) setTemperature(envVals[1].value);
+      if (envVals[2].value) setAtivo(envVals[2].value !== "false");
+      if (envVals[3].value) setModelo(envVals[3].value);
+      const metaId = envVals[4].value || "";
+      setPhoneId(metaId);
+
+      // Monta lista de canais disponíveis
+      const canais: CanalDisponivel[] = [];
+      if (metaId) {
+        canais.push({ provider: "meta", id: metaId, label: "Meta API Oficial", phone: metaId, conectado: true });
+      }
+      if (Array.isArray(baileysRes)) {
+        for (const inst of baileysRes) {
+          canais.push({
+            provider: "baileys",
+            id: inst.id,
+            label: inst.label,
+            phone: inst.phone ? `+${inst.phone}` : null,
+            conectado: inst.connected,
+          });
+        }
+      }
+      setCanaisDisponiveis(canais);
+
+      // Carrega seleção salva
+      if (envVals[5].value) {
+        try {
+          setCanaisSelecionados(JSON.parse(envVals[5].value));
+        } catch { /* ignora */ }
+      }
+
       setLoading(false);
     }
     load();
@@ -78,7 +120,10 @@ export default function AgentePage() {
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_TEMPERATURE", value: temperature }) }),
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_ATIVO", value: String(ativo) }) }),
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_MODEL", value: modelo }) }),
+        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_CANAIS", value: JSON.stringify(canaisSelecionados) }) }),
       ]);
+      // Sincroniza instâncias selecionadas com o servidor Baileys
+      await fetch("/api/admin/agente/sync-canais", { method: "POST" }).catch(() => {});
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch {
@@ -86,6 +131,18 @@ export default function AgentePage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function toggleCanal(canal: CanalDisponivel) {
+    setCanaisSelecionados((prev) => {
+      const jaEsta = prev.some((c) => c.provider === canal.provider && c.id === canal.id);
+      if (jaEsta) return prev.filter((c) => !(c.provider === canal.provider && c.id === canal.id));
+      return [...prev, { provider: canal.provider, id: canal.id }];
+    });
+  }
+
+  function canalSelecionado(canal: CanalDisponivel) {
+    return canaisSelecionados.some((c) => c.provider === canal.provider && c.id === canal.id);
   }
 
   function resetPrompt() {
@@ -140,6 +197,42 @@ export default function AgentePage() {
             </div>
             {!phoneId && (
               <p className="conn-hint">Configure o <strong>META_PHONE_NUMBER_ID</strong> na aba Integrações.</p>
+            )}
+          </div>
+
+          {/* Canais do Agente */}
+          <div className="agente-card full">
+            <div className="card-label">Canais do agente</div>
+            <p className="card-desc">Selecione em quais números o agente receberá e responderá mensagens. Pode ser um ou mais números, via Meta API ou Baileys.</p>
+            {canaisDisponiveis.length === 0 ? (
+              <p className="canal-vazio">Nenhum número disponível. Configure a Meta API ou inicie o servidor Baileys com instâncias conectadas.</p>
+            ) : (
+              <div className="canais-grid">
+                {canaisDisponiveis.map((canal) => {
+                  const ativo = canalSelecionado(canal);
+                  return (
+                    <button
+                      key={`${canal.provider}-${canal.id}`}
+                      className={`canal-card ${ativo ? "ativo" : ""} ${!canal.conectado ? "desconectado" : ""}`}
+                      onClick={() => toggleCanal(canal)}
+                    >
+                      <div className="canal-top">
+                        <span className={`canal-dot ${canal.conectado ? "ok" : "nok"}`} />
+                        <span className="canal-provider">{canal.provider === "meta" ? "Meta API" : "Baileys"}</span>
+                        <span className={`canal-check ${ativo ? "vis" : ""}`}>✓</span>
+                      </div>
+                      <div className="canal-label">{canal.label}</div>
+                      {canal.phone && <div className="canal-phone">{canal.phone}</div>}
+                      {!canal.conectado && <div className="canal-offline">Offline</div>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {canaisSelecionados.length > 0 && (
+              <p className="canal-hint">
+                {canaisSelecionados.length} canal(is) ativo(s). O agente responderá apenas pelas vias selecionadas.
+              </p>
             )}
           </div>
 
@@ -272,5 +365,23 @@ const css = `
   .model-desc{font-size:12px;color:#7a6e5e;line-height:1.5;margin-bottom:8px;font-weight:300;}
   .model-cost{font-size:11px;font-weight:700;letter-spacing:.5px;color:#4a3e30;text-transform:uppercase;}
   .model-card.active .model-cost{color:rgba(194,144,77,.6);}
-  @media(max-width:768px){.agente-grid{grid-template-columns:1fr;}.agente-page{padding:20px;}.agente-header{flex-direction:column;}}
+  .canal-vazio{font-size:13px;color:#7a6e5e;line-height:1.6;}
+  .canais-grid{display:flex;flex-wrap:wrap;gap:10px;}
+  .canal-card{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:14px 16px;text-align:left;cursor:pointer;font-family:inherit;transition:all .15s;min-width:180px;}
+  .canal-card:hover:not(.desconectado){border-color:rgba(194,144,77,.3);background:rgba(194,144,77,.04);}
+  .canal-card.ativo{border-color:#c2904d;background:rgba(194,144,77,.08);}
+  .canal-card.desconectado{opacity:.5;cursor:not-allowed;}
+  .canal-top{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .canal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .canal-dot.ok{background:#6acca0;}
+  .canal-dot.nok{background:#4a3e30;}
+  .canal-provider{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4a3e30;flex:1;}
+  .canal-card.ativo .canal-provider{color:rgba(194,144,77,.7);}
+  .canal-check{font-size:12px;color:#c2904d;opacity:0;transition:opacity .15s;}
+  .canal-check.vis{opacity:1;}
+  .canal-label{font-size:14px;font-weight:600;color:#fff9e6;margin-bottom:2px;}
+  .canal-phone{font-size:12px;color:#7a6e5e;font-family:monospace;}
+  .canal-offline{font-size:11px;color:#e07070;margin-top:4px;}
+  .canal-hint{font-size:12px;color:rgba(194,144,77,.7);margin-top:12px;}
+  @media(max-width:768px){.agente-grid{grid-template-columns:1fr;}.agente-page{padding:20px;}.agente-header{flex-direction:column;}.canais-grid{flex-direction:column;}.canal-card{min-width:unset;}}
 `;

@@ -140,6 +140,31 @@ function criarInstancia(id, label) {
     setTimeout(() => client.initialize(), 5000)
   })
 
+  // Encaminha mensagens recebidas para o agente SDR (se configurado)
+  client.on('message', async (msg) => {
+    if (msg.fromMe) return
+    if (!config.agentWebhookUrl) return
+    if (config.agentInstances && !config.agentInstances.includes(id)) return
+
+    const phone = msg.from.replace(/@c\.us$|@s\.whatsapp\.net$/, '')
+    const texto = msg.body || ''
+    if (!texto) return
+
+    try {
+      await fetch(config.agentWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-baileys-secret': config.agentWebhookSecret || '',
+        },
+        body: JSON.stringify({ instanceId: id, phone, texto }),
+        signal: AbortSignal.timeout(10000),
+      })
+    } catch (err) {
+      console.error(`[${id}] Erro ao encaminhar mensagem para agente:`, err.message)
+    }
+  })
+
   client.initialize()
 }
 
@@ -151,7 +176,10 @@ function salvarConfig() {
       id,
       label: inst.label,
       phone: inst.phone || undefined,
-    }))
+    })),
+    ...(config.agentWebhookUrl ? { agentWebhookUrl: config.agentWebhookUrl } : {}),
+    ...(config.agentWebhookSecret ? { agentWebhookSecret: config.agentWebhookSecret } : {}),
+    ...(config.agentInstances ? { agentInstances: config.agentInstances } : {}),
   }
   fs.writeFileSync(configPath, JSON.stringify(data, null, 2), 'utf8')
 }
@@ -349,6 +377,18 @@ async function processarLista(jobId, instId, contatos) {
   job.status = 'concluido'
   console.log(`\n✅ [Job ${jobId}] Concluído — ${job.enviados} enviados, ${job.falhas} falhas`)
 }
+
+// ── Configuração do agente SDR ─────────────────────────────────────────────────
+// POST /config/agent — atualiza URL de webhook e instâncias ativas do agente
+app.post('/config/agent', (req, res) => {
+  const { webhookUrl, webhookSecret, instances } = req.body
+  if (webhookUrl !== undefined) config.agentWebhookUrl = webhookUrl || null
+  if (webhookSecret !== undefined) config.agentWebhookSecret = webhookSecret || null
+  if (Array.isArray(instances)) config.agentInstances = instances
+  salvarConfig()
+  console.log(`\n🤖 Agente SDR configurado — instâncias: [${(config.agentInstances || []).join(', ')}]`)
+  res.json({ ok: true })
+})
 
 // ── Rotas de compatibilidade (usa instância "1") ───────────────────────────────
 app.get('/', (req, res) => {

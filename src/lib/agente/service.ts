@@ -109,10 +109,13 @@ export async function iniciarAgenteParaLead(leadId: string, force = false): Prom
   return { ok: true, erroWhatsApp }
 }
 
+type CanalAgente = { provider: 'meta' | 'baileys'; instanceId?: string }
+
 export async function responderAgenteParaLead(
   leadId: string,
   mensagem: string,
-  enviarWhatsApp = true
+  enviarWhatsApp = true,
+  canal?: CanalAgente
 ): Promise<{ ok: boolean; resposta: string }> {
   const supabase = createAdminClient()
 
@@ -129,6 +132,21 @@ export async function responderAgenteParaLead(
   const agenteAtivo = await getConfig('AGENT_ATIVO')
   if (agenteAtivo === 'false') {
     return { ok: true, resposta: '' }
+  }
+
+  // Se AGENT_CANAIS estiver configurado, verifica se este canal está ativo
+  if (canal) {
+    const canaisRaw = await getConfig('AGENT_CANAIS')
+    if (canaisRaw) {
+      try {
+        const canais: Array<{ provider: string; id: string }> = JSON.parse(canaisRaw)
+        const canalAtivo = canais.some(c =>
+          c.provider === canal.provider &&
+          (canal.provider === 'meta' || c.id === canal.instanceId)
+        )
+        if (!canalAtivo) return { ok: true, resposta: '' }
+      } catch { /* ignora JSON inválido, processa normalmente */ }
+    }
   }
 
   const { data: historico } = await supabase
@@ -224,9 +242,13 @@ export async function responderAgenteParaLead(
 
   if (enviarWhatsApp && lead.whatsapp && resposta) {
     try {
-      await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+      if (canal?.provider === 'baileys') {
+        await enviarViaBaileys(lead.whatsapp, resposta, canal.instanceId)
+      } else {
+        await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+      }
     } catch (err) {
-      console.error('[agente] Falha ao enviar resposta via WhatsApp — verifique META_ACCESS_TOKEN e META_PHONE_NUMBER_ID (ou COEXISTENCIA_WEBHOOK_URL):', err)
+      console.error('[agente] Falha ao enviar resposta via WhatsApp:', err)
     }
   }
 
