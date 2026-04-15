@@ -1,22 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
-type CanalDisponivel = {
-  provider: 'meta' | 'baileys'
-  id: string
-  label: string
-  phone?: string | null
-  conectado: boolean
-}
-
-type CanalSelecionado = { provider: 'meta' | 'baileys'; id: string }
+import { useState, useEffect, useCallback } from "react";
 
 const MODELS = [
-  { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", desc: "Rápido, eficiente e econômico. Ideal para volume alto de conversas.", cost: "Baixo custo" },
-  { id: "gpt-4.1", name: "GPT-4.1", desc: "Alta capacidade de raciocínio e contexto longo. Melhor qualidade.", cost: "Custo médio" },
-  { id: "gpt-4o", name: "GPT-4o", desc: "Modelo multimodal da OpenAI. Excelente equilíbrio custo-benefício.", cost: "Custo médio" },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", desc: "Versão compacta do GPT-4o. Ótimo para respostas rápidas.", cost: "Baixo custo" },
+  { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", desc: "Rápido e econômico. Ideal para volume alto.", cost: "Baixo custo" },
+  { id: "gpt-4.1", name: "GPT-4.1", desc: "Alta capacidade e contexto longo. Melhor qualidade.", cost: "Custo médio" },
+  { id: "gpt-4o", name: "GPT-4o", desc: "Multimodal da OpenAI. Excelente equilíbrio.", cost: "Custo médio" },
+  { id: "gpt-4o-mini", name: "GPT-4o Mini", desc: "Compacto e rápido. Ótimo para respostas curtas.", cost: "Baixo custo" },
 ];
 
 const DEFAULT_PROMPT = `Você é um consultor especialista em Inteligência Social do Método Maestria Social.
@@ -45,270 +35,332 @@ AO FINAL DE CADA RESPOSTA, inclua um bloco JSON separado por "---JSON---":
 }
 ---JSON---`;
 
+type Canal = { provider: "meta" | "baileys"; id: string };
+type CanalDisponivel = { provider: "meta" | "baileys"; id: string; label: string; phone?: string | null; conectado: boolean };
+
+type Agente = {
+  id: string;
+  nome: string;
+  descricao: string;
+  prompt: string;
+  temperatura: number;
+  modelo: string;
+  ativo: boolean;
+  canais: Canal[];
+};
+
 export default function AgentePage() {
-  const [prompt, setPrompt] = useState("");
-  const [temperature, setTemperature] = useState("0.2");
-  const [ativo, setAtivo] = useState(true);
-  const [modelo, setModelo] = useState("gpt-4.1-mini");
-  const [phoneId, setPhoneId] = useState("");
+  const [agentes, setAgentes] = useState<Agente[]>([]);
+  const [selecionado, setSelecionado] = useState<Agente | null>(null);
   const [canaisDisponiveis, setCanaisDisponiveis] = useState<CanalDisponivel[]>([]);
-  const [canaisSelecionados, setCanaisSelecionados] = useState<CanalSelecionado[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [criando, setCriando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
   const [error, setError] = useState("");
+  const [vistaLista, setVistaLista] = useState(true); // mobile: alterna entre lista e editor
+
+  const carregarCanaisDisponiveis = useCallback(async (metaId: string) => {
+    const canais: CanalDisponivel[] = [];
+    if (metaId) {
+      canais.push({ provider: "meta", id: metaId, label: "Meta API Oficial", phone: metaId, conectado: true });
+    }
+    const baileysRes = await fetch("/api/admin/wpp/baileys-status").then(r => r.json()).catch(() => []);
+    if (Array.isArray(baileysRes)) {
+      for (const inst of baileysRes) {
+        canais.push({ provider: "baileys", id: inst.id, label: inst.label, phone: inst.phone ? `+${inst.phone}` : null, conectado: inst.connected });
+      }
+    }
+    setCanaisDisponiveis(canais);
+  }, []);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const keys = ["AGENT_SYSTEM_PROMPT", "AGENT_TEMPERATURE", "AGENT_ATIVO", "AGENT_MODEL", "META_PHONE_NUMBER_ID", "AGENT_CANAIS"];
-      const [envVals, baileysRes] = await Promise.all([
-        Promise.all(
-          keys.map((k) =>
-            fetch(`/api/admin/env/value?key=${k}`)
-              .then((r) => r.json())
-              .catch(() => ({ value: null }))
-          )
-        ),
-        fetch("/api/admin/wpp/baileys-status").then((r) => r.json()).catch(() => []),
+      const [agentesRes, metaRes] = await Promise.all([
+        fetch("/api/admin/agentes").then(r => r.json()).catch(() => []),
+        fetch("/api/admin/env/value?key=META_PHONE_NUMBER_ID").then(r => r.json()).catch(() => ({ value: null })),
       ]);
-
-      if (envVals[0].value) setPrompt(envVals[0].value);
-      else setPrompt(DEFAULT_PROMPT);
-      if (envVals[1].value) setTemperature(envVals[1].value);
-      if (envVals[2].value) setAtivo(envVals[2].value !== "false");
-      if (envVals[3].value) setModelo(envVals[3].value);
-      const metaId = envVals[4].value || "";
-      setPhoneId(metaId);
-
-      // Monta lista de canais disponíveis
-      const canais: CanalDisponivel[] = [];
-      if (metaId) {
-        canais.push({ provider: "meta", id: metaId, label: "Meta API Oficial", phone: metaId, conectado: true });
-      }
-      if (Array.isArray(baileysRes)) {
-        for (const inst of baileysRes) {
-          canais.push({
-            provider: "baileys",
-            id: inst.id,
-            label: inst.label,
-            phone: inst.phone ? `+${inst.phone}` : null,
-            conectado: inst.connected,
-          });
-        }
-      }
-      setCanaisDisponiveis(canais);
-
-      // Carrega seleção salva
-      if (envVals[5].value) {
-        try {
-          setCanaisSelecionados(JSON.parse(envVals[5].value));
-        } catch { /* ignora */ }
-      }
-
+      const lista: Agente[] = Array.isArray(agentesRes) ? agentesRes : [];
+      setAgentes(lista);
+      if (lista.length > 0) setSelecionado(lista[0]);
+      await carregarCanaisDisponiveis(metaRes.value || "");
       setLoading(false);
     }
     load();
-  }, []);
+  }, [carregarCanaisDisponiveis]);
 
-  async function handleSave() {
+  async function criarAgente() {
+    setCriando(true);
+    setError("");
+    const res = await fetch("/api/admin/agentes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: "Novo Agente", prompt: DEFAULT_PROMPT, temperatura: 0.2, modelo: "gpt-4.1-mini", ativo: true, canais: [] }),
+    });
+    const novo = await res.json();
+    if (!res.ok) { setError(novo.error || "Erro ao criar agente"); setCriando(false); return; }
+    setAgentes(prev => [...prev, novo]);
+    setSelecionado(novo);
+    setVistaLista(false);
+    setCriando(false);
+  }
+
+  async function salvar() {
+    if (!selecionado) return;
     setSaving(true);
     setError("");
-    try {
-      await Promise.all([
-        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_SYSTEM_PROMPT", value: prompt }) }),
-        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_TEMPERATURE", value: temperature }) }),
-        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_ATIVO", value: String(ativo) }) }),
-        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_MODEL", value: modelo }) }),
-        fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_CANAIS", value: JSON.stringify(canaisSelecionados) }) }),
-      ]);
-      // Sincroniza instâncias selecionadas com o servidor Baileys
-      await fetch("/api/admin/agente/sync-canais", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ canais: canaisSelecionados }),
-      }).catch(() => {});
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch {
-      setError("Erro ao salvar. Tente novamente.");
-    } finally {
-      setSaving(false);
-    }
+    const res = await fetch(`/api/admin/agentes/${selecionado.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(selecionado),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || "Erro ao salvar"); setSaving(false); return; }
+    setAgentes(prev => prev.map(a => a.id === data.id ? data : a));
+    setSelecionado(data);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+    setSaving(false);
+  }
+
+  async function excluir() {
+    if (!selecionado) return;
+    setExcluindo(true);
+    const res = await fetch(`/api/admin/agentes/${selecionado.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || "Erro ao excluir"); setExcluindo(false); setConfirmarExclusao(false); return; }
+    const novos = agentes.filter(a => a.id !== selecionado.id);
+    setAgentes(novos);
+    setSelecionado(novos[0] || null);
+    setConfirmarExclusao(false);
+    setExcluindo(false);
+    setVistaLista(true);
+  }
+
+  function update(campo: Partial<Agente>) {
+    setSelecionado(prev => prev ? { ...prev, ...campo } : prev);
   }
 
   function toggleCanal(canal: CanalDisponivel) {
-    setCanaisSelecionados((prev) => {
-      const jaEsta = prev.some((c) => c.provider === canal.provider && c.id === canal.id);
-      if (jaEsta) return prev.filter((c) => !(c.provider === canal.provider && c.id === canal.id));
-      return [...prev, { provider: canal.provider, id: canal.id }];
-    });
+    if (!selecionado) return;
+    const canais = selecionado.canais || [];
+    const jaEsta = canais.some(c => c.provider === canal.provider && c.id === canal.id);
+    update({ canais: jaEsta ? canais.filter(c => !(c.provider === canal.provider && c.id === canal.id)) : [...canais, { provider: canal.provider, id: canal.id }] });
   }
 
-  function canalSelecionado(canal: CanalDisponivel) {
-    return canaisSelecionados.some((c) => c.provider === canal.provider && c.id === canal.id);
+  function canalAtivo(canal: CanalDisponivel) {
+    return (selecionado?.canais || []).some(c => c.provider === canal.provider && c.id === canal.id);
   }
 
-  function resetPrompt() {
-    setPrompt(DEFAULT_PROMPT);
-  }
-
-  if (loading) return <div className="agente-loading">Carregando configurações…</div>;
+  if (loading) return <div className="agente-loading">Carregando…</div>;
 
   return (
     <>
       <style>{css}</style>
-      <div className="agente-page">
-        <div className="agente-header">
-          <div>
-            <h1 className="agente-title">Agente SDR</h1>
-            <p className="agente-sub">Configure o comportamento do agente de qualificação via WhatsApp</p>
+      <div className="ag-root">
+
+        {/* ── Sidebar lista ── */}
+        <aside className={`ag-sidebar ${!vistaLista ? "ag-sidebar-hidden" : ""}`}>
+          <div className="ag-sidebar-header">
+            <h1 className="ag-title">Agentes SDR</h1>
+            <p className="ag-sub">Configure agentes de qualificação</p>
           </div>
-          <button className="save-btn" onClick={handleSave} disabled={saving}>
-            {saving ? "Salvando…" : saved ? "✓ Salvo" : "Salvar configurações"}
-          </button>
-        </div>
 
-        {error && <div className="agente-error">{error}</div>}
-
-        <div className="agente-grid">
-          {/* Status */}
-          <div className="agente-card">
-            <div className="card-label">Status</div>
-            <div className="toggle-row">
-              <div>
-                <div className="toggle-title">Agente ativo</div>
-                <div className="toggle-desc">Quando desativado, o agente não responde mensagens</div>
-              </div>
+          <div className="ag-list">
+            {agentes.map(ag => (
               <button
-                className={`toggle-btn ${ativo ? "on" : "off"}`}
-                onClick={() => setAtivo((v) => !v)}
+                key={ag.id}
+                className={`ag-item ${selecionado?.id === ag.id ? "ag-item-ativo" : ""}`}
+                onClick={() => { setSelecionado(ag); setVistaLista(false); setConfirmarExclusao(false); setError(""); }}
               >
-                <span className="toggle-knob" />
+                <span className={`ag-status-dot ${ag.ativo ? "dot-on" : "dot-off"}`} />
+                <div className="ag-item-info">
+                  <span className="ag-item-nome">{ag.nome}</span>
+                  <span className="ag-item-canais">
+                    {ag.canais?.length ? `${ag.canais.length} canal(is)` : "Sem canais"}
+                  </span>
+                </div>
               </button>
+            ))}
+          </div>
+
+          <button className="ag-novo-btn" onClick={criarAgente} disabled={criando}>
+            {criando ? "Criando…" : "+ Novo agente"}
+          </button>
+        </aside>
+
+        {/* ── Editor ── */}
+        <main className={`ag-editor ${vistaLista ? "ag-editor-hidden" : ""}`}>
+          {!selecionado ? (
+            <div className="ag-empty">
+              <p>Selecione um agente ou crie um novo.</p>
             </div>
-          </div>
-
-          {/* Conexão Meta */}
-          <div className="agente-card">
-            <div className="card-label">Conexão WhatsApp</div>
-            <div className="conn-row">
-              <span className={`conn-dot ${phoneId ? "ok" : "nok"}`} />
-              <div>
-                <div className="conn-title">{phoneId ? "Número conectado" : "Número não configurado"}</div>
-                {phoneId && <div className="conn-id">Phone Number ID: {phoneId}</div>}
-              </div>
-            </div>
-            {!phoneId && (
-              <p className="conn-hint">Configure o <strong>META_PHONE_NUMBER_ID</strong> na aba Integrações.</p>
-            )}
-          </div>
-
-          {/* Canais do Agente */}
-          <div className="agente-card full">
-            <div className="card-label">Canais do agente</div>
-            <p className="card-desc">Selecione em quais números o agente receberá e responderá mensagens. Pode ser um ou mais números, via Meta API ou Baileys.</p>
-            {canaisDisponiveis.length === 0 ? (
-              <p className="canal-vazio">Nenhum número disponível. Configure a Meta API ou inicie o servidor Baileys com instâncias conectadas.</p>
-            ) : (
-              <div className="canais-grid">
-                {canaisDisponiveis.map((canal) => {
-                  const ativo = canalSelecionado(canal);
-                  return (
-                    <button
-                      key={`${canal.provider}-${canal.id}`}
-                      className={`canal-card ${ativo ? "ativo" : ""} ${!canal.conectado ? "desconectado" : ""}`}
-                      onClick={() => toggleCanal(canal)}
-                    >
-                      <div className="canal-top">
-                        <span className={`canal-dot ${canal.conectado ? "ok" : "nok"}`} />
-                        <span className="canal-provider">{canal.provider === "meta" ? "Meta API" : "Baileys"}</span>
-                        <span className={`canal-check ${ativo ? "vis" : ""}`}>✓</span>
-                      </div>
-                      <div className="canal-label">{canal.label}</div>
-                      {canal.phone && <div className="canal-phone">{canal.phone}</div>}
-                      {!canal.conectado && <div className="canal-offline">Offline</div>}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {canaisSelecionados.length > 0 && (
-              <p className="canal-hint">
-                {canaisSelecionados.length} canal(is) ativo(s). O agente responderá apenas pelas vias selecionadas.
-              </p>
-            )}
-          </div>
-
-          {/* Temperatura */}
-          <div className="agente-card full">
-            <div className="card-label">Temperatura do modelo</div>
-            <p className="card-desc">
-              Controla a criatividade das respostas. Valores baixos (0.1–0.3) geram respostas mais previsíveis e consistentes. Valores altos (0.7–1.0) geram respostas mais variadas.
-            </p>
-            <div className="temp-row">
-              <input
-                className="temp-slider"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={temperature}
-                onChange={(e) => setTemperature(e.target.value)}
-              />
-              <div className="temp-labels">
-                <span>Preciso (0.0)</span>
-                <span className="temp-val">{parseFloat(temperature).toFixed(2)}</span>
-                <span>Criativo (1.0)</span>
-              </div>
-              <div className="temp-presets">
-                {[["0.1", "Muito preciso"], ["0.2", "Preciso"], ["0.5", "Equilibrado"], ["0.7", "Criativo"]].map(([v, l]) => (
-                  <button key={v} className={`preset-btn ${temperature === v ? "active" : ""}`} onClick={() => setTemperature(v)}>
-                    {l} ({v})
+          ) : (
+            <>
+              {/* Header mobile */}
+              <div className="ag-editor-header">
+                <button className="ag-back-btn" onClick={() => setVistaLista(true)}>← Agentes</button>
+                <div className="ag-editor-actions">
+                  <button className="ag-excluir-btn" onClick={() => setConfirmarExclusao(true)} disabled={excluindo || agentes.length <= 1}>
+                    Excluir
                   </button>
-                ))}
+                  <button className="ag-salvar-btn" onClick={salvar} disabled={saving}>
+                    {saving ? "Salvando…" : saved ? "✓ Salvo" : "Salvar"}
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Prompt */}
-          <div className="agente-card full">
-            <div className="prompt-header">
-              <div>
-                <div className="card-label">Prompt do sistema</div>
-                <p className="card-desc">Define a personalidade, regras e comportamento do agente. Editável diretamente.</p>
+              {error && <div className="ag-error">{error}</div>}
+
+              {confirmarExclusao && (
+                <div className="ag-confirm">
+                  <p>Tem certeza que deseja excluir <strong>{selecionado.nome}</strong>?</p>
+                  <div className="ag-confirm-btns">
+                    <button onClick={() => setConfirmarExclusao(false)}>Cancelar</button>
+                    <button className="btn-danger" onClick={excluir} disabled={excluindo}>
+                      {excluindo ? "Excluindo…" : "Sim, excluir"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="ag-form">
+                {/* Nome e status */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Identidade</div>
+                  <div className="ag-nome-row">
+                    <input
+                      className="ag-nome-input"
+                      value={selecionado.nome}
+                      onChange={e => update({ nome: e.target.value })}
+                      placeholder="Nome do agente"
+                    />
+                    <button
+                      className={`ag-toggle ${selecionado.ativo ? "tog-on" : "tog-off"}`}
+                      onClick={() => update({ ativo: !selecionado.ativo })}
+                      title={selecionado.ativo ? "Agente ativo" : "Agente inativo"}
+                    >
+                      <span className="tog-knob" />
+                    </button>
+                    <span className="ag-toggle-label">{selecionado.ativo ? "Ativo" : "Inativo"}</span>
+                  </div>
+                  <input
+                    className="ag-desc-input"
+                    value={selecionado.descricao}
+                    onChange={e => update({ descricao: e.target.value })}
+                    placeholder="Descrição (opcional)"
+                  />
+                </div>
+
+                {/* Canais */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Canais</div>
+                  <p className="ag-card-desc">Selecione em quais números este agente responde. Um canal só pode pertencer a um agente.</p>
+                  {canaisDisponiveis.length === 0 ? (
+                    <p className="ag-canal-vazio">Nenhum número disponível. Configure a Meta API ou inicie o servidor Baileys.</p>
+                  ) : (
+                    <div className="ag-canais">
+                      {canaisDisponiveis.map(canal => {
+                        const ativo = canalAtivo(canal);
+                        return (
+                          <button
+                            key={`${canal.provider}-${canal.id}`}
+                            className={`ag-canal ${ativo ? "canal-on" : ""} ${!canal.conectado ? "canal-off" : ""}`}
+                            onClick={() => canal.conectado && toggleCanal(canal)}
+                          >
+                            <div className="ag-canal-top">
+                              <span className={`ag-canal-dot ${canal.conectado ? "dot-green" : "dot-gray"}`} />
+                              <span className="ag-canal-provider">{canal.provider === "meta" ? "Meta API" : "Baileys"}</span>
+                              {ativo && <span className="ag-canal-check">✓</span>}
+                            </div>
+                            <div className="ag-canal-nome">{canal.label}</div>
+                            {canal.phone && <div className="ag-canal-phone">{canal.phone}</div>}
+                            {!canal.conectado && <div className="ag-canal-offline">Offline</div>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Temperatura */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Temperatura</div>
+                  <p className="ag-card-desc">Controla a criatividade. Baixo = consistente. Alto = criativo.</p>
+                  <div className="ag-temp-row">
+                    <input
+                      type="range" min="0" max="1" step="0.05"
+                      value={selecionado.temperatura}
+                      onChange={e => update({ temperatura: parseFloat(e.target.value) })}
+                      className="ag-slider"
+                    />
+                    <div className="ag-temp-labels">
+                      <span>Preciso (0.0)</span>
+                      <span className="ag-temp-val">{Number(selecionado.temperatura).toFixed(2)}</span>
+                      <span>Criativo (1.0)</span>
+                    </div>
+                    <div className="ag-presets">
+                      {[["0.1", "Muito preciso"], ["0.2", "Preciso"], ["0.5", "Equilibrado"], ["0.7", "Criativo"]].map(([v, l]) => (
+                        <button key={v} className={`ag-preset ${String(selecionado.temperatura) === v || Number(selecionado.temperatura).toFixed(1) === parseFloat(v).toFixed(1) ? "preset-on" : ""}`}
+                          onClick={() => update({ temperatura: parseFloat(v) })}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modelo */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Modelo de IA</div>
+                  <div className="ag-models">
+                    {MODELS.map(m => (
+                      <button key={m.id} className={`ag-model ${selecionado.modelo === m.id ? "model-on" : ""}`} onClick={() => update({ modelo: m.id })}>
+                        <div className="ag-model-nome">{m.name}</div>
+                        <div className="ag-model-desc">{m.desc}</div>
+                        <div className="ag-model-cost">{m.cost}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Prompt */}
+                <div className="ag-card">
+                  <div className="ag-prompt-header">
+                    <div>
+                      <div className="ag-card-label">Prompt do sistema</div>
+                      <p className="ag-card-desc">Define a personalidade e comportamento deste agente.</p>
+                    </div>
+                    <button className="ag-reset-btn" onClick={() => update({ prompt: DEFAULT_PROMPT })}>↺ Padrão</button>
+                  </div>
+                  <textarea
+                    className="ag-prompt"
+                    value={selecionado.prompt}
+                    onChange={e => update({ prompt: e.target.value })}
+                    rows={18}
+                    spellCheck={false}
+                  />
+                  <div className="ag-chars">{selecionado.prompt.length} caracteres</div>
+                </div>
+
+                {/* Ações desktop */}
+                <div className="ag-footer">
+                  {agentes.length > 1 && (
+                    <button className="ag-excluir-btn-desktop" onClick={() => setConfirmarExclusao(true)} disabled={excluindo}>
+                      Excluir agente
+                    </button>
+                  )}
+                  <button className="ag-salvar-btn-desktop" onClick={salvar} disabled={saving}>
+                    {saving ? "Salvando…" : saved ? "✓ Salvo" : "Salvar configurações"}
+                  </button>
+                </div>
               </div>
-              <button className="reset-btn" onClick={resetPrompt}>↺ Restaurar padrão</button>
-            </div>
-            <textarea
-              className="prompt-textarea"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={20}
-              spellCheck={false}
-            />
-            <div className="prompt-chars">{prompt.length} caracteres</div>
-          </div>
-
-          {/* Modelo */}
-          <div className="agente-card full">
-            <div className="card-label">Modelo de IA</div>
-            <p className="card-desc">Escolha o modelo usado pelo agente. Modelos mais capazes geram respostas melhores, mas custam mais por token.</p>
-            <div className="models-grid">
-              {MODELS.map((m) => (
-                <button
-                  key={m.id}
-                  className={`model-card ${modelo === m.id ? "active" : ""}`}
-                  onClick={() => setModelo(m.id)}
-                >
-                  <div className="model-name">{m.name}</div>
-                  <div className="model-desc">{m.desc}</div>
-                  <div className="model-cost">{m.cost}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        </main>
       </div>
     </>
   );
@@ -316,76 +368,125 @@ export default function AgentePage() {
 
 const css = `
   .agente-loading{padding:40px;color:#7a6e5e;font-size:14px;}
-  .agente-page{padding:40px;}
-  .agente-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:32px;flex-wrap:wrap;}
-  .agente-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:32px;font-weight:700;color:#fff9e6;margin-bottom:6px;}
-  .agente-sub{font-size:14px;color:#7a6e5e;font-weight:300;}
-  .agente-error{background:rgba(224,88,64,.1);border:1px solid rgba(224,88,64,.3);border-radius:10px;padding:12px 16px;font-size:14px;color:#e05840;margin-bottom:20px;}
-  .save-btn{background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;border:none;border-radius:12px;padding:13px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap;}
-  .save-btn:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);}
-  .save-btn:disabled{opacity:.6;cursor:not-allowed;}
-  .agente-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  .agente-card{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:24px 28px;}
-  .agente-card.full{grid-column:1/-1;}
-  .card-label{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#4a3e30;margin-bottom:12px;}
-  .card-desc{font-size:13px;color:#7a6e5e;line-height:1.6;font-weight:300;margin-bottom:16px;}
-  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:16px;}
-  .toggle-title{font-size:14px;font-weight:600;color:#fff9e6;margin-bottom:4px;}
-  .toggle-desc{font-size:12px;color:#7a6e5e;}
-  .toggle-btn{width:48px;height:26px;border-radius:99px;border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0;}
-  .toggle-btn.on{background:#c2904d;}
-  .toggle-btn.off{background:#2a1f18;}
-  .toggle-knob{position:absolute;top:3px;width:20px;height:20px;border-radius:50%;background:#fff9e6;transition:left .2s;}
-  .toggle-btn.on .toggle-knob{left:25px;}
-  .toggle-btn.off .toggle-knob{left:3px;}
-  .conn-row{display:flex;align-items:center;gap:12px;}
-  .conn-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-  .conn-dot.ok{background:#6acca0;box-shadow:0 0 6px rgba(106,204,160,.4);}
-  .conn-dot.nok{background:#4a3e30;}
-  .conn-title{font-size:14px;font-weight:600;color:#fff9e6;margin-bottom:2px;}
-  .conn-id{font-size:12px;color:#7a6e5e;font-family:monospace;}
-  .conn-hint{font-size:13px;color:#7a6e5e;margin-top:12px;line-height:1.5;}
-  .conn-hint strong{color:#c2904d;}
-  .temp-row{display:flex;flex-direction:column;gap:10px;}
-  .temp-slider{width:100%;accent-color:#c2904d;cursor:pointer;}
-  .temp-labels{display:flex;justify-content:space-between;font-size:12px;color:#7a6e5e;}
-  .temp-val{font-size:14px;font-weight:700;color:#c2904d;}
-  .temp-presets{display:flex;gap:8px;flex-wrap:wrap;}
-  .preset-btn{background:rgba(255,255,255,.03);border:1px solid #2a1f18;border-radius:8px;padding:7px 14px;font-size:12px;color:#7a6e5e;cursor:pointer;font-family:inherit;transition:all .15s;}
-  .preset-btn:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
-  .preset-btn.active{background:rgba(194,144,77,.1);border-color:rgba(194,144,77,.3);color:#c2904d;font-weight:600;}
-  .prompt-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:4px;}
-  .reset-btn{background:none;border:1px solid #2a1f18;border-radius:8px;padding:7px 14px;font-size:12px;color:#7a6e5e;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
-  .reset-btn:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
-  .prompt-textarea{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:16px;font-size:13px;color:#fff9e6;font-family:monospace;line-height:1.7;resize:vertical;outline:none;transition:border-color .2s;}
-  .prompt-textarea:focus{border-color:rgba(194,144,77,.3);}
-  .prompt-chars{font-size:11px;color:#4a3e30;text-align:right;margin-top:6px;}
-  .models-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
-  .model-card{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:16px 18px;text-align:left;cursor:pointer;font-family:inherit;transition:all .15s;}
-  .model-card:hover{border-color:rgba(194,144,77,.3);background:rgba(194,144,77,.04);}
-  .model-card.active{border-color:#c2904d;background:rgba(194,144,77,.08);}
-  .model-name{font-size:14px;font-weight:700;color:#fff9e6;margin-bottom:4px;}
-  .model-card.active .model-name{color:#c2904d;}
-  .model-desc{font-size:12px;color:#7a6e5e;line-height:1.5;margin-bottom:8px;font-weight:300;}
-  .model-cost{font-size:11px;font-weight:700;letter-spacing:.5px;color:#4a3e30;text-transform:uppercase;}
-  .model-card.active .model-cost{color:rgba(194,144,77,.6);}
-  .canal-vazio{font-size:13px;color:#7a6e5e;line-height:1.6;}
-  .canais-grid{display:flex;flex-wrap:wrap;gap:10px;}
-  .canal-card{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:14px 16px;text-align:left;cursor:pointer;font-family:inherit;transition:all .15s;min-width:180px;}
-  .canal-card:hover:not(.desconectado){border-color:rgba(194,144,77,.3);background:rgba(194,144,77,.04);}
-  .canal-card.ativo{border-color:#c2904d;background:rgba(194,144,77,.08);}
-  .canal-card.desconectado{opacity:.5;cursor:not-allowed;}
-  .canal-top{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
-  .canal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-  .canal-dot.ok{background:#6acca0;}
-  .canal-dot.nok{background:#4a3e30;}
-  .canal-provider{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4a3e30;flex:1;}
-  .canal-card.ativo .canal-provider{color:rgba(194,144,77,.7);}
-  .canal-check{font-size:12px;color:#c2904d;opacity:0;transition:opacity .15s;}
-  .canal-check.vis{opacity:1;}
-  .canal-label{font-size:14px;font-weight:600;color:#fff9e6;margin-bottom:2px;}
-  .canal-phone{font-size:12px;color:#7a6e5e;font-family:monospace;}
-  .canal-offline{font-size:11px;color:#e07070;margin-top:4px;}
-  .canal-hint{font-size:12px;color:rgba(194,144,77,.7);margin-top:12px;}
-  @media(max-width:768px){.agente-grid{grid-template-columns:1fr;}.agente-page{padding:20px;}.agente-header{flex-direction:column;}.canais-grid{flex-direction:column;}.canal-card{min-width:unset;}}
+  .ag-root{display:flex;height:calc(100vh - 60px);overflow:hidden;background:#0e0f09;}
+
+  /* Sidebar */
+  .ag-sidebar{width:280px;flex-shrink:0;background:#111009;border-right:1px solid #2a1f18;display:flex;flex-direction:column;overflow:hidden;}
+  .ag-sidebar-header{padding:28px 24px 20px;border-bottom:1px solid #2a1f18;}
+  .ag-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:24px;font-weight:700;color:#fff9e6;margin-bottom:4px;}
+  .ag-sub{font-size:12px;color:#4a3e30;}
+  .ag-list{flex:1;overflow-y:auto;padding:12px;}
+  .ag-item{width:100%;background:none;border:1px solid transparent;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:inherit;transition:all .15s;text-align:left;}
+  .ag-item:hover{background:rgba(255,255,255,.03);border-color:#2a1f18;}
+  .ag-item-ativo{background:rgba(194,144,77,.08)!important;border-color:rgba(194,144,77,.3)!important;}
+  .ag-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .dot-on{background:#6acca0;box-shadow:0 0 5px rgba(106,204,160,.4);}
+  .dot-off{background:#4a3e30;}
+  .ag-item-info{display:flex;flex-direction:column;gap:2px;}
+  .ag-item-nome{font-size:14px;font-weight:600;color:#fff9e6;}
+  .ag-item-ativo .ag-item-nome{color:#c2904d;}
+  .ag-item-canais{font-size:11px;color:#4a3e30;}
+  .ag-novo-btn{margin:12px;background:rgba(194,144,77,.1);border:1px dashed rgba(194,144,77,.3);border-radius:10px;padding:12px;color:#c2904d;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .ag-novo-btn:hover:not(:disabled){background:rgba(194,144,77,.15);}
+  .ag-novo-btn:disabled{opacity:.5;cursor:not-allowed;}
+
+  /* Editor */
+  .ag-editor{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+  .ag-empty{flex:1;display:flex;align-items:center;justify-content:center;color:#4a3e30;font-size:14px;}
+  .ag-editor-header{display:none;}
+  .ag-error{background:rgba(224,88,64,.1);border:1px solid rgba(224,88,64,.3);border-radius:10px;padding:12px 16px;font-size:14px;color:#e05840;margin:20px 24px 0;}
+  .ag-confirm{background:#1a1410;border:1px solid rgba(224,88,64,.3);border-radius:12px;padding:20px 24px;margin:20px 24px 0;}
+  .ag-confirm p{font-size:14px;color:#fff9e6;margin-bottom:14px;}
+  .ag-confirm strong{color:#e07070;}
+  .ag-confirm-btns{display:flex;gap:10px;}
+  .ag-confirm-btns button{border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid #2a1f18;background:rgba(255,255,255,.03);color:#7a6e5e;transition:all .15s;}
+  .ag-confirm-btns button:hover{border-color:#4a3e30;color:#fff9e6;}
+  .btn-danger{background:rgba(224,88,64,.15)!important;border-color:rgba(224,88,64,.4)!important;color:#e05840!important;}
+  .btn-danger:hover{background:rgba(224,88,64,.25)!important;}
+
+  /* Form */
+  .ag-form{padding:24px;display:flex;flex-direction:column;gap:16px;}
+  .ag-card{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:22px 24px;}
+  .ag-card-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#4a3e30;margin-bottom:12px;}
+  .ag-card-desc{font-size:13px;color:#7a6e5e;line-height:1.6;margin-bottom:14px;font-weight:300;}
+  .ag-nome-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+  .ag-nome-input{flex:1;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:11px 14px;font-size:16px;font-weight:600;color:#fff9e6;font-family:'Cormorant Garamond',Georgia,serif;outline:none;transition:border-color .2s;}
+  .ag-nome-input:focus{border-color:rgba(194,144,77,.4);}
+  .ag-toggle{width:44px;height:24px;border-radius:99px;border:none;cursor:pointer;position:relative;flex-shrink:0;transition:background .2s;}
+  .tog-on{background:#c2904d;}
+  .tog-off{background:#2a1f18;}
+  .tog-knob{position:absolute;top:3px;width:18px;height:18px;border-radius:50%;background:#fff9e6;transition:left .2s;}
+  .tog-on .tog-knob{left:23px;}
+  .tog-off .tog-knob{left:3px;}
+  .ag-toggle-label{font-size:12px;color:#7a6e5e;white-space:nowrap;}
+  .ag-desc-input{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;font-size:13px;color:#7a6e5e;font-family:inherit;outline:none;transition:border-color .2s;}
+  .ag-desc-input:focus{border-color:rgba(194,144,77,.3);}
+  .ag-canal-vazio{font-size:13px;color:#4a3e30;}
+  .ag-canais{display:flex;flex-wrap:wrap;gap:10px;}
+  .ag-canal{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:12px 14px;cursor:pointer;font-family:inherit;transition:all .15s;text-align:left;min-width:160px;}
+  .ag-canal:hover:not(.canal-off){border-color:rgba(194,144,77,.3);}
+  .canal-on{border-color:#c2904d!important;background:rgba(194,144,77,.08)!important;}
+  .canal-off{opacity:.45;cursor:not-allowed;}
+  .ag-canal-top{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .ag-canal-dot{width:7px;height:7px;border-radius:50%;}
+  .dot-green{background:#6acca0;}
+  .dot-gray{background:#4a3e30;}
+  .ag-canal-provider{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4a3e30;flex:1;}
+  .canal-on .ag-canal-provider{color:rgba(194,144,77,.7);}
+  .ag-canal-check{font-size:11px;color:#c2904d;font-weight:700;}
+  .ag-canal-nome{font-size:13px;font-weight:600;color:#fff9e6;margin-bottom:2px;}
+  .ag-canal-phone{font-size:11px;color:#7a6e5e;font-family:monospace;}
+  .ag-canal-offline{font-size:11px;color:#e07070;margin-top:3px;}
+  .ag-temp-row{display:flex;flex-direction:column;gap:10px;}
+  .ag-slider{width:100%;accent-color:#c2904d;cursor:pointer;}
+  .ag-temp-labels{display:flex;justify-content:space-between;font-size:12px;color:#7a6e5e;}
+  .ag-temp-val{font-size:14px;font-weight:700;color:#c2904d;}
+  .ag-presets{display:flex;gap:8px;flex-wrap:wrap;}
+  .ag-preset{background:rgba(255,255,255,.03);border:1px solid #2a1f18;border-radius:8px;padding:6px 13px;font-size:12px;color:#7a6e5e;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .ag-preset:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
+  .preset-on{background:rgba(194,144,77,.1)!important;border-color:rgba(194,144,77,.3)!important;color:#c2904d!important;font-weight:600;}
+  .ag-models{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;}
+  .ag-model{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:14px 16px;text-align:left;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .ag-model:hover{border-color:rgba(194,144,77,.3);}
+  .model-on{border-color:#c2904d!important;background:rgba(194,144,77,.08)!important;}
+  .ag-model-nome{font-size:13px;font-weight:700;color:#fff9e6;margin-bottom:4px;}
+  .model-on .ag-model-nome{color:#c2904d;}
+  .ag-model-desc{font-size:12px;color:#7a6e5e;line-height:1.5;margin-bottom:6px;font-weight:300;}
+  .ag-model-cost{font-size:10px;font-weight:700;letter-spacing:.5px;color:#4a3e30;text-transform:uppercase;}
+  .model-on .ag-model-cost{color:rgba(194,144,77,.5);}
+  .ag-prompt-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px;}
+  .ag-reset-btn{background:none;border:1px solid #2a1f18;border-radius:8px;padding:6px 12px;font-size:12px;color:#7a6e5e;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
+  .ag-reset-btn:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
+  .ag-prompt{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:14px;font-size:13px;color:#fff9e6;font-family:monospace;line-height:1.7;resize:vertical;outline:none;transition:border-color .2s;}
+  .ag-prompt:focus{border-color:rgba(194,144,77,.3);}
+  .ag-chars{font-size:11px;color:#4a3e30;text-align:right;margin-top:6px;}
+  .ag-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;padding-bottom:8px;}
+  .ag-salvar-btn-desktop{background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;border:none;border-radius:12px;padding:13px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;}
+  .ag-salvar-btn-desktop:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);}
+  .ag-salvar-btn-desktop:disabled{opacity:.6;cursor:not-allowed;}
+  .ag-excluir-btn-desktop{background:none;border:1px solid rgba(224,88,64,.3);border-radius:12px;padding:12px 20px;font-size:13px;font-weight:600;color:#e07070;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .ag-excluir-btn-desktop:hover:not(:disabled){background:rgba(224,88,64,.08);}
+  .ag-excluir-btn-desktop:disabled{opacity:.3;cursor:not-allowed;}
+
+  /* Mobile */
+  @media(max-width:768px){
+    .ag-root{flex-direction:column;height:auto;min-height:calc(100vh - 60px);}
+    .ag-sidebar{width:100%;border-right:none;border-bottom:1px solid #2a1f18;}
+    .ag-sidebar-hidden{display:none;}
+    .ag-editor{display:flex;}
+    .ag-editor-hidden{display:none;}
+    .ag-editor-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #2a1f18;background:#111009;}
+    .ag-back-btn{background:none;border:none;color:#c2904d;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;padding:0;}
+    .ag-editor-actions{display:flex;gap:8px;}
+    .ag-salvar-btn{background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+    .ag-salvar-btn:disabled{opacity:.6;}
+    .ag-excluir-btn{background:none;border:1px solid rgba(224,88,64,.3);border-radius:8px;padding:7px 14px;font-size:13px;color:#e07070;cursor:pointer;font-family:inherit;}
+    .ag-footer{display:none;}
+    .ag-form{padding:16px;}
+    .ag-canais{flex-direction:column;}
+    .ag-canal{min-width:unset;}
+  }
+  @media(min-width:769px){
+    .ag-salvar-btn,.ag-excluir-btn,.ag-back-btn{display:none;}
+  }
 `;

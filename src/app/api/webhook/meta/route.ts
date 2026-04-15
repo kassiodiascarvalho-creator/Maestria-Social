@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig, setConfig } from '@/lib/config'
-import { responderAgenteParaLead } from '@/lib/agente/service'
+import { responderAgenteParaLead, encontrarAgentePorCanal } from '@/lib/agente/service'
 import { marcarMensagemComoLida } from '@/lib/meta'
 import { atualizarUltimaMsgUser } from '@/lib/wpp-leads'
 
@@ -197,7 +197,8 @@ export async function POST(req: NextRequest) {
 
     await saveDebug('disparando_agente', { leadId: lead.id, texto })
     try {
-      const result = await responderAgenteParaLead(lead.id, texto, true, { provider: 'meta' })
+      const agente = await encontrarAgentePorCanal('meta')
+      const result = await responderAgenteParaLead(lead.id, texto, true, { provider: 'meta' }, agente)
       await saveDebug('agente_respondeu', { leadId: lead.id, resposta: result.resposta })
     } catch (agenteErr) {
       await saveDebug('agente_erro', { leadId: lead.id, erro: String(agenteErr) })

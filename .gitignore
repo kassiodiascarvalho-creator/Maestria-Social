@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+baileys-server/sessoes/
+baileys-server/.wwebjs_cache/
+baileys-server/.wwebjs_auth/

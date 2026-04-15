@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig } from '@/lib/config'
-import { responderAgenteParaLead } from '@/lib/agente/service'
+import { responderAgenteParaLead, encontrarAgentePorCanal } from '@/lib/agente/service'
 import { atualizarUltimaMsgUser } from '@/lib/wpp-leads'
 
 export const dynamic = 'force-dynamic'
@@ -81,10 +81,8 @@ export async function POST(req: NextRequest) {
     const lead = await buscarLeadPorTelefone(phone)
     if (!lead) return NextResponse.json({ status: 'ok' })
 
-    await responderAgenteParaLead(lead.id, texto, true, {
-      provider: 'baileys',
-      instanceId,
-    })
+    const agente = await encontrarAgentePorCanal('baileys', instanceId)
+    await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente)
   } catch (err) {
     console.error('[webhook/baileys]', err)
   }

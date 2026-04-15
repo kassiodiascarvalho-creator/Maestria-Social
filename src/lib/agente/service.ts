@@ -111,11 +111,42 @@ export async function iniciarAgenteParaLead(leadId: string, force = false): Prom
 
 type CanalAgente = { provider: 'meta' | 'baileys'; instanceId?: string }
 
+type AgenteDB = {
+  id: string
+  nome: string
+  prompt: string
+  temperatura: number
+  modelo: string
+  ativo: boolean
+  canais: Array<{ provider: string; id: string }>
+}
+
+// Busca o agente configurado para um canal específico
+export async function encontrarAgentePorCanal(
+  provider: 'meta' | 'baileys',
+  instanceId?: string
+): Promise<AgenteDB | null> {
+  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any).from('agentes').select('*').eq('ativo', true)
+  if (!data?.length) return null
+
+  for (const ag of data) {
+    const canais = (ag.canais || []) as Array<{ provider: string; id: string }>
+    const match = canais.some(c =>
+      c.provider === provider && (provider === 'meta' || c.id === instanceId)
+    )
+    if (match) return ag as AgenteDB
+  }
+  return null
+}
+
 export async function responderAgenteParaLead(
   leadId: string,
   mensagem: string,
   enviarWhatsApp = true,
-  canal?: CanalAgente
+  canal?: CanalAgente,
+  agenteDB?: AgenteDB | null
 ): Promise<{ ok: boolean; resposta: string }> {
   const supabase = createAdminClient()
 
@@ -129,23 +160,26 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
-  const agenteAtivo = await getConfig('AGENT_ATIVO')
-  if (agenteAtivo === 'false') {
-    return { ok: true, resposta: '' }
-  }
+  // Se veio de agente DB: usa config dele; senão usa config global (compat)
+  if (agenteDB) {
+    if (!agenteDB.ativo) return { ok: true, resposta: '' }
+  } else {
+    const agenteAtivo = await getConfig('AGENT_ATIVO')
+    if (agenteAtivo === 'false') return { ok: true, resposta: '' }
 
-  // Se AGENT_CANAIS estiver configurado, verifica se este canal está ativo
-  if (canal) {
-    const canaisRaw = await getConfig('AGENT_CANAIS')
-    if (canaisRaw) {
-      try {
-        const canais: Array<{ provider: string; id: string }> = JSON.parse(canaisRaw)
-        const canalAtivo = canais.some(c =>
-          c.provider === canal.provider &&
-          (canal.provider === 'meta' || c.id === canal.instanceId)
-        )
-        if (!canalAtivo) return { ok: true, resposta: '' }
-      } catch { /* ignora JSON inválido, processa normalmente */ }
+    // Fallback: verifica AGENT_CANAIS global se não há agente DB
+    if (canal) {
+      const canaisRaw = await getConfig('AGENT_CANAIS')
+      if (canaisRaw) {
+        try {
+          const canais: Array<{ provider: string; id: string }> = JSON.parse(canaisRaw)
+          const canalAtivo = canais.some(c =>
+            c.provider === canal.provider &&
+            (canal.provider === 'meta' || c.id === canal.instanceId)
+          )
+          if (!canalAtivo) return { ok: true, resposta: '' }
+        } catch { /* ignora */ }
+      }
     }
   }
 
@@ -156,13 +190,12 @@ export async function responderAgenteParaLead(
     .order('criado_em', { ascending: true })
     .limit(20)
 
-  const promptCustom = await getConfig('AGENT_SYSTEM_PROMPT')
-  const tempConfig = await getConfig('AGENT_TEMPERATURE')
-  const modeloConfig = await getConfig('AGENT_MODEL')
-  const temperatura = tempConfig ? parseFloat(tempConfig) : 0.2
-  const modelo = modeloConfig || MODEL
-  const systemPrompt = promptCustom
-    ? promptCustom.replace('{{nome}}', lead.nome).replace('{{pilar}}', lead.pilar_fraco ?? 'Comunicação')
+  // Config: agente DB tem prioridade sobre global
+  const temperatura = agenteDB ? Number(agenteDB.temperatura) : parseFloat((await getConfig('AGENT_TEMPERATURE')) || '0.2')
+  const modelo = agenteDB?.modelo || (await getConfig('AGENT_MODEL')) || MODEL
+  const promptRaw = agenteDB?.prompt || (await getConfig('AGENT_SYSTEM_PROMPT')) || ''
+  const systemPrompt = promptRaw
+    ? promptRaw.replace('{{nome}}', lead.nome).replace('{{pilar}}', lead.pilar_fraco ?? 'Comunicação')
     : buildSystemPrompt(lead)
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
