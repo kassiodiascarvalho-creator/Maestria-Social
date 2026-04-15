@@ -50,7 +50,22 @@ async function buscarLeadPorTelefone(raw: string) {
     .or(`whatsapp.ilike.%${short}%,whatsapp.ilike.%${full}%`)
     .limit(1)
     .maybeSingle()
-  return data ?? null
+  if (data) return data
+
+  // Fallback: busca via wpp_contatos.lead_id (vínculo criado na sincronização do disparo)
+  // Garante que o webhook sempre encontra o mesmo lead que o disparo usou
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any
+  const { data: contato } = await db
+    .from('wpp_contatos')
+    .select('lead_id')
+    .not('lead_id', 'is', null)
+    .or(`telefone.eq.${raw},telefone.eq.${full},telefone.eq.${short}`)
+    .limit(1)
+    .maybeSingle()
+  if (contato?.lead_id) return { id: contato.lead_id as string }
+
+  return null
 }
 
 export async function POST(req: NextRequest) {

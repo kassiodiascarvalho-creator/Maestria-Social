@@ -10,6 +10,23 @@ function normalizarTelefone(tel: string): string {
   return digits.startsWith('55') ? digits : `55${digits}`
 }
 
+function variacoesTelefone(tel: string): string[] {
+  const digits = tel.replace(/\D/g, '')
+  const full = digits.startsWith('55') ? digits : `55${digits}`
+  const short = full.slice(2)
+  const vars = new Set([tel, full, short])
+  if (short.length === 10) {
+    const com9 = `${short.slice(0, 2)}9${short.slice(2)}`
+    vars.add(com9)
+    vars.add(`55${com9}`)
+  } else if (short.length === 11) {
+    const sem9 = `${short.slice(0, 2)}${short.slice(3)}`
+    vars.add(sem9)
+    vars.add(`55${sem9}`)
+  }
+  return Array.from(vars).filter(Boolean)
+}
+
 // ── Baileys ────────────────────────────────────────────────────────────────────
 async function enviarBaileys(
   apiUrl: string,
@@ -250,9 +267,9 @@ function preencherVarsTemplate(
   return { ...msg, template_vars: vars }
 }
 
-// Sincroniza todos os contatos de uma lista como leads (upsert por whatsapp).
-// Novos contatos recebem status 'frio' e etiqueta 'ia_atendendo'.
-// Leads já existentes têm origem atualizada se ainda estava vazia.
+// Sincroniza todos os contatos de uma lista como leads.
+// Detecta leads existentes por VARIAÇÕES de telefone (evita duplicatas de formato).
+// Vincula wpp_contatos.lead_id para que o webhook Baileys encontre o lead correto.
 async function sincronizarContatosComoLeads(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -262,28 +279,72 @@ async function sincronizarContatosComoLeads(
   try {
     const { data: contatos } = await db
       .from('wpp_contatos')
-      .select('nome, telefone')
+      .select('id, nome, telefone')
       .eq('lista_id', listaId)
 
     if (!contatos?.length) return
 
-    for (const c of contatos as Array<{ nome: string | null; telefone: string }>) {
-      const telefone = normalizarTelefone(c.telefone)
+    type Contato = { id: string; nome: string | null; telefone: string }
+
+    // Pré-calcula variações de telefone para cada contato
+    const contatosDados = (contatos as Contato[]).map(c => ({
+      ...c,
+      vars: variacoesTelefone(c.telefone),
+      normalizado: normalizarTelefone(c.telefone),
+    }))
+
+    // Batch: busca leads existentes por TODAS as variações de uma vez
+    const todasVars = [...new Set(contatosDados.flatMap(c => c.vars))]
+    const { data: leadsExistentes } = await db
+      .from('leads')
+      .select('id, whatsapp')
+      .in('whatsapp', todasVars)
+
+    // Mapa bidirecional: qualquer variação de telefone → lead_id
+    const mapaVar2Lead: Record<string, string> = {}
+    for (const l of (leadsExistentes ?? []) as Array<{ id: string; whatsapp: string }>) {
+      for (const v of variacoesTelefone(l.whatsapp)) {
+        mapaVar2Lead[v] = l.id
+      }
+    }
+
+    for (const c of contatosDados) {
       const nome = c.nome?.trim() || 'Contato'
 
-      // Upsert: insere se não existir (conflict em whatsapp).
-      // ignoreDuplicates:false garante que origem seja atualizada se já existir sem ela.
-      await db.from('leads').upsert(
-        {
-          nome,
-          email: `${telefone}@disparo.local`,
-          whatsapp: telefone,
-          origem: listaNome,
-          etiqueta: 'ia_atendendo',
-          status_lead: 'frio',
-        },
-        { onConflict: 'whatsapp', ignoreDuplicates: true }
-      )
+      // Procura se já existe lead com alguma variação do telefone
+      let leadId: string | null = null
+      for (const v of c.vars) {
+        if (mapaVar2Lead[v]) { leadId = mapaVar2Lead[v]; break }
+      }
+
+      if (!leadId) {
+        // Lead não existe: cria com telefone normalizado (5511...)
+        const { data: novoLead } = await db
+          .from('leads')
+          .upsert(
+            {
+              nome,
+              email: `${c.normalizado}@disparo.local`,
+              whatsapp: c.normalizado,
+              origem: listaNome,
+              etiqueta: 'ia_atendendo',
+              status_lead: 'frio',
+            },
+            { onConflict: 'whatsapp', ignoreDuplicates: false }
+          )
+          .select('id')
+          .single()
+        leadId = novoLead?.id ?? null
+        // Atualiza mapa para próximas iterações da mesma lista
+        if (leadId) {
+          for (const v of c.vars) mapaVar2Lead[v] = leadId
+        }
+      }
+
+      // Vincula lead_id ao contato (permite busca reversa no webhook Baileys)
+      if (leadId) {
+        await db.from('wpp_contatos').update({ lead_id: leadId }).eq('id', c.id)
+      }
     }
   } catch (err) {
     console.error('[disparo] Erro ao sincronizar leads:', err)
@@ -291,7 +352,8 @@ async function sincronizarContatosComoLeads(
 }
 
 // Salva as mensagens disparadas no histórico de conversa dos leads correspondentes.
-// Permite que o chat do lead mostre o que foi enviado pelo disparo em massa.
+// Usa variações de telefone para encontrar o lead mesmo quando o formato difere
+// (ex: lead tem "11999999999" mas disparo usou "5511999999999").
 async function salvarDisparoNaConversa(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -299,22 +361,32 @@ async function salvarDisparoNaConversa(
 ): Promise<void> {
   if (!enviados.length) return
   try {
-    const telefones = enviados.map(e => e.phone)
+    // Gera todas as variações de telefone para busca abrangente
+    const todasVars = [...new Set(enviados.flatMap(e => variacoesTelefone(e.phone)))]
+
     const { data: leads } = await db
       .from('leads')
       .select('id, whatsapp')
-      .in('whatsapp', telefones)
+      .in('whatsapp', todasVars)
 
     if (!leads?.length) return
 
-    const mapaLead: Record<string, string> = {}
+    // Mapa bidirecional: qualquer variação do whatsapp do lead → lead_id
+    const mapaVar2Lead: Record<string, string> = {}
     for (const l of leads as Array<{ id: string; whatsapp: string }>) {
-      mapaLead[l.whatsapp] = l.id
+      for (const v of variacoesTelefone(l.whatsapp)) {
+        mapaVar2Lead[v] = l.id
+      }
     }
 
     const inserts = enviados
-      .filter(e => mapaLead[e.phone])
-      .map(e => ({ lead_id: mapaLead[e.phone], role: 'assistant', mensagem: e.mensagem }))
+      .map(e => {
+        // Tenta cada variação do phone enviado até achar um lead
+        const vars = variacoesTelefone(e.phone)
+        const leadId = vars.map(v => mapaVar2Lead[v]).find(Boolean)
+        return leadId ? { lead_id: leadId, role: 'assistant', mensagem: e.mensagem } : null
+      })
+      .filter((x): x is { lead_id: string; role: string; mensagem: string } => x !== null)
 
     if (inserts.length > 0) {
       await db.from('conversas').insert(inserts)
