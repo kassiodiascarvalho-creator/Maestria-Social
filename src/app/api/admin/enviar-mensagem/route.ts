@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
+import { enviarViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
@@ -80,8 +81,16 @@ export async function POST(req: NextRequest) {
       await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
       mensagemSalva = caption ? `[${tipo}: ${file.name}] ${caption}` : `[${tipo}: ${file.name}]`
     } else if (texto) {
-      // Texto usa a lib compartilhada — respeita WHATSAPP_MODE / coexistência
-      await enviarMensagemWhatsApp(para, texto)
+      // Tenta Baileys primeiro (sem restrição de janela 24h); fallback para Meta
+      let enviado = false
+      try {
+        await enviarViaBaileys(para, texto)
+        enviado = true
+      } catch { /* fallback abaixo */ }
+
+      if (!enviado) {
+        await enviarMensagemWhatsApp(para, texto)
+      }
       mensagemSalva = texto
     }
 

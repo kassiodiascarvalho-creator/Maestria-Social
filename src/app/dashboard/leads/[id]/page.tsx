@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import ChatInput from "./ChatInput";
 import EtiquetaSelector from "./EtiquetaSelector";
+import ExcluirLead from "./ExcluirLead";
 
 const STATUS_COLOR: Record<string, string> = { quente: "#e07070", morno: "#d4a055", frio: "#7a9ec0" };
 const STATUS_EMOJI: Record<string, string> = { quente: "🔴", morno: "🟡", frio: "🔵" };
@@ -74,9 +75,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
           </div>
-          <span className="lead-status" style={{ color: STATUS_COLOR[lead.status_lead] }}>
-            {STATUS_EMOJI[lead.status_lead]} {lead.status_lead}
-          </span>
+          <div className="lead-header-right">
+            <span className="lead-status" style={{ color: STATUS_COLOR[lead.status_lead] }}>
+              {STATUS_EMOJI[lead.status_lead]} {lead.status_lead}
+            </span>
+            <ExcluirLead leadId={id} nomeLocal={lead.nome} />
+          </div>
         </div>
 
         <div className="lead-grid">
@@ -168,6 +172,18 @@ const css = `
   .back-link{font-size:13px;color:#7a6e5e;text-decoration:none;display:inline-block;margin-bottom:24px;transition:color .15s;}
   .back-link:hover{color:#c2904d;}
   .lead-header{display:flex;align-items:flex-start;gap:20px;margin-bottom:36px;flex-wrap:wrap;}
+  .lead-header-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px;margin-left:auto;}
+  .excluir-btn{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#7a6e5e;background:transparent;border:1px solid #2a1f18;border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s;}
+  .excluir-btn:hover{color:#e07070;border-color:rgba(224,112,112,.3);}
+  .excluir-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+  .excluir-aviso{font-size:13px;color:#d4c9b5;}
+  .excluir-aviso strong{color:#fff9e6;}
+  .excluir-sim{background:#e07070;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;font-family:inherit;transition:filter .15s;}
+  .excluir-sim:hover:not(:disabled){filter:brightness(1.1);}
+  .excluir-sim:disabled{opacity:.5;cursor:default;}
+  .excluir-nao{background:transparent;border:1px solid #2a1f18;border-radius:8px;color:#7a6e5e;font-size:12px;padding:5px 12px;cursor:pointer;font-family:inherit;transition:color .15s;}
+  .excluir-nao:hover:not(:disabled){color:#fff9e6;}
+  .excluir-erro{font-size:12px;color:#e07070;}
   .lead-avatar-lg{width:56px;height:56px;border-radius:50%;background:rgba(194,144,77,.15);border:1px solid rgba(194,144,77,.25);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#c2904d;flex-shrink:0;}
   .lead-identity{display:flex;align-items:flex-start;gap:16px;flex:1;}
   .lead-name{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:700;color:#fff9e6;}
