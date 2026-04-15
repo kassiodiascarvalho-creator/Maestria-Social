@@ -290,6 +290,40 @@ async function sincronizarContatosComoLeads(
   }
 }
 
+// Salva as mensagens disparadas no histórico de conversa dos leads correspondentes.
+// Permite que o chat do lead mostre o que foi enviado pelo disparo em massa.
+async function salvarDisparoNaConversa(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  enviados: Array<{ phone: string; mensagem: string }>
+): Promise<void> {
+  if (!enviados.length) return
+  try {
+    const telefones = enviados.map(e => e.phone)
+    const { data: leads } = await db
+      .from('leads')
+      .select('id, whatsapp')
+      .in('whatsapp', telefones)
+
+    if (!leads?.length) return
+
+    const mapaLead: Record<string, string> = {}
+    for (const l of leads as Array<{ id: string; whatsapp: string }>) {
+      mapaLead[l.whatsapp] = l.id
+    }
+
+    const inserts = enviados
+      .filter(e => mapaLead[e.phone])
+      .map(e => ({ lead_id: mapaLead[e.phone], role: 'assistant', mensagem: e.mensagem }))
+
+    if (inserts.length > 0) {
+      await db.from('conversas').insert(inserts)
+    }
+  } catch (err) {
+    console.error('[disparo] Erro ao salvar conversa:', err)
+  }
+}
+
 // POST — dispara sequência de mensagens para contatos filtrados de uma lista
 // body: { lista_id, mensagens: MensagemItem[], filtros?: Filtros, api_provider?: 'meta' | 'zapi' }
 export async function POST(req: NextRequest) {
@@ -523,6 +557,17 @@ export async function POST(req: NextRequest) {
 
       const { jobId } = await baileysRes.json()
 
+      // Salva primeiro texto de cada contato no histórico de conversa do lead
+      void salvarDisparoNaConversa(
+        db,
+        listaParaBaileys.map(c => ({
+          phone: normalizarTelefone(c.phone),
+          mensagem: c.mensagens[0]
+            ? (c.mensagens[0].type === 'text' ? String(c.mensagens[0].content ?? '') : `[${c.mensagens[0].type}]`)
+            : '[disparo]',
+        }))
+      )
+
       // Registra disparo no Supabase (totais serão 0 — atualizados quando o job concluir)
       const resumoBaileys = mensagens.map(m => m.tipo).join(' + ')
       await db.from('wpp_disparos').insert({
@@ -544,9 +589,11 @@ export async function POST(req: NextRequest) {
     let enviados = 0
     let falhas = 0
     const erros: string[] = []
+    const registrosConversa: Array<{ phone: string; mensagem: string }> = []
 
     for (const contato of contatosFiltrados) {
       let contatoOk = true
+      let primeiroTextoEnviado: string | null = null
 
       if (apiProvider === 'zapi') {
         for (const msg of mensagens) {
@@ -558,6 +605,11 @@ export async function POST(req: NextRequest) {
               : msg
           try {
             await enviarZApi(zapiInstanceId!, zapiToken!, zapiClientToken, contato.telefone, msgPersonalizada)
+            if (!primeiroTextoEnviado) {
+              primeiroTextoEnviado = msg.tipo === 'text'
+                ? (msgPersonalizada.conteudo ?? '')
+                : `[${msg.tipo}]`
+            }
           } catch (err) {
             contatoOk = false
             erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
@@ -581,6 +633,13 @@ export async function POST(req: NextRequest) {
             }
             try {
               await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, msgFinal)
+              if (!primeiroTextoEnviado) {
+                primeiroTextoEnviado = msg.tipo === 'text'
+                  ? (msgFinal.conteudo ?? '')
+                  : msg.tipo === 'template'
+                    ? `[template: ${msg.template_name}]`
+                    : `[${msg.tipo}]`
+              }
             } catch (err) {
               contatoOk = false
               erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
@@ -595,6 +654,7 @@ export async function POST(req: NextRequest) {
               const msgComVars = preencherVarsTemplate(msg, contato)
               try {
                 await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, msgComVars)
+                if (!primeiroTextoEnviado) primeiroTextoEnviado = `[template: ${msg.template_name}]`
               } catch (err) {
                 contatoOk = false
                 erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
@@ -611,6 +671,7 @@ export async function POST(req: NextRequest) {
                 template_lang: 'pt_BR',
                 template_vars: [(contato.nome || 'Lead') as string, String(c.qs_total ?? 0), (c.pilar_fraco as string) || 'N/A'],
               })
+              if (!primeiroTextoEnviado) primeiroTextoEnviado = `[template: ${templatePadrao}]`
             } catch (err) {
               contatoOk = false
               erros.push(`${contato.telefone} (template): ${err instanceof Error ? err.message : String(err)}`)
@@ -622,10 +683,17 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (contatoOk) enviados++
-      else falhas++
+      if (contatoOk) {
+        enviados++
+        if (primeiroTextoEnviado) {
+          registrosConversa.push({ phone: normalizarTelefone(contato.telefone), mensagem: primeiroTextoEnviado })
+        }
+      } else falhas++
       await new Promise(r => setTimeout(r, 300))
     }
+
+    // Salva mensagens enviadas no histórico de conversa dos leads
+    void salvarDisparoNaConversa(db, registrosConversa)
 
     // Registra disparo
     const resumo = mensagens.map(m => m.tipo === 'template' ? `template:${m.template_name}` : m.tipo).join(' + ')

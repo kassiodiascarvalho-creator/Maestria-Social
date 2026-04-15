@@ -32,6 +32,20 @@ export default async function LeadsPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any;
 
+  // Busca origens distintas para o dropdown
+  const { data: origensRaw } = await supabase
+    .from("leads")
+    .select("origem")
+    .not("origem", "is", null)
+    .order("origem")
+  const origensUnicas: string[] = [
+    ...new Set(
+      ((origensRaw ?? []) as Array<{ origem: string }>)
+        .map(o => o.origem)
+        .filter(Boolean)
+    ),
+  ]
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase
     .from("leads")
@@ -69,7 +83,12 @@ export default async function LeadsPage({
         {/* Filtros */}
         <form className="filters" method="GET">
           <input className="filter-input" name="q" defaultValue={params.q} placeholder="Buscar por nome…" />
-          <input className="filter-input filter-input-sm" name="origem" defaultValue={params.origem} placeholder="Origem…" />
+          <select className="filter-select" name="origem" defaultValue={params.origem ?? ""}>
+            <option value="">Todas as origens</option>
+            {origensUnicas.map(o => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
           <select className="filter-select" name="status" defaultValue={params.status ?? ""}>
             <option value="">Todos os status</option>
             <option value="quente">🔴 Quente</option>
