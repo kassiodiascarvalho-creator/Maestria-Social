@@ -11,12 +11,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const supabase = createAdminClient();
 
-  const [{ data: lead }, { data: conversas }, { data: qualificacoes }] = await Promise.all([
-    supabase.from("leads").select("*").eq("id", id).single(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any
+  const [{ data: leadRaw }, { data: conversas }, { data: qualificacoes }] = await Promise.all([
+    db.from("leads").select("*").eq("id", id).single(),
     supabase.from("conversas").select("*").eq("lead_id", id).order("criado_em", { ascending: true }),
     supabase.from("qualificacoes").select("*").eq("lead_id", id).order("criado_em", { ascending: true }),
   ]);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lead = leadRaw as any
   if (!lead) notFound();
 
   const pilares = [

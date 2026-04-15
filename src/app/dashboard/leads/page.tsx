@@ -29,9 +29,11 @@ export default async function LeadsPage({
   searchParams: Promise<{ status?: string; pilar?: string; nivel?: string; renda?: string; q?: string; etiqueta?: string; origem?: string }>
 }) {
   const params = await searchParams;
-  const supabase = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any;
 
-  let query = supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
     .from("leads")
     .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,renda_mensal,criado_em,etiqueta,origem")
     .order("criado_em", { ascending: false });
