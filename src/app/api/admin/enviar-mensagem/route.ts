@@ -87,6 +87,15 @@ export async function POST(req: NextRequest) {
 
     await supabase.from('conversas').insert({ lead_id: leadId, role: 'assistant', mensagem: mensagemSalva })
 
+    // Registra atividade humana: agente pausa por 5 min
+    await supabase
+      .from('leads')
+      .update({
+        ultima_atividade_humana: new Date().toISOString(),
+        etiqueta: 'humano_atendendo',
+      })
+      .eq('id', leadId)
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[enviar-mensagem]', err)

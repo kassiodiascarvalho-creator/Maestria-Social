@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import ChatInput from "./ChatInput";
+import EtiquetaSelector from "./EtiquetaSelector";
 
 const STATUS_COLOR: Record<string, string> = { quente: "#e07070", morno: "#d4a055", frio: "#7a9ec0" };
 const STATUS_EMOJI: Record<string, string> = { quente: "🔴", morno: "🟡", frio: "🔵" };
@@ -53,6 +54,19 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   <span className="lead-contact-sep">·</span>
                   <span className="lead-contact-item lead-renda">{lead.renda_mensal}</span>
                 </>}
+              </div>
+
+              {/* Origem + Etiqueta */}
+              <div className="lead-meta-row">
+                {lead.origem && (
+                  <span className="lead-origem" title="Lista de disparo de origem">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }}>
+                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8a19.79 19.79 0 01-3.07-8.63A2 2 0 012 .18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/>
+                    </svg>
+                    {lead.origem}
+                  </span>
+                )}
+                <EtiquetaSelector leadId={id} etiquetaAtual={lead.etiqueta ?? null} />
               </div>
             </div>
           </div>
@@ -149,17 +163,40 @@ const css = `
   .lead-page{padding:40px;}
   .back-link{font-size:13px;color:#7a6e5e;text-decoration:none;display:inline-block;margin-bottom:24px;transition:color .15s;}
   .back-link:hover{color:#c2904d;}
-  .lead-header{display:flex;align-items:center;gap:20px;margin-bottom:36px;flex-wrap:wrap;}
+  .lead-header{display:flex;align-items:flex-start;gap:20px;margin-bottom:36px;flex-wrap:wrap;}
   .lead-avatar-lg{width:56px;height:56px;border-radius:50%;background:rgba(194,144,77,.15);border:1px solid rgba(194,144,77,.25);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#c2904d;flex-shrink:0;}
-  .lead-identity{display:flex;align-items:center;gap:16px;flex:1;}
+  .lead-identity{display:flex;align-items:flex-start;gap:16px;flex:1;}
   .lead-name{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:700;color:#fff9e6;}
-  .lead-contact{font-size:13px;color:#7a6e5e;margin-top:4px;}
-  .lead-status{font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:capitalize;}
+  .lead-status{font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:capitalize;margin-top:6px;}
   .lead-contact-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px 0;margin-top:4px;}
   .lead-contact-item{font-size:13px;color:#7a6e5e;}
   .lead-contact-sep{font-size:13px;color:#4a3e30;margin:0 6px;}
   .lead-instagram{color:#9b8ec4;}
   .lead-renda{color:#7a9e7a;}
+
+  /* Origem + Etiqueta */
+  .lead-meta-row{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;}
+  .lead-origem{font-size:12px;color:#9b8ec4;background:rgba(155,142,196,.08);border:1px solid rgba(155,142,196,.15);border-radius:6px;padding:3px 8px;}
+
+  /* EtiquetaSelector */
+  .etq-wrap{position:relative;display:inline-block;}
+  .etq-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:4px 10px;border-radius:6px;border:1px solid;background:transparent;cursor:pointer;font-family:inherit;transition:opacity .15s;}
+  .etq-badge:hover{opacity:.8;}
+  .etq-caret{font-size:10px;opacity:.6;}
+  .etq-dropdown{position:absolute;top:calc(100% + 6px);left:0;z-index:50;background:#1a1410;border:1px solid #2a1f18;border-radius:12px;padding:8px;min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:4px;}
+  .etq-option{display:block;width:100%;text-align:left;background:transparent;border:none;padding:8px 10px;font-size:13px;font-weight:600;border-radius:8px;cursor:pointer;font-family:inherit;transition:background .15s;}
+  .etq-option:hover:not(:disabled){background:rgba(255,255,255,.04);}
+  .etq-option-ativa{background:rgba(255,255,255,.06);}
+  .etq-option:disabled{opacity:.4;cursor:default;}
+  .etq-custom-row{display:flex;gap:6px;margin-top:4px;border-top:1px solid #2a1f18;padding-top:8px;}
+  .etq-custom-input{flex:1;background:#13100c;border:1px solid #2a1f18;border-radius:8px;padding:7px 10px;font-size:13px;color:#fff9e6;font-family:inherit;outline:none;}
+  .etq-custom-input::placeholder{color:#4a3e30;}
+  .etq-custom-input:focus{border-color:rgba(194,144,77,.35);}
+  .etq-custom-btn{background:#c2904d;border:none;border-radius:8px;color:#0e0f09;font-size:14px;font-weight:700;width:32px;cursor:pointer;flex-shrink:0;transition:filter .15s;}
+  .etq-custom-btn:hover:not(:disabled){filter:brightness(1.1);}
+  .etq-custom-btn:disabled{opacity:.4;cursor:default;}
+  .etq-erro{font-size:12px;color:#e07070;padding:4px 6px;}
+
   .lead-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   .lead-col{display:flex;flex-direction:column;gap:20px;}
   .lead-card{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:24px;}
@@ -247,5 +284,6 @@ const css = `
     .lead-page{padding:20px;}
     .lead-contact-row{flex-direction:column;align-items:flex-start;gap:3px;}
     .lead-contact-sep{display:none;}
+    .etq-dropdown{left:auto;right:0;}
   }
 `;

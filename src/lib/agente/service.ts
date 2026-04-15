@@ -160,6 +160,20 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
+  // Regra de pausa: se um humano enviou mensagem nos últimos 5 minutos, o agente não responde
+  if (lead.ultima_atividade_humana) {
+    const diffMs = Date.now() - new Date(lead.ultima_atividade_humana as string).getTime()
+    const CINCO_MIN = 5 * 60 * 1000
+    if (diffMs < CINCO_MIN) {
+      return { ok: true, resposta: '' } // agente em pausa — humano está atendendo
+    }
+    // Pausa expirou: retorna etiqueta para 'ia_atendendo'
+    await supabase
+      .from('leads')
+      .update({ ultima_atividade_humana: null, etiqueta: 'ia_atendendo' })
+      .eq('id', leadId)
+  }
+
   // Se veio de agente DB: usa config dele; senão usa config global (compat)
   if (agenteDB) {
     if (!agenteDB.ativo) return { ok: true, resposta: '' }

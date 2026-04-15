@@ -250,6 +250,46 @@ function preencherVarsTemplate(
   return { ...msg, template_vars: vars }
 }
 
+// Sincroniza todos os contatos de uma lista como leads (upsert por whatsapp).
+// Novos contatos recebem status 'frio' e etiqueta 'ia_atendendo'.
+// Leads já existentes têm origem atualizada se ainda estava vazia.
+async function sincronizarContatosComoLeads(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  listaId: string,
+  listaNome: string,
+): Promise<void> {
+  try {
+    const { data: contatos } = await db
+      .from('wpp_contatos')
+      .select('nome, telefone')
+      .eq('lista_id', listaId)
+
+    if (!contatos?.length) return
+
+    for (const c of contatos as Array<{ nome: string | null; telefone: string }>) {
+      const telefone = normalizarTelefone(c.telefone)
+      const nome = c.nome?.trim() || 'Contato'
+
+      // Upsert: insere se não existir (conflict em whatsapp).
+      // ignoreDuplicates:false garante que origem seja atualizada se já existir sem ela.
+      await db.from('leads').upsert(
+        {
+          nome,
+          email: `${telefone}@disparo.local`,
+          whatsapp: telefone,
+          origem: listaNome,
+          etiqueta: 'ia_atendendo',
+          status_lead: 'frio',
+        },
+        { onConflict: 'whatsapp', ignoreDuplicates: true }
+      )
+    }
+  } catch (err) {
+    console.error('[disparo] Erro ao sincronizar leads:', err)
+  }
+}
+
 // POST — dispara sequência de mensagens para contatos filtrados de uma lista
 // body: { lista_id, mensagens: MensagemItem[], filtros?: Filtros, api_provider?: 'meta' | 'zapi' }
 export async function POST(req: NextRequest) {
@@ -319,6 +359,9 @@ export async function POST(req: NextRequest) {
       .single()
 
     const isLeads = listaInfo?.is_leads === true
+
+    // Sincroniza todos os contatos da lista como leads (upsert silencioso)
+    void sincronizarContatosComoLeads(db, lista_id, listaInfo?.nome ?? '')
 
     // Busca template padrão para contatos fora da janela 24h
     const templatePadrao = await getConfig('META_TEMPLATE_NAME')
