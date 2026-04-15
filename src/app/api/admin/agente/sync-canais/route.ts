@@ -11,10 +11,10 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const canaisRaw = await getConfig('AGENT_CANAIS')
   let canais: Array<{ provider: string; id: string }> = []
   try {
-    if (canaisRaw) canais = JSON.parse(canaisRaw)
+    const body = await req.json()
+    if (Array.isArray(body.canais)) canais = body.canais
   } catch { /* ignora */ }
 
   const baileysInstances = canais

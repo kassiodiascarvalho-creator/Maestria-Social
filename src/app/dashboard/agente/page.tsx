@@ -123,7 +123,11 @@ export default function AgentePage() {
         fetch("/api/admin/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "AGENT_CANAIS", value: JSON.stringify(canaisSelecionados) }) }),
       ]);
       // Sincroniza instâncias selecionadas com o servidor Baileys
-      await fetch("/api/admin/agente/sync-canais", { method: "POST" }).catch(() => {});
+      await fetch("/api/admin/agente/sync-canais", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ canais: canaisSelecionados }),
+      }).catch(() => {});
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch {
