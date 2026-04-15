@@ -161,8 +161,10 @@ export async function responderAgenteParaLead(
   }
 
   // Regra de pausa: se um humano enviou mensagem nos últimos 5 minutos, o agente não responde
-  if (lead.ultima_atividade_humana) {
-    const diffMs = Date.now() - new Date(lead.ultima_atividade_humana as string).getTime()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leadAny = lead as any
+  if (leadAny.ultima_atividade_humana) {
+    const diffMs = Date.now() - new Date(leadAny.ultima_atividade_humana as string).getTime()
     const CINCO_MIN = 5 * 60 * 1000
     if (diffMs < CINCO_MIN) {
       return { ok: true, resposta: '' } // agente em pausa — humano está atendendo
