@@ -1,5 +1,16 @@
 {
   "instances": [
-    { "id": "1", "label": "Número Principal" }
-  ]
+    {
+      "id": "1",
+      "label": "Número Principal",
+      "phone": "553384522635"
+    },
+    {
+      "id": "2",
+      "label": "Kássio Carvalho SP",
+      "phone": "5511917110736"
+    }
+  ],
+  "agentWebhookSecret": "23926647302eefddb0dc6a224c6b1ac0f48a81ddd5f477ee",
+  "agentInstances": []
 }

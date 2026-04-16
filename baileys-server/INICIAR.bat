@@ -30,4 +30,4 @@ echo   - Ngrok: tunel publico ativo
 echo.
 echo  Acesse o Maestria Social para ver o QR code na tela!
 echo.
-timeout /t 6 /nobreak >nul
+pause
