@@ -368,7 +368,7 @@ const css = `
   /* Corpo */
   .cal-grade-body{display:grid;grid-template-columns:52px repeat(7,1fr);overflow-y:auto;max-height:600px;}
   .cal-hora-col{border-right:1px solid #2a1f18;}
-  .cal-hora-cell{font-size:11px;color:#2a1f18;text-align:right;padding-right:8px;padding-top:4px;border-bottom:1px solid #1e1a14;box-sizing:border-box;}
+  .cal-hora-cell{font-size:11px;color:#7a6e5e;text-align:right;padding-right:8px;padding-top:4px;border-bottom:1px solid #1e1a14;box-sizing:border-box;font-family:monospace;letter-spacing:.3px;}
   .cal-dia-col{border-right:1px solid #2a1f18;position:relative;box-sizing:border-box;}
   .cal-dia-col:last-child{border-right:none;}
   .cal-linha-hora{position:absolute;left:0;right:0;height:1px;background:#1e1a14;}
