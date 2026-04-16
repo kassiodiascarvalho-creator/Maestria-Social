@@ -58,6 +58,81 @@ async function enviarWhatsApp(numero: string, texto: string, instanciaId: string
   }
 }
 
+/**
+ * Descobre automaticamente qual instância Baileys usar para mandar a confirmação.
+ *
+ * Ordem de prioridade:
+ * 1. Agente que já conversou com esse telefone (via conversas.agente_id → agentes.canais)
+ * 2. Primeira instância Baileys conectada no servidor
+ * 3. null (pula o envio)
+ */
+async function descobrirInstanciaBaileys(telefone: string): Promise<string | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+
+  // Variações do telefone (com e sem código de país, 9 dígito, etc.)
+  const tel = telefone.replace(/\D/g, '')
+  const variacoes = Array.from(new Set([
+    tel,
+    tel.startsWith('55') ? tel.slice(2) : `55${tel}`,
+    tel.length === 11 ? `55${tel}` : tel,
+    tel.length === 13 && tel.startsWith('55') ? tel.slice(2) : tel,
+    // com 9 extra
+    tel.length === 12 && tel.startsWith('55') ? `${tel.slice(0, 4)}9${tel.slice(4)}` : tel,
+    // sem 9 extra
+    tel.length === 13 && tel.startsWith('55') && tel[4] === '9' ? `${tel.slice(0, 4)}${tel.slice(5)}` : tel,
+  ]))
+
+  // 1. Achar lead pelo telefone em wpp_contatos
+  const { data: contatos } = await admin
+    .from('wpp_contatos')
+    .select('lead_id')
+    .in('telefone', variacoes)
+    .not('lead_id', 'is', null)
+    .limit(1)
+
+  const leadId: string | null = contatos?.[0]?.lead_id ?? null
+
+  if (leadId) {
+    // 2. Pegar conversa mais recente com agente_id preenchido
+    const { data: conversa } = await admin
+      .from('conversas')
+      .select('agente_id')
+      .eq('lead_id', leadId)
+      .not('agente_id', 'is', null)
+      .order('criado_em', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (conversa?.agente_id) {
+      // 3. Pegar canais do agente → achar Baileys
+      const { data: agente } = await admin
+        .from('agentes')
+        .select('canais')
+        .eq('id', conversa.agente_id)
+        .single()
+
+      const canais: Array<{ provider: string; id: string }> = agente?.canais ?? []
+      const baileysCan = canais.find(c => c.provider === 'baileys')
+      if (baileysCan?.id) return baileysCan.id
+    }
+  }
+
+  // Fallback: primeira instância conectada no servidor Baileys
+  try {
+    const res = await fetch(`${BAILEYS_SERVER_URL}/instancias`)
+    if (res.ok) {
+      const lista: Array<{ id: string; status: string }> = await res.json()
+      const conectada = lista.find(i => i.status === 'conectado')
+      if (conectada) return conectada.id
+    }
+  } catch {
+    // servidor offline
+  }
+
+  return null
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { pessoaId, data, horario, duracao, campos } = body
@@ -83,7 +158,7 @@ export async function POST(req: NextRequest) {
   const isoFim = dtFim.toISOString()
   const horaFimStr = `${String(dtFim.getHours()).padStart(2, '0')}:${String(dtFim.getMinutes()).padStart(2, '0')}`
 
-  // Extrair dados do cliente dos campos preenchidos
+  // Extrair dados do lead dos campos preenchidos
   const nomeCliente: string = campos?.['Nome completo'] ?? campos?.['nome'] ?? campos?.['Nome'] ?? 'Cliente'
   const emailCliente: string | null = campos?.['E-mail'] ?? campos?.['email'] ?? null
   const whatsCliente: string | null = campos?.['WhatsApp'] ?? campos?.['whatsapp'] ?? null
@@ -107,13 +182,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Salvar agendamento com colunas corretas da tabela
+  // Salvar agendamento
   const { data: agendamento, error: aErr } = await admin
     .from('agenda_agendamentos')
     .insert({
       pessoa_id: pessoaId,
       data,
-      horario: horario,
+      horario,
       horario_fim: horaFimStr,
       nome_lead: nomeCliente,
       email_lead: emailCliente ?? '',
@@ -129,16 +204,18 @@ export async function POST(req: NextRequest) {
 
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
 
-  // Enviar WhatsApp de confirmação
-  const sessaoBaileysPadrao = process.env.BAILEYS_SESSAO_ID
-  if (whatsCliente && sessaoBaileysPadrao) {
-    const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {
-      weekday: 'long', day: 'numeric', month: 'long',
-    })
-    let mensagem = `Olá, ${nomeCliente}! ✅ Seu agendamento com *${pessoa.nome}* está confirmado!\n\n📅 *${dataFormatada}* às *${horario}*\n⏱ Duração: ${duracao} minutos`
-    if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
-    mensagem += '\n\nAté lá! 😊'
-    await enviarWhatsApp(whatsCliente, mensagem, sessaoBaileysPadrao)
+  // Enviar WhatsApp de confirmação para o lead — instância descoberta automaticamente
+  if (whatsCliente) {
+    const instanciaId = await descobrirInstanciaBaileys(whatsCliente)
+    if (instanciaId) {
+      const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {
+        weekday: 'long', day: 'numeric', month: 'long',
+      })
+      let mensagem = `Olá, ${nomeCliente}! ✅ Seu agendamento com *${pessoa.nome}* está confirmado!\n\n📅 *${dataFormatada}* às *${horario}*\n⏱ Duração: ${duracao} minutos`
+      if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
+      mensagem += '\n\nAté lá! 😊'
+      await enviarWhatsApp(whatsCliente, mensagem, instanciaId)
+    }
   }
 
   return NextResponse.json({ ok: true, agendamento }, { status: 201 })
