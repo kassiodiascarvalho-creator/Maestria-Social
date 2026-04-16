@@ -204,6 +204,15 @@ export async function POST(req: NextRequest) {
 
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
 
+  // Bloquear o slot agendado para que não apareça disponível para outros leads
+  await admin.from('agenda_excecoes').insert({
+    pessoa_id: pessoaId,
+    data,
+    tipo: 'bloqueado',
+    inicio: horario,
+    fim: horaFimStr,
+  })
+
   // Enviar WhatsApp de confirmação para o lead — instância descoberta automaticamente
   if (whatsCliente) {
     const instanciaId = await descobrirInstanciaBaileys(whatsCliente)

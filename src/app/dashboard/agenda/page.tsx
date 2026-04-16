@@ -31,7 +31,10 @@ export default async function AgendaPage() {
             <h1 className="ag-titulo">Agenda</h1>
             <p className="ag-sub">Gerencie mentores, coaches e colaboradores disponíveis para agendamento</p>
           </div>
-          <Link href="/dashboard/agenda/nova" className="ag-novo-btn">+ Nova pessoa</Link>
+          <div className="ag-header-btns">
+            <Link href="/dashboard/agenda/calendario" className="ag-cal-btn">◷ Ver Calendário</Link>
+            <Link href="/dashboard/agenda/nova" className="ag-novo-btn">+ Nova pessoa</Link>
+          </div>
         </div>
 
         {lista.length === 0 ? (
@@ -92,6 +95,9 @@ const css = `
   .ag-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:32px;flex-wrap:wrap;}
   .ag-titulo{font-family:'Cormorant Garamond',Georgia,serif;font-size:32px;font-weight:700;color:#fff9e6;margin-bottom:4px;}
   .ag-sub{font-size:13px;color:#4a3e30;line-height:1.5;}
+  .ag-header-btns{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .ag-cal-btn{background:#1a1410;border:1px solid #2a1f18;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:600;color:#c2904d;text-decoration:none;display:inline-block;transition:all .2s;white-space:nowrap;}
+  .ag-cal-btn:hover{border-color:rgba(194,144,77,.4);background:#1e1812;}
   .ag-novo-btn{background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;transition:all .2s;white-space:nowrap;}
   .ag-novo-btn:hover{filter:brightness(1.08);transform:translateY(-1px);}
   .ag-vazio{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:80px 24px;text-align:center;}
