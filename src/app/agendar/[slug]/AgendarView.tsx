@@ -58,6 +58,17 @@ function diasDoMes(ano: number, mes: number): (Date | null)[] {
   return dias
 }
 
+function getPlaceholder(nome: string, tipo: string): string {
+  const n = nome.toLowerCase()
+  if (tipo === 'email' || n.includes('email') || n.includes('e-mail')) return 'Ex: joao@email.com'
+  if (tipo === 'tel' || n.includes('whatsapp') || n.includes('telefone') || n.includes('celular')) return 'Ex: 11 99999-9999'
+  if (n.includes('nome')) return 'Ex: João Silva'
+  if (tipo === 'number' || n.includes('número') || n.includes('numero')) return 'Ex: 30'
+  if (tipo === 'date') return ''
+  if (tipo === 'textarea') return 'Escreva aqui…'
+  return 'Digite aqui…'
+}
+
 export default function AgendarView({ pessoa, horarios, excecoes, campos }: {
   pessoa: Pessoa
   horarios: Horario[]
@@ -253,6 +264,7 @@ export default function AgendarView({ pessoa, horarios, excecoes, campos }: {
                   {c.tipo === 'textarea' ? (
                     <textarea
                       className="ag-campo-input ag-campo-textarea"
+                      placeholder={getPlaceholder(c.nome, c.tipo)}
                       value={form[c.nome] ?? ''}
                       onChange={e => setForm(f => ({ ...f, [c.nome]: e.target.value }))}
                       required={c.obrigatorio}
@@ -262,6 +274,7 @@ export default function AgendarView({ pessoa, horarios, excecoes, campos }: {
                     <input
                       className="ag-campo-input"
                       type={c.tipo}
+                      placeholder={getPlaceholder(c.nome, c.tipo)}
                       value={form[c.nome] ?? ''}
                       onChange={e => setForm(f => ({ ...f, [c.nome]: e.target.value }))}
                       required={c.obrigatorio}

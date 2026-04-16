@@ -27,6 +27,7 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
   const [posY, setPosY] = useState(pessoa?.foto_pos_y ?? 0)
   const [scale, setScale] = useState(pessoa?.foto_scale ?? 1)
   const [uploading, setUploading] = useState(false)
+  const [fotoVersion, setFotoVersion] = useState(Date.now())
   const [dragging, setDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0, posX: 0, posY: 0 })
 
@@ -88,6 +89,7 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
     const data = await res.json() as { url?: string; error?: string }
     if (!res.ok) { setErro(data.error ?? 'Erro ao enviar foto'); setUploading(false); return }
     setFotoUrl(data.url!)
+    setFotoVersion(Date.now())
     setPosX(0); setPosY(0); setScale(1)
     setUploading(false)
   }
@@ -182,7 +184,7 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
                 <div className="ed-foto-circle">
                   {fotoUrl ? (
                     <img
-                      src={fotoUrl}
+                      src={`${fotoUrl}?v=${fotoVersion}`}
                       alt="foto"
                       draggable={false}
                       onMouseDown={onMouseDown}

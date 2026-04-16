@@ -15,7 +15,14 @@ function toDateStr(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
-function gerarSlots(date: Date, horarios: Horario[], excecoes: Excecao[], duracaoMin: number): string[] {
+function addMin(time: string, mins: number): string {
+  const [h, m] = time.split(':').map(Number)
+  const total = h * 60 + m + mins
+  return `${String(Math.floor(total / 60) % 24).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`
+}
+
+// Gera todos os slots possíveis do dia (sem filtrar bloqueios individuais)
+function gerarTodosSlots(date: Date, horarios: Horario[], excecoes: Excecao[], duracaoMin: number): string[] {
   const dataStr = toDateStr(date)
   const diaSemana = date.getDay()
 
@@ -23,13 +30,9 @@ function gerarSlots(date: Date, horarios: Horario[], excecoes: Excecao[], duraca
   if (bloqueioTotal) return []
 
   const periodos: Array<{ inicio: string; fim: string }> = []
-
-  horarios
-    .filter(h => h.dia_semana === diaSemana && h.ativo)
+  horarios.filter(h => h.dia_semana === diaSemana && h.ativo)
     .forEach(h => periodos.push({ inicio: h.inicio.slice(0, 5), fim: h.fim.slice(0, 5) }))
-
-  excecoes
-    .filter(e => e.data === dataStr && e.tipo === 'extra' && e.inicio && e.fim)
+  excecoes.filter(e => e.data === dataStr && e.tipo === 'extra' && e.inicio && e.fim)
     .forEach(e => periodos.push({ inicio: e.inicio!.slice(0, 5), fim: e.fim!.slice(0, 5) }))
 
   const slots: string[] = []
@@ -39,20 +42,22 @@ function gerarSlots(date: Date, horarios: Horario[], excecoes: Excecao[], duraca
     let cur = hI * 60 + mI
     const end = hF * 60 + mF
     while (cur + duracaoMin <= end) {
-      slots.push(`${String(Math.floor(cur / 60)).padStart(2, '0')}:${String(cur % 60).padStart(2, '0')}`)
+      slots.push(`${String(Math.floor(cur / 60)).padStart(2,'0')}:${String(cur % 60).padStart(2,'0')}`)
       cur += duracaoMin
     }
   }
   return slots.sort()
 }
 
-function temDisponibilidade(date: Date, horarios: Horario[], excecoes: Excecao[]): boolean {
+function temDisponibilidade(date: Date, horarios: Horario[], excecoes: Excecao[], duracao: number): boolean {
   const dataStr = toDateStr(date)
   const bloqueado = excecoes.some(e => e.data === dataStr && e.tipo === 'bloqueado' && !e.inicio)
   if (bloqueado) return false
-  const extra = excecoes.some(e => e.data === dataStr && e.tipo === 'extra' && e.inicio)
-  if (extra) return true
-  return horarios.some(h => h.dia_semana === date.getDay() && h.ativo)
+  const todos = gerarTodosSlots(date, horarios, excecoes, duracao)
+  const bloqueadosIndividuais = new Set(
+    excecoes.filter(e => e.data === dataStr && e.tipo === 'bloqueado' && e.inicio).map(e => e.inicio!.slice(0,5))
+  )
+  return todos.some(s => !bloqueadosIndividuais.has(s))
 }
 
 export default function DisponibilidadeEditor({ pessoa, horariosIniciais, excecoesIniciais }: {
@@ -68,8 +73,6 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
   const [dataSel, setDataSel] = useState<Date>(hoje)
   const [excecoes, setExcecoes] = useState<Excecao[]>(excecoesIniciais)
   const [loading, setLoading] = useState(false)
-
-  // Extra hours form
   const [mostrarExtra, setMostrarExtra] = useState(false)
   const [extraInicio, setExtraInicio] = useState('08:00')
   const [extraFim, setExtraFim] = useState('12:00')
@@ -77,10 +80,14 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
   const dataSelStr = toDateStr(dataSel)
   const bloqueioTotal = excecoes.some(e => e.data === dataSelStr && e.tipo === 'bloqueado' && !e.inicio)
   const excExtra = excecoes.filter(e => e.data === dataSelStr && e.tipo === 'extra')
-  const slots = gerarSlots(dataSel, horariosIniciais, excecoes, pessoa.duracao_slot)
-
-  // Dias ativos na semana com base nos horários
   const diasAtivos = new Set(horariosIniciais.map(h => h.dia_semana))
+
+  // Slots: todos possíveis do dia
+  const todosSlots = gerarTodosSlots(dataSel, horariosIniciais, excecoes, pessoa.duracao_slot)
+  // Quais estão individualmente bloqueados
+  const bloqueadosSet = new Set(
+    excecoes.filter(e => e.data === dataSelStr && e.tipo === 'bloqueado' && e.inicio).map(e => e.inicio!.slice(0,5))
+  )
 
   const diasDoMes = useCallback(() => {
     const ano = mes.getFullYear()
@@ -96,13 +103,15 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
   async function bloquearDia() {
     setLoading(true)
     const res = await fetch('/api/admin/agenda/excecoes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pessoaId: pessoa.id, data: dataSelStr, tipo: 'bloqueado' }),
     })
     if (res.ok) {
       const nova = await res.json() as Excecao
-      setExcecoes(prev => [...prev, nova])
+      // Remove bloqueios individuais do dia (dia inteiro substitui)
+      const idsBloqInd = excecoes.filter(e => e.data === dataSelStr && e.tipo === 'bloqueado' && e.inicio).map(e => e.id)
+      for (const id of idsBloqInd) await fetch(`/api/admin/agenda/excecoes?id=${id}`, { method: 'DELETE' })
+      setExcecoes(prev => [...prev.filter(e => !(e.data === dataSelStr && e.tipo === 'bloqueado' && e.inicio)), nova])
     }
     setLoading(false)
   }
@@ -117,11 +126,30 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
     setLoading(false)
   }
 
+  async function toggleSlot(slot: string) {
+    const excBloq = excecoes.find(e => e.data === dataSelStr && e.tipo === 'bloqueado' && e.inicio?.slice(0,5) === slot)
+    if (excBloq) {
+      // Desbloquear slot
+      await fetch(`/api/admin/agenda/excecoes?id=${excBloq.id}`, { method: 'DELETE' })
+      setExcecoes(prev => prev.filter(e => e.id !== excBloq.id))
+    } else {
+      // Bloquear slot
+      const fim = addMin(slot, pessoa.duracao_slot)
+      const res = await fetch('/api/admin/agenda/excecoes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pessoaId: pessoa.id, data: dataSelStr, tipo: 'bloqueado', inicio: slot, fim }),
+      })
+      if (res.ok) {
+        const nova = await res.json() as Excecao
+        setExcecoes(prev => [...prev, nova])
+      }
+    }
+  }
+
   async function adicionarExtra() {
     setLoading(true)
     const res = await fetch('/api/admin/agenda/excecoes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pessoaId: pessoa.id, data: dataSelStr, tipo: 'extra', inicio: extraInicio, fim: extraFim }),
     })
     if (res.ok) {
@@ -138,32 +166,31 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
   }
 
   const cells = diasDoMes()
-
-  const manha = slots.filter(s => parseInt(s.split(':')[0]) < 12)
-  const tarde = slots.filter(s => parseInt(s.split(':')[0]) >= 12)
+  const manha = todosSlots.filter(s => parseInt(s.split(':')[0]) < 12)
+  const tarde = todosSlots.filter(s => parseInt(s.split(':')[0]) >= 12)
+  const disponiveis = todosSlots.filter(s => !bloqueadosSet.has(s)).length
 
   return (
     <>
       <style>{css}</style>
       <div className="dv-root">
-        {/* Header */}
         <div className="dv-header">
           <button className="dv-back" onClick={() => router.push(`/dashboard/agenda/${pessoa.id}`)}>← Voltar</button>
           <div>
             <h1 className="dv-titulo">Disponibilidade</h1>
-            <p className="dv-sub">Clique num dia para ver os slots • Bloqueie dias ou adicione horários extras</p>
+            <p className="dv-sub">Clique num slot para bloquear/desbloquear • Verde = disponível • Vermelho = bloqueado</p>
           </div>
         </div>
 
         <div className="dv-body">
-          {/* Painel esquerdo — perfil */}
+          {/* Perfil */}
           <aside className="dv-perfil">
             <div className="dv-foto-circle">
               {pessoa.foto_url ? (
                 <img src={pessoa.foto_url} alt={pessoa.nome} style={{
-                  position: 'absolute', left: '50%', top: '50%',
-                  transform: `translate(calc(-50% + ${pessoa.foto_pos_x}px), calc(-50% + ${pessoa.foto_pos_y}px)) scale(${pessoa.foto_scale})`,
-                  width: '200%', height: '200%', objectFit: 'cover',
+                  position:'absolute',left:'50%',top:'50%',
+                  transform:`translate(calc(-50% + ${pessoa.foto_pos_x}px), calc(-50% + ${pessoa.foto_pos_y}px)) scale(${pessoa.foto_scale})`,
+                  width:'200%',height:'200%',objectFit:'cover',
                 }} />
               ) : (
                 <span className="dv-foto-inicial">{pessoa.nome.charAt(0).toUpperCase()}</span>
@@ -184,23 +211,22 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
           {/* Calendário */}
           <div className="dv-cal-wrap">
             <div className="dv-cal-nav">
-              <button className="dv-nav-btn" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button>
+              <button className="dv-nav-btn" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth()-1, 1))}>‹</button>
               <span className="dv-cal-mes">{MESES[mes.getMonth()]} {mes.getFullYear()}</span>
-              <button className="dv-nav-btn" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button>
+              <button className="dv-nav-btn" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth()+1, 1))}>›</button>
             </div>
             <div className="dv-cal-grid">
               {DIAS_SEMANA.map(d => <div key={d} className="dv-cal-head">{d}</div>)}
               {cells.map((date, idx) => {
-                if (!date) return <div key={`empty-${idx}`} className="dv-cal-empty" />
+                if (!date) return <div key={`e${idx}`} className="dv-cal-empty" />
                 const str = toDateStr(date)
                 const isSel = str === dataSelStr
                 const isBloq = excecoes.some(e => e.data === str && e.tipo === 'bloqueado' && !e.inicio)
-                const temDisp = temDisponibilidade(date, horariosIniciais, excecoes)
+                const temDisp = temDisponibilidade(date, horariosIniciais, excecoes, pessoa.duracao_slot)
                 const isHoje = str === toDateStr(hoje)
                 return (
-                  <button
-                    key={str}
-                    className={`dv-cal-day ${isSel ? 'day-sel' : ''} ${isHoje ? 'day-hoje' : ''} ${isBloq ? 'day-bloq' : ''}`}
+                  <button key={str}
+                    className={`dv-cal-day ${isSel?'day-sel':''} ${isHoje?'day-hoje':''} ${isBloq?'day-bloq':''}`}
                     onClick={() => setDataSel(date)}
                   >
                     {date.getDate()}
@@ -212,34 +238,24 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
             </div>
           </div>
 
-          {/* Painel direito — slots */}
+          {/* Painel slots */}
           <div className="dv-slots-panel">
             <div className="dv-slots-header">
               <p className="dv-slots-dia-nome">{DIAS_NOMES[dataSel.getDay()]}</p>
-              <p className="dv-slots-data">
-                {dataSel.getDate()} de {MESES[dataSel.getMonth()]}
-              </p>
+              <p className="dv-slots-data">{dataSel.getDate()} de {MESES[dataSel.getMonth()]}</p>
             </div>
 
-            {/* Ações do dia */}
             <div className="dv-acoes">
               {bloqueioTotal ? (
-                <button className="dv-btn-desbloquear" onClick={desbloquearDia} disabled={loading}>
-                  ✓ Desbloquear dia
-                </button>
+                <button className="dv-btn-desbloquear" onClick={desbloquearDia} disabled={loading}>✓ Desbloquear dia</button>
               ) : (
-                <button className="dv-btn-bloquear" onClick={bloquearDia} disabled={loading}>
-                  ✕ Bloquear dia inteiro
-                </button>
+                <button className="dv-btn-bloquear" onClick={bloquearDia} disabled={loading}>✕ Bloquear dia inteiro</button>
               )}
               {!bloqueioTotal && (
-                <button className="dv-btn-extra" onClick={() => setMostrarExtra(!mostrarExtra)} type="button">
-                  + Horário extra
-                </button>
+                <button className="dv-btn-extra" onClick={() => setMostrarExtra(!mostrarExtra)} type="button">+ Horário extra</button>
               )}
             </div>
 
-            {/* Form horário extra */}
             {mostrarExtra && !bloqueioTotal && (
               <div className="dv-extra-form">
                 <div className="dv-extra-row">
@@ -251,7 +267,6 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
               </div>
             )}
 
-            {/* Extras cadastrados */}
             {excExtra.length > 0 && (
               <div className="dv-extras-lista">
                 {excExtra.map(e => (
@@ -264,18 +279,30 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
               </div>
             )}
 
-            {/* Slots */}
             {bloqueioTotal ? (
               <div className="dv-bloqueado-msg">🔒 Dia bloqueado</div>
-            ) : slots.length === 0 ? (
+            ) : todosSlots.length === 0 ? (
               <div className="dv-sem-slots">Sem disponibilidade neste dia</div>
             ) : (
               <div className="dv-slots-body">
+                <p className="dv-slots-hint">Clique num horário para bloquear ou desbloquear</p>
                 {manha.length > 0 && (
                   <div className="dv-turno">
                     <span className="dv-turno-label">☀ Manhã</span>
                     <div className="dv-slots-grid">
-                      {manha.map(s => <div key={s} className="dv-slot">{s}</div>)}
+                      {manha.map(s => {
+                        const bloq = bloqueadosSet.has(s)
+                        return (
+                          <button key={s}
+                            className={`dv-slot-btn ${bloq ? 'slot-bloq' : 'slot-disp'}`}
+                            onClick={() => toggleSlot(s)}
+                            title={bloq ? 'Clique para desbloquear' : 'Clique para bloquear'}
+                            type="button"
+                          >
+                            {s}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -283,11 +310,23 @@ export default function DisponibilidadeEditor({ pessoa, horariosIniciais, exceco
                   <div className="dv-turno">
                     <span className="dv-turno-label">🌤 Tarde</span>
                     <div className="dv-slots-grid">
-                      {tarde.map(s => <div key={s} className="dv-slot">{s}</div>)}
+                      {tarde.map(s => {
+                        const bloq = bloqueadosSet.has(s)
+                        return (
+                          <button key={s}
+                            className={`dv-slot-btn ${bloq ? 'slot-bloq' : 'slot-disp'}`}
+                            onClick={() => toggleSlot(s)}
+                            title={bloq ? 'Clique para desbloquear' : 'Clique para bloquear'}
+                            type="button"
+                          >
+                            {s}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
-                <p className="dv-slots-count">{slots.length} horário{slots.length !== 1 ? 's' : ''} disponível{slots.length !== 1 ? 'is' : ''}</p>
+                <p className="dv-slots-count">{disponiveis} de {todosSlots.length} horário{todosSlots.length !== 1?'s':''} disponível{disponiveis !== 1?'is':''}</p>
               </div>
             )}
           </div>
@@ -305,8 +344,6 @@ const css = `
   .dv-titulo{font-family:'Cormorant Garamond',Georgia,serif;font-size:24px;font-weight:700;color:#fff9e6;}
   .dv-sub{font-size:12px;color:#4a3e30;margin-top:2px;}
   .dv-body{display:grid;grid-template-columns:220px 1fr 240px;gap:16px;align-items:start;}
-
-  /* Perfil */
   .dv-perfil{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
   .dv-foto-circle{width:80px;height:80px;border-radius:50%;overflow:hidden;position:relative;background:#2a1f18;border:2px solid #3a2f28;flex-shrink:0;}
   .dv-foto-inicial{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;color:#c2904d;font-family:'Cormorant Garamond',Georgia,serif;}
@@ -318,8 +355,6 @@ const css = `
   .dv-dia-chip{padding:3px 8px;border-radius:20px;font-size:11px;background:#111009;border:1px solid #2a1f18;color:#4a3e30;}
   .dv-dia-chip.chip-on{background:rgba(106,204,160,.1);border-color:rgba(106,204,160,.3);color:#6acca0;}
   .dv-perfil-duracao{font-size:12px;color:#7a6e5e;}
-
-  /* Calendário */
   .dv-cal-wrap{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:24px;}
   .dv-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
   .dv-nav-btn{background:none;border:1px solid #2a1f18;border-radius:8px;width:32px;height:32px;color:#7a6e5e;font-size:18px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;}
@@ -336,8 +371,6 @@ const css = `
   .dv-dot{width:5px;height:5px;border-radius:50%;}
   .dot-green{background:#6acca0;}
   .dot-red{background:#e05840;}
-
-  /* Slots panel */
   .dv-slots-panel{background:#1a1410;border:1px solid #2a1f18;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px;}
   .dv-slots-header{border-bottom:1px solid #2a1f18;padding-bottom:12px;}
   .dv-slots-dia-nome{font-size:12px;color:#4a3e30;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
@@ -362,15 +395,16 @@ const css = `
   .dv-extra-del:hover{color:#e07070;}
   .dv-bloqueado-msg{font-size:14px;color:#4a3e30;text-align:center;padding:20px 0;}
   .dv-sem-slots{font-size:13px;color:#4a3e30;text-align:center;padding:20px 0;font-style:italic;}
+  .dv-slots-hint{font-size:11px;color:#4a3e30;text-align:center;}
   .dv-slots-body{display:flex;flex-direction:column;gap:12px;}
   .dv-turno{display:flex;flex-direction:column;gap:8px;}
   .dv-turno-label{font-size:11px;font-weight:700;color:#7a6e5e;text-transform:uppercase;letter-spacing:.5px;}
   .dv-slots-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;}
-  .dv-slot{background:#111009;border:1px solid #2a1f18;border-radius:8px;padding:7px 8px;font-size:12px;color:#6acca0;font-family:monospace;text-align:center;}
+  .dv-slot-btn{border-radius:8px;padding:7px 8px;font-size:12px;font-family:monospace;text-align:center;cursor:pointer;border:1px solid;transition:all .15s;}
+  .slot-disp{background:#111009;border-color:rgba(106,204,160,.3);color:#6acca0;}
+  .slot-disp:hover{background:rgba(224,88,64,.08);border-color:rgba(224,88,64,.4);color:#e07070;}
+  .slot-bloq{background:rgba(224,88,64,.08);border-color:rgba(224,88,64,.3);color:#e07070;text-decoration:line-through;opacity:.7;}
+  .slot-bloq:hover{background:rgba(106,204,160,.08);border-color:rgba(106,204,160,.4);color:#6acca0;text-decoration:none;opacity:1;}
   .dv-slots-count{font-size:11px;color:#4a3e30;text-align:center;padding-top:4px;}
-
-  @media(max-width:900px){
-    .dv-body{grid-template-columns:1fr;}
-    .dv-root{padding:16px;}
-  }
+  @media(max-width:900px){.dv-body{grid-template-columns:1fr;}.dv-root{padding:16px;}}
 `
