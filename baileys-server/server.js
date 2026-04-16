@@ -150,11 +150,12 @@ function criarInstancia(id, label) {
     let texto = msg.body || ''
 
     // Transcreve áudio/voz via Whisper quando não há texto
-    if (!texto && (msg.type === 'ptt' || msg.type === 'audio')) {
+    if (!texto && msg.hasMedia && (msg.type === 'ptt' || msg.type === 'audio')) {
+      console.log(`[${id}] Áudio recebido (${msg.type}), baixando mídia...`)
       try {
         const media = await msg.downloadMedia()
         if (media?.data) {
-          // Deriva a URL base da app a partir do webhook URL
+          console.log(`[${id}] Mídia baixada (${media.mimetype}), enviando para transcrição...`)
           const appUrl = config.agentWebhookUrl.replace(/\/api\/webhook\/baileys.*$/, '')
           const res = await fetch(`${appUrl}/api/admin/transcribe`, {
             method: 'POST',
@@ -168,8 +169,14 @@ function criarInstancia(id, label) {
           if (res.ok) {
             const data = await res.json()
             texto = data.texto || ''
-            if (texto) console.log(`[${id}] Áudio transcrito: "${texto.slice(0, 60)}..."`)
+            if (texto) console.log(`[${id}] ✅ Transcrito: "${texto.slice(0, 80)}"`)
+            else console.warn(`[${id}] ⚠️ Transcrição retornou vazio`)
+          } else {
+            const err = await res.text()
+            console.error(`[${id}] ❌ Erro na transcrição (${res.status}):`, err)
           }
+        } else {
+          console.warn(`[${id}] downloadMedia() não retornou dados`)
         }
       } catch (err) {
         console.error(`[${id}] Erro ao transcrever áudio:`, err.message)
