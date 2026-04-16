@@ -69,7 +69,6 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
 
-  // Carregar pessoa
   const { data: pessoa, error: pErr } = await admin
     .from('agenda_pessoas')
     .select('id, nome, google_refresh_token')
@@ -77,25 +76,21 @@ export async function POST(req: NextRequest) {
     .single()
   if (pErr || !pessoa) return NextResponse.json({ error: 'Pessoa não encontrada' }, { status: 404 })
 
-  // Montar datas ISO
-  const [horaInicio, minInicio] = horario.split(':').map(Number)
+  // Montar datas ISO para o Google Calendar
   const dtInicio = new Date(`${data}T${horario}:00`)
   const dtFim = new Date(dtInicio.getTime() + duracao * 60 * 1000)
-
   const isoInicio = dtInicio.toISOString()
   const isoFim = dtFim.toISOString()
-
   const horaFimStr = `${String(dtFim.getHours()).padStart(2, '0')}:${String(dtFim.getMinutes()).padStart(2, '0')}`
-  void horaInicio; void minInicio
 
-  // Dados do lead
-  const nomeCliente: string = campos?.['nome'] ?? campos?.['Nome'] ?? 'Cliente'
-  const emailCliente: string | null = campos?.['email'] ?? campos?.['E-mail'] ?? campos?.['email'] ?? null
-  const whatsCliente: string | null = campos?.['whatsapp'] ?? campos?.['WhatsApp'] ?? null
+  // Extrair dados do cliente dos campos preenchidos
+  const nomeCliente: string = campos?.['Nome completo'] ?? campos?.['nome'] ?? campos?.['Nome'] ?? 'Cliente'
+  const emailCliente: string | null = campos?.['E-mail'] ?? campos?.['email'] ?? null
+  const whatsCliente: string | null = campos?.['WhatsApp'] ?? campos?.['whatsapp'] ?? null
 
-  // Criar evento no Google Calendar (se tiver token)
+  // Criar evento no Google Calendar (se tiver token configurado)
   let meetLink: string | null = null
-  let eventLink: string | null = null
+  let googleEventLink: string | null = null
   if (pessoa.google_refresh_token) {
     try {
       const result = await criarEventoCalendar(
@@ -106,24 +101,27 @@ export async function POST(req: NextRequest) {
         emailCliente,
       )
       meetLink = result.meetLink
-      eventLink = result.eventLink
+      googleEventLink = result.eventLink
     } catch (e) {
       console.error('Erro ao criar evento Google Calendar:', e)
-      // não bloquear o agendamento
     }
   }
 
-  // Salvar agendamento
+  // Salvar agendamento com colunas corretas da tabela
   const { data: agendamento, error: aErr } = await admin
     .from('agenda_agendamentos')
     .insert({
       pessoa_id: pessoaId,
       data,
-      horario_inicio: horario,
+      horario: horario,
       horario_fim: horaFimStr,
+      nome_lead: nomeCliente,
+      email_lead: emailCliente ?? '',
+      whatsapp_lead: whatsCliente,
+      campos_extras: campos ?? {},
       campos_preenchidos: campos ?? {},
-      google_event_link: eventLink,
       meet_link: meetLink,
+      google_event_link: googleEventLink,
       status: 'confirmado',
     })
     .select()
@@ -131,7 +129,7 @@ export async function POST(req: NextRequest) {
 
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
 
-  // Enviar WhatsApp de confirmação (se tiver número do cliente e sessão Baileys configurada)
+  // Enviar WhatsApp de confirmação
   const sessaoBaileysPadrao = process.env.BAILEYS_SESSAO_ID
   if (whatsCliente && sessaoBaileysPadrao) {
     const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {

@@ -36,16 +36,21 @@ export async function PUT(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
 
-  // Delete and re-insert
-  await admin.from('agenda_campos').delete().eq('pessoa_id', pessoaId)
+  // Remove apenas os campos NÃO fixos — preserva os fixos (nome, email, whatsapp)
+  await admin.from('agenda_campos').delete().eq('pessoa_id', pessoaId).eq('fixo', false)
 
   if (campos.length > 0) {
-    const rows = campos.map((c: { nome: string; tipo: string; obrigatorio: boolean; ordem: number }, idx: number) => ({
+    // Determinar a próxima ordem (após os campos fixos)
+    const { data: fixos } = await admin.from('agenda_campos').select('ordem').eq('pessoa_id', pessoaId).eq('fixo', true).order('ordem', { ascending: false }).limit(1)
+    const baseOrdem = (fixos?.[0]?.ordem ?? -1) + 1
+
+    const rows = campos.map((c: { nome: string; tipo: string; obrigatorio: boolean }, idx: number) => ({
       pessoa_id: pessoaId,
       nome: c.nome,
       tipo: c.tipo ?? 'text',
       obrigatorio: c.obrigatorio ?? false,
-      ordem: c.ordem ?? idx,
+      ordem: baseOrdem + idx,
+      fixo: false,
     }))
     const { error } = await admin.from('agenda_campos').insert(rows)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

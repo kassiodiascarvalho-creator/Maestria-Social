@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-type Campo = { id?: string; nome: string; tipo: string; obrigatorio: boolean; ordem: number }
+type Campo = { id?: string; nome: string; tipo: string; obrigatorio: boolean; ordem: number; fixo?: boolean }
 type Pessoa = { id: string; nome: string; role: string }
 
 const TIPOS = ['text', 'email', 'tel', 'textarea', 'select', 'number', 'date']
@@ -17,38 +17,36 @@ const TIPOS_LABEL: Record<string, string> = {
   date: 'Data',
 }
 
-const CAMPOS_FIXOS = ['nome', 'email', 'whatsapp']
-
 function uid() { return Math.random().toString(36).slice(2) }
-
-function campoParaState(c: Campo & { id?: string }) {
-  return { ...c, _key: uid() }
-}
 
 export default function CamposEditor({ pessoa, camposIniciais }: { pessoa: Pessoa; camposIniciais: Campo[] }) {
   const router = useRouter()
-  const [campos, setCampos] = useState<Array<Campo & { _key: string }>>(() =>
-    camposIniciais.map(campoParaState)
+
+  const fixosIniciais = camposIniciais.filter(c => c.fixo)
+  const extrasIniciais = camposIniciais.filter(c => !c.fixo)
+
+  const [extras, setExtras] = useState<Array<Campo & { _key: string }>>(() =>
+    extrasIniciais.map(c => ({ ...c, _key: uid() }))
   )
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [erro, setErro] = useState('')
 
   function addCampo() {
-    setCampos(prev => [...prev, { _key: uid(), nome: '', tipo: 'text', obrigatorio: false, ordem: prev.length }])
+    setExtras(prev => [...prev, { _key: uid(), nome: '', tipo: 'text', obrigatorio: false, ordem: prev.length, fixo: false }])
   }
 
   function removeCampo(key: string) {
-    setCampos(prev => prev.filter(c => c._key !== key).map((c, i) => ({ ...c, ordem: i })))
+    setExtras(prev => prev.filter(c => c._key !== key).map((c, i) => ({ ...c, ordem: i })))
   }
 
   function updateCampo(key: string, partial: Partial<Campo>) {
-    setCampos(prev => prev.map(c => c._key === key ? { ...c, ...partial } : c))
+    setExtras(prev => prev.map(c => c._key === key ? { ...c, ...partial } : c))
   }
 
   function moverCima(idx: number) {
     if (idx === 0) return
-    setCampos(prev => {
+    setExtras(prev => {
       const arr = [...prev]
       ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
       return arr.map((c, i) => ({ ...c, ordem: i }))
@@ -56,7 +54,7 @@ export default function CamposEditor({ pessoa, camposIniciais }: { pessoa: Pesso
   }
 
   function moverBaixo(idx: number) {
-    setCampos(prev => {
+    setExtras(prev => {
       if (idx >= prev.length - 1) return prev
       const arr = [...prev]
       ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
@@ -64,18 +62,16 @@ export default function CamposEditor({ pessoa, camposIniciais }: { pessoa: Pesso
     })
   }
 
-  const fixos = campos.filter(c => CAMPOS_FIXOS.includes(c.nome.toLowerCase()))
-  const extras = campos.filter(c => !CAMPOS_FIXOS.includes(c.nome.toLowerCase()))
-
   async function salvar() {
     setSaving(true); setErro('')
+
+    // Só salva os extras — os fixos nunca mudam
+    const payload = extras.map(({ _key, id: _id, ...rest }) => rest)
+
     const res = await fetch('/api/admin/agenda/campos', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pessoaId: pessoa.id,
-        campos: campos.map(({ _key, id: _id, ...rest }) => rest),
-      }),
+      body: JSON.stringify({ pessoaId: pessoa.id, campos: payload }),
     })
     if (!res.ok) { setErro('Erro ao salvar'); setSaving(false); return }
     setSaved(true); setTimeout(() => setSaved(false), 2500)
@@ -108,8 +104,11 @@ export default function CamposEditor({ pessoa, camposIniciais }: { pessoa: Pesso
         {/* Campos fixos */}
         <div className="cm-secao">
           <div className="cm-secao-titulo">Campos fixos</div>
-          {fixos.map(c => (
-            <div key={c._key} className="cm-campo-row cm-campo-fixo">
+          {fixosIniciais.length === 0 && (
+            <p className="cm-vazio">Nenhum campo fixo encontrado. Verifique o banco de dados.</p>
+          )}
+          {fixosIniciais.map((c, i) => (
+            <div key={c.id ?? i} className="cm-campo-row cm-campo-fixo">
               <span className="cm-campo-lock">🔒</span>
               <span className="cm-campo-nome-fixo">{c.nome}</span>
               <span className="cm-tipo-badge">{TIPOS_LABEL[c.tipo] ?? c.tipo}</span>
@@ -118,7 +117,7 @@ export default function CamposEditor({ pessoa, camposIniciais }: { pessoa: Pesso
           ))}
         </div>
 
-        {/* Campos extras */}
+        {/* Campos personalizados */}
         <div className="cm-secao">
           <div className="cm-secao-header">
             <div className="cm-secao-titulo">Campos personalizados</div>
@@ -132,12 +131,12 @@ export default function CamposEditor({ pessoa, camposIniciais }: { pessoa: Pesso
               {extras.map((c, idx) => (
                 <div key={c._key} className="cm-campo-row cm-campo-editavel">
                   <div className="cm-ordem-btns">
-                    <button className="cm-ord-btn" onClick={() => moverCima(campos.indexOf(c))} disabled={idx === 0} type="button">▲</button>
-                    <button className="cm-ord-btn" onClick={() => moverBaixo(campos.indexOf(c))} disabled={idx === extras.length - 1} type="button">▼</button>
+                    <button className="cm-ord-btn" onClick={() => moverCima(idx)} disabled={idx === 0} type="button">▲</button>
+                    <button className="cm-ord-btn" onClick={() => moverBaixo(idx)} disabled={idx === extras.length - 1} type="button">▼</button>
                   </div>
                   <input
                     className="cm-nome-input"
-                    placeholder="Nome do campo"
+                    placeholder="Nome do campo (ex: Cidade, Objetivo…)"
                     value={c.nome}
                     onChange={e => updateCampo(c._key, { nome: e.target.value })}
                   />

@@ -61,11 +61,11 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Cria campos padrão (nome, email, whatsapp)
+  // Cria campos padrão (nome, email, whatsapp) — marcados como fixo=true
   await admin.from('agenda_campos').insert([
-    { pessoa_id: data.id, label: 'Nome completo', tipo: 'text', obrigatorio: true, ordem: 0 },
-    { pessoa_id: data.id, label: 'E-mail', tipo: 'email', obrigatorio: true, ordem: 1 },
-    { pessoa_id: data.id, label: 'WhatsApp', tipo: 'phone', obrigatorio: true, ordem: 2 },
+    { pessoa_id: data.id, nome: 'Nome completo', tipo: 'text', obrigatorio: true, ordem: 0, fixo: true },
+    { pessoa_id: data.id, nome: 'E-mail', tipo: 'email', obrigatorio: true, ordem: 1, fixo: true },
+    { pessoa_id: data.id, nome: 'WhatsApp', tipo: 'tel', obrigatorio: true, ordem: 2, fixo: true },
   ])
 
   return NextResponse.json(data, { status: 201 })
