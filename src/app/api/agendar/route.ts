@@ -46,12 +46,12 @@ async function criarEventoCalendar(
   return { eventLink: data.htmlLink ?? '', meetLink }
 }
 
-async function enviarWhatsApp(numero: string, texto: string, sessaoId: string) {
+async function enviarWhatsApp(numero: string, texto: string, instanciaId: string) {
   try {
-    await fetch(`${BAILEYS_SERVER_URL}/send`, {
+    await fetch(`${BAILEYS_SERVER_URL}/instancia/${instanciaId}/disparar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: sessaoId, number: numero, message: texto }),
+      body: JSON.stringify({ phone: numero, type: 'text', content: texto }),
     })
   } catch {
     // WhatsApp não é crítico — não falha o agendamento
