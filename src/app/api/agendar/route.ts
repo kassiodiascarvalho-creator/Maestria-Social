@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
 
   const { data: pessoa, error: pErr } = await admin
     .from('agenda_pessoas')
-    .select('id, nome, google_refresh_token')
+    .select('id, nome, google_refresh_token, agente_id')
     .eq('id', pessoaId)
     .single()
   if (pErr || !pessoa) return NextResponse.json({ error: 'Pessoa não encontrada' }, { status: 404 })
@@ -159,10 +159,18 @@ export async function POST(req: NextRequest) {
   const isoInicio = `${data}T${horario}:00`
   const isoFim = `${data}T${horaFimStr}:00`
 
-  // Extrair dados do lead dos campos preenchidos
-  const nomeCliente: string = campos?.['Nome completo'] ?? campos?.['nome'] ?? campos?.['Nome'] ?? 'Cliente'
-  const emailCliente: string | null = campos?.['E-mail'] ?? campos?.['email'] ?? null
-  const whatsCliente: string | null = campos?.['WhatsApp'] ?? campos?.['whatsapp'] ?? null
+  // Extrair dados do lead dos campos preenchidos (busca case-insensitive por chave)
+  function extrairCampo(obj: Record<string, string>, ...chaves: string[]): string | null {
+    if (!obj) return null
+    for (const chave of chaves) {
+      const match = Object.entries(obj).find(([k]) => k.toLowerCase().includes(chave.toLowerCase()))
+      if (match?.[1]) return match[1]
+    }
+    return null
+  }
+  const nomeCliente: string = extrairCampo(campos, 'nome') ?? 'Cliente'
+  const emailCliente: string | null = extrairCampo(campos, 'e-mail', 'email')
+  const whatsCliente: string | null = extrairCampo(campos, 'whatsapp', 'whats', 'telefone', 'celular')
 
   // Criar evento no Google Calendar (se tiver token configurado)
   let meetLink: string | null = null
@@ -214,9 +222,25 @@ export async function POST(req: NextRequest) {
     fim: horaFimStr,
   })
 
-  // Enviar WhatsApp de confirmação para o lead — instância descoberta automaticamente
+  // Enviar WhatsApp de confirmação para o lead
   if (whatsCliente) {
-    const instanciaId = await descobrirInstanciaBaileys(whatsCliente)
+    // Prioridade 1: agente vinculado diretamente à pessoa da agenda
+    let instanciaId: string | null = null
+    if (pessoa.agente_id) {
+      const { data: agente } = await admin
+        .from('agentes')
+        .select('canais')
+        .eq('id', pessoa.agente_id)
+        .single()
+      const canais: Array<{ provider: string; id: string }> = agente?.canais ?? []
+      instanciaId = canais.find((c: { provider: string; id: string }) => c.provider === 'baileys')?.id ?? null
+    }
+
+    // Prioridade 2: histórico de conversa do lead (fallback para leads do disparo)
+    if (!instanciaId) {
+      instanciaId = await descobrirInstanciaBaileys(whatsCliente)
+    }
+
     if (instanciaId) {
       const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {
         weekday: 'long', day: 'numeric', month: 'long',
@@ -225,6 +249,8 @@ export async function POST(req: NextRequest) {
       if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
       mensagem += '\n\nAté lá! 😊'
       await enviarWhatsApp(whatsCliente, mensagem, instanciaId)
+    } else {
+      console.warn('[agendar] Nenhuma instância Baileys disponível para enviar confirmação. whatsapp:', whatsCliente)
     }
   }
 
