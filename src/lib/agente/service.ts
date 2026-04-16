@@ -246,19 +246,25 @@ export async function responderAgenteParaLead(
   const temperatura = agenteDB ? Number(agenteDB.temperatura) : parseFloat((await getConfig('AGENT_TEMPERATURE')) || '0.2')
   const modelo = agenteDB?.modelo || (await getConfig('AGENT_MODEL')) || MODEL
   const promptRaw = agenteDB?.prompt || (await getConfig('AGENT_SYSTEM_PROMPT')) || ''
-  // Descobre o link de agendamento: agenda_pessoas.agente_id → slug → URL
+  // Descobre o link de agendamento e dados da pessoa da agenda vinculada ao agente
   // Prioridade: 1) pessoa da agenda vinculada ao agente, 2) campo link_agendamento do agente, 3) config global
   let linkAgendamento = agenteDB?.link_agendamento || ''
-  if (!linkAgendamento && agenteDB?.id) {
+  let pessoaNome: string | undefined
+  let pessoaRole: string | undefined
+  if (agenteDB?.id) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
     const { data: pessoaAgenda } = await (supabase as any)
       .from('agenda_pessoas')
-      .select('slug')
+      .select('slug, nome, role')
       .eq('agente_id', agenteDB.id)
       .eq('ativo', true)
       .single()
-    if (pessoaAgenda?.slug) {
-      linkAgendamento = `${appUrl}/agendar/${pessoaAgenda.slug}`
+    if (pessoaAgenda) {
+      if (!linkAgendamento && pessoaAgenda.slug) {
+        linkAgendamento = `${appUrl}/agendar/${pessoaAgenda.slug}`
+      }
+      pessoaNome = pessoaAgenda.nome || undefined
+      pessoaRole = pessoaAgenda.role || undefined
     }
   }
   if (!linkAgendamento) {
@@ -269,7 +275,9 @@ export async function responderAgenteParaLead(
         .replace(/\{\{nome\}\}/g, lead.nome)
         .replace(/\{\{pilar\}\}/g, lead.pilar_fraco ?? 'Comunicação')
         .replace(/\{\{link_agendamento\}\}/g, linkAgendamento)
-    : buildSystemPrompt(lead, linkAgendamento)
+        .replace(/\{\{pessoa_nome\}\}/g, pessoaNome ?? '')
+        .replace(/\{\{pessoa_role\}\}/g, pessoaRole ?? '')
+    : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole)
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },

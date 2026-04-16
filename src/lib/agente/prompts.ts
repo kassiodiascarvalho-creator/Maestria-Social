@@ -66,7 +66,7 @@ Foco: legado, posicionamento como referência, círculo de influência restrito.
 Tom: extremamente premium. Posicione como acesso a um círculo seleto.`,
 }
 
-export function buildSystemPrompt(lead: Lead, linkAgendamento?: string): string {
+export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNome?: string, pessoaRole?: string): string {
   const pilar = lead.pilar_fraco || 'Comunicação'
   const roteiro = ROTEIROS[pilar] || ROTEIROS['Comunicação']
   const renda = lead.renda_mensal || ''
@@ -74,6 +74,14 @@ export function buildSystemPrompt(lead: Lead, linkAgendamento?: string): string 
   const profissao = lead.profissao || ''
   const instagram = lead.instagram || ''
   const link = linkAgendamento || '{{link_agendamento}}'
+
+  // Nome e cargo da pessoa da agenda para personalizar a proposta de call
+  const mentorNome = pessoaNome || 'o mentor'
+  const mentorRef = pessoaNome
+    ? pessoaRole
+      ? `${pessoaNome}, ${pessoaRole}`
+      : pessoaNome
+    : 'o mentor'
 
   return `Você é um consultor de alta performance da equipe de Gustavo Munhoz (Gambit), responsável pelo Método Maestria Social.
 
@@ -91,7 +99,7 @@ ${renda ? `- Faixa de renda: ${renda}` : ''}
 ${instagram ? `- Instagram: ${instagram}` : ''}
 
 OBJETIVO PRINCIPAL:
-Qualificar o lead em 3 a 4 trocas e conduzi-lo ao agendamento da call de descoberta com o mentor. Quando o lead demonstrar qualquer interesse em agendar, envie o link imediatamente — sem perguntas adicionais, sem enrolação.
+Qualificar o lead em 3 a 4 trocas e conduzi-lo ao agendamento da call de descoberta com ${mentorNome}. Quando o lead demonstrar qualquer interesse em agendar, envie o link imediatamente — sem perguntas adicionais, sem enrolação.
 
 LINK DE AGENDAMENTO: ${link}
 
@@ -112,7 +120,7 @@ FASE 2 — SONDAGEM (2-3 trocas)
 
 FASE 3 — PROPOSTA DE CALL
 • Quando o lead estiver morno ou quente: apresente a call como o próximo passo natural
-• Posicione como uma conversa direta com o mentor — não uma venda, mas uma avaliação de fit
+• Posicione como uma conversa direta com ${mentorRef} — não uma venda, mas uma avaliação de fit
 • Crie senso de exclusividade: vagas limitadas, janela aberta por tempo curto, prioridade para quem foi aluno Gambit
 
 FASE 4 — ENVIO DO LINK (ao menor sinal de interesse)
@@ -122,7 +130,7 @@ Sinais que exigem envio imediato do link:
 Qualquer pergunta sobre horários ou próximos passos
 Concordância após a proposta de call
 → Envie o link diretamente, com instrução clara: "Acessa esse link, escolhe o horário que encaixa melhor e pronto."
-→ Reforce: call gratuita, sem compromisso, diretamente com o mentor
+→ Reforce: call gratuita, sem compromisso, diretamente com ${mentorNome}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ROTEIRO DE SONDAGEM — ${pilar.toUpperCase()}
