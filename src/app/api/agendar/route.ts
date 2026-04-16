@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarViaBaileys } from '@/lib/baileys'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
+import { getConfig } from '@/lib/config'
 import { google } from 'googleapis'
 
 export const dynamic = 'force-dynamic'
@@ -225,21 +226,29 @@ export async function POST(req: NextRequest) {
     if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
     mensagem += '\n\nAté lá! 😊'
 
+    // Verifica se Meta está configurada (só usa se tiver token e phone_number_id)
+    const metaToken = await getConfig('META_ACCESS_TOKEN')
+    const metaPhoneId = await getConfig('META_PHONE_NUMBER_ID')
+    const metaAtiva = !!(metaToken && metaPhoneId)
+
     if (instanciaId) {
       try {
         await enviarViaBaileys(whatsCliente, mensagem, instanciaId)
       } catch (err) {
         console.warn('[agendar] Falha Baileys, tentando Meta:', err)
-        // Fallback Meta — funciona se lead respondeu nas últimas 24h
-        try { await enviarMensagemWhatsApp(whatsCliente, mensagem) } catch { /* silencioso */ }
+        if (metaAtiva) {
+          try { await enviarMensagemWhatsApp(whatsCliente, mensagem) } catch { /* silencioso */ }
+        }
       }
-    } else {
-      // Sem Baileys — tenta Meta diretamente (janela de 24h)
+    } else if (metaAtiva) {
+      // Sem Baileys — usa Meta se estiver configurada (janela de 24h)
       try {
         await enviarMensagemWhatsApp(whatsCliente, mensagem)
       } catch (err) {
         console.warn('[agendar] Sem canal disponível para confirmação:', err)
       }
+    } else {
+      console.warn('[agendar] Nenhum canal disponível para enviar confirmação ao lead')
     }
 
     // Buscar lead pelo WhatsApp para salvar no histórico e atualizar etiqueta
