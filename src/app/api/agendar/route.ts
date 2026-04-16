@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { enviarViaBaileys } from '@/lib/baileys'
 import { google } from 'googleapis'
 
 export const dynamic = 'force-dynamic'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
-const BAILEYS_SERVER_URL = process.env.BAILEYS_SERVER_URL ?? 'http://localhost:3001'
 
 function buildOAuth2(refreshToken: string) {
   const oauth2 = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
@@ -46,17 +46,6 @@ async function criarEventoCalendar(
   return { eventLink: data.htmlLink ?? '', meetLink }
 }
 
-async function enviarWhatsApp(numero: string, texto: string, instanciaId: string) {
-  try {
-    await fetch(`${BAILEYS_SERVER_URL}/instancia/${instanciaId}/disparar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: numero, type: 'text', content: texto }),
-    })
-  } catch {
-    // WhatsApp não é crítico — não falha o agendamento
-  }
-}
 
 /**
  * Descobre automaticamente qual instância Baileys usar para mandar a confirmação.
@@ -116,18 +105,6 @@ async function descobrirInstanciaBaileys(telefone: string): Promise<string | nul
       const baileysCan = canais.find(c => c.provider === 'baileys')
       if (baileysCan?.id) return baileysCan.id
     }
-  }
-
-  // Fallback: primeira instância conectada no servidor Baileys
-  try {
-    const res = await fetch(`${BAILEYS_SERVER_URL}/instancias`)
-    if (res.ok) {
-      const lista: Array<{ id: string; status: string }> = await res.json()
-      const conectada = lista.find(i => i.status === 'conectado')
-      if (conectada) return conectada.id
-    }
-  } catch {
-    // servidor offline
   }
 
   return null
@@ -248,7 +225,11 @@ export async function POST(req: NextRequest) {
       let mensagem = `Olá, ${nomeCliente}! ✅ Seu agendamento com *${pessoa.nome}* está confirmado!\n\n📅 *${dataFormatada}* às *${horario}*\n⏱ Duração: ${duracao} minutos`
       if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
       mensagem += '\n\nAté lá! 😊'
-      await enviarWhatsApp(whatsCliente, mensagem, instanciaId)
+      try {
+        await enviarViaBaileys(whatsCliente, mensagem, instanciaId)
+      } catch (err) {
+        console.warn('[agendar] Falha ao enviar confirmação WhatsApp:', err)
+      }
     } else {
       console.warn('[agendar] Nenhuma instância Baileys disponível para enviar confirmação. whatsapp:', whatsCliente)
     }
