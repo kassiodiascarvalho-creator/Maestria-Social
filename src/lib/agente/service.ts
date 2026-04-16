@@ -148,7 +148,8 @@ export async function responderAgenteParaLead(
   mensagem: string,
   enviarWhatsApp = true,
   canal?: CanalAgente,
-  agenteDB?: AgenteDB | null
+  agenteDB?: AgenteDB | null,
+  extMessageId?: string
 ): Promise<{ ok: boolean; resposta: string }> {
   const supabase = createAdminClient()
 
@@ -162,14 +163,21 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
-  // Salva mensagem do lead SEMPRE — independente de o agente responder ou não
+  // Salva mensagem do lead SEMPRE — independente de o agente responder ou não.
+  // ext_message_id tem índice UNIQUE: se o mesmo webhook chegar duas vezes (Meta re-entrega),
+  // o insert falha silenciosamente e o agente não responde duplicado.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('conversas').insert({
+  const { error: insertMsgError } = await (supabase as any).from('conversas').insert({
     lead_id: leadId,
     role: 'user',
     mensagem,
     agente_id: agenteDB?.id ?? null,
+    ext_message_id: extMessageId ?? null,
   })
+  if (insertMsgError?.code === '23505') {
+    // Evento já processado (webhook duplicado) — ignora silenciosamente
+    return { ok: true, resposta: '' }
+  }
 
   // Regra de pausa: se um humano enviou mensagem nos últimos 5 minutos, o agente não responde
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

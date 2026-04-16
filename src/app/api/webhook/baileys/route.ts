@@ -78,14 +78,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let body: { instanceId?: string; phone?: string; texto?: string }
+  let body: { instanceId?: string; phone?: string; texto?: string; messageId?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ status: 'ok' })
   }
 
-  const { instanceId, phone, texto } = body
+  const { instanceId, phone, texto, messageId } = body
   if (!phone || !texto || !instanceId) {
     return NextResponse.json({ status: 'ok' })
   }
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     if (!lead) return NextResponse.json({ status: 'ok' })
 
     const agente = await encontrarAgentePorCanal('baileys', instanceId)
-    await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente)
+    await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente, messageId)
   } catch (err) {
     console.error('[webhook/baileys]', err)
   }

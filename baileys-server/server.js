@@ -157,7 +157,7 @@ function criarInstancia(id, label) {
           'Content-Type': 'application/json',
           'x-baileys-secret': config.agentWebhookSecret || '',
         },
-        body: JSON.stringify({ instanceId: id, phone, texto }),
+        body: JSON.stringify({ instanceId: id, phone, texto, messageId: msg.id?.id || msg.id?._serialized }),
         signal: AbortSignal.timeout(10000),
       })
     } catch (err) {
