@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarViaBaileys } from '@/lib/baileys'
+import { enviarMensagemWhatsApp } from '@/lib/meta'
 import { google } from 'googleapis'
 
 export const dynamic = 'force-dynamic'
@@ -231,7 +232,16 @@ export async function POST(req: NextRequest) {
       try {
         await enviarViaBaileys(whatsCliente, mensagem, instanciaId)
       } catch (err) {
-        console.warn('[agendar] Falha ao enviar confirmação WhatsApp:', err)
+        console.warn('[agendar] Falha Baileys, tentando Meta:', err)
+        // Fallback Meta — funciona se lead respondeu nas últimas 24h
+        try { await enviarMensagemWhatsApp(whatsCliente, mensagem) } catch { /* silencioso */ }
+      }
+    } else {
+      // Sem Baileys — tenta Meta diretamente (janela de 24h)
+      try {
+        await enviarMensagemWhatsApp(whatsCliente, mensagem)
+      } catch (err) {
+        console.warn('[agendar] Sem canal disponível para confirmação:', err)
       }
     }
 
