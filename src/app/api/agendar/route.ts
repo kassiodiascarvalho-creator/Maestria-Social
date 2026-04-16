@@ -202,11 +202,13 @@ export async function POST(req: NextRequest) {
 
   // Enviar WhatsApp de confirmação e registrar no histórico
   if (whatsCliente) {
-    // Prioridade 1: agente vinculado diretamente à pessoa da agenda
-    let instanciaId: string | null = null
     let agenteId: string | null = pessoa.agente_id ?? null
 
-    if (agenteId) {
+    // Prioridade 1: canal em que o lead estava conversando (histórico de conversas)
+    let instanciaId: string | null = await descobrirInstanciaBaileys(whatsCliente)
+
+    // Prioridade 2: agente vinculado diretamente à pessoa da agenda (fallback)
+    if (!instanciaId && agenteId) {
       const { data: agente } = await admin
         .from('agentes')
         .select('id, canais')
@@ -214,11 +216,6 @@ export async function POST(req: NextRequest) {
         .single()
       const canais: Array<{ provider: string; id: string }> = agente?.canais ?? []
       instanciaId = canais.find((c: { provider: string; id: string }) => c.provider === 'baileys')?.id ?? null
-    }
-
-    // Prioridade 2: histórico de conversa do lead (fallback)
-    if (!instanciaId) {
-      instanciaId = await descobrirInstanciaBaileys(whatsCliente)
     }
 
     const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {
