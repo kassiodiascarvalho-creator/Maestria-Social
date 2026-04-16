@@ -42,7 +42,7 @@ function parseAgenteJSON(texto: string): { resposta: string; dados: AgenteJSON }
   }
 }
 
-export async function iniciarAgenteParaLead(leadId: string, force = false): Promise<{ ok: boolean; ignorado?: boolean; erroWhatsApp?: string }> {
+export async function iniciarAgenteParaLead(leadId: string, force = false, agenteId?: string): Promise<{ ok: boolean; ignorado?: boolean; erroWhatsApp?: string }> {
   const supabase = createAdminClient()
   const { data: lead, error: leadError } = await supabase
     .from('leads')
@@ -72,10 +72,12 @@ export async function iniciarAgenteParaLead(leadId: string, force = false): Prom
 
   const primeiraMsg = buildPrimeiraMsg(lead)
 
-  await supabase.from('conversas').insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('conversas').insert({
     lead_id: leadId,
     role: 'assistant',
     mensagem: primeiraMsg,
+    agente_id: agenteId ?? null,
   })
 
   // Marca que o agente foi iniciado para este lead
@@ -161,10 +163,12 @@ export async function responderAgenteParaLead(
   }
 
   // Salva mensagem do lead SEMPRE — independente de o agente responder ou não
-  await supabase.from('conversas').insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('conversas').insert({
     lead_id: leadId,
     role: 'user',
     mensagem,
+    agente_id: agenteDB?.id ?? null,
   })
 
   // Regra de pausa: se um humano enviou mensagem nos últimos 5 minutos, o agente não responde
@@ -207,12 +211,18 @@ export async function responderAgenteParaLead(
     }
   }
 
-  const { data: historico } = await supabase
+  // Filtra histórico por agente_id quando há agente configurado — contextos separados por agente
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let historicoQuery = (supabase as any)
     .from('conversas')
     .select('role, mensagem')
     .eq('lead_id', leadId)
     .order('criado_em', { ascending: true })
     .limit(20)
+  if (agenteDB?.id) {
+    historicoQuery = historicoQuery.eq('agente_id', agenteDB.id)
+  }
+  const { data: historico } = await historicoQuery
 
   // Config: agente DB tem prioridade sobre global
   const temperatura = agenteDB ? Number(agenteDB.temperatura) : parseFloat((await getConfig('AGENT_TEMPERATURE')) || '0.2')
@@ -254,10 +264,12 @@ export async function responderAgenteParaLead(
   const respostaCompleta = completion.choices[0]?.message?.content ?? ''
   const { resposta, dados } = parseAgenteJSON(respostaCompleta)
 
-  await supabase.from('conversas').insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('conversas').insert({
     lead_id: leadId,
     role: 'assistant',
     mensagem: resposta,
+    agente_id: agenteDB?.id ?? null,
   })
 
   if (dados.qualificacoes && dados.qualificacoes.length > 0) {
