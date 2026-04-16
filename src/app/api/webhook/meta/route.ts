@@ -4,6 +4,7 @@ import { getConfig, setConfig } from '@/lib/config'
 import { responderAgenteParaLead, encontrarAgentePorCanal } from '@/lib/agente/service'
 import { marcarMensagemComoLida } from '@/lib/meta'
 import { atualizarUltimaMsgUser } from '@/lib/wpp-leads'
+import { transcreverAudioMeta } from '@/lib/transcribe'
 
 async function saveDebug(etapa: string, detalhes: unknown) {
   try {
@@ -170,8 +171,21 @@ export async function POST(req: NextRequest) {
 
     const message = messages[0]
     const from = message.from as string | undefined
-    const texto = extrairTextoMensagem(message)
     const messageId = message.id as string | undefined
+    const messageType = message.type as string | undefined
+
+    let texto = extrairTextoMensagem(message)
+
+    // Transcreve áudio/voz via Whisper quando não há texto
+    if (!texto && (messageType === 'audio' || messageType === 'voice')) {
+      const audioId = (message.audio as Record<string, unknown> | undefined)?.id as string | undefined
+      const accessToken = await getConfig('META_ACCESS_TOKEN')
+      if (audioId && accessToken) {
+        await saveDebug('transcricao_audio', { audioId })
+        texto = await transcreverAudioMeta(audioId, accessToken)
+        if (texto) await saveDebug('transcricao_ok', { texto })
+      }
+    }
 
     if (!from || !texto) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })

@@ -147,7 +147,35 @@ function criarInstancia(id, label) {
     if (config.agentInstances && !config.agentInstances.includes(id)) return
 
     const phone = msg.from.replace(/@c\.us$|@s\.whatsapp\.net$/, '')
-    const texto = msg.body || ''
+    let texto = msg.body || ''
+
+    // Transcreve áudio/voz via Whisper quando não há texto
+    if (!texto && (msg.type === 'ptt' || msg.type === 'audio')) {
+      try {
+        const media = await msg.downloadMedia()
+        if (media?.data) {
+          // Deriva a URL base da app a partir do webhook URL
+          const appUrl = config.agentWebhookUrl.replace(/\/api\/webhook\/baileys.*$/, '')
+          const res = await fetch(`${appUrl}/api/admin/transcribe`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-baileys-secret': config.agentWebhookSecret || '',
+            },
+            body: JSON.stringify({ audio: media.data, mimetype: media.mimetype || 'audio/ogg' }),
+            signal: AbortSignal.timeout(30000),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            texto = data.texto || ''
+            if (texto) console.log(`[${id}] Áudio transcrito: "${texto.slice(0, 60)}..."`)
+          }
+        }
+      } catch (err) {
+        console.error(`[${id}] Erro ao transcrever áudio:`, err.message)
+      }
+    }
+
     if (!texto) return
 
     try {
