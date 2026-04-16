@@ -6,6 +6,8 @@ import type { PessoaDB } from './page'
 
 type Props = { pessoa: PessoaDB | null; googleStatus?: string }
 
+type AgenteOpcao = { id: string; nome: string; ativo: boolean }
+
 const ROLES = ['Mentor', 'Coach', 'Colaborador', 'Especialista', 'Consultor']
 const DURACOES = [15, 20, 30, 45, 60, 90]
 
@@ -20,6 +22,15 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
   const [duracao, setDuracao] = useState(pessoa?.duracao_slot ?? 30)
   const [ativo, setAtivo] = useState(pessoa?.ativo ?? true)
   const [slug, setSlug] = useState(pessoa?.slug ?? '')
+  const [agenteId, setAgenteId] = useState<string>((pessoa as Record<string, unknown> | null)?.agente_id as string ?? '')
+  const [agentes, setAgentes] = useState<AgenteOpcao[]>([])
+
+  useEffect(() => {
+    fetch('/api/admin/agentes')
+      .then(r => r.json())
+      .then((data: AgenteOpcao[]) => { if (Array.isArray(data)) setAgentes(data) })
+      .catch(() => {})
+  }, [])
 
   // Foto
   const [fotoUrl, setFotoUrl] = useState(pessoa?.foto_url ?? null)
@@ -98,7 +109,7 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
   async function salvar() {
     if (!nome.trim()) { setErro('Nome é obrigatório'); return }
     setSaving(true); setErro('')
-    const body = { nome, bio, role, email, duracao_slot: duracao, ativo, slug, foto_url: fotoUrl, foto_pos_x: posX, foto_pos_y: posY, foto_scale: scale }
+    const body = { nome, bio, role, email, duracao_slot: duracao, ativo, slug, foto_url: fotoUrl, foto_pos_x: posX, foto_pos_y: posY, foto_scale: scale, agente_id: agenteId || null }
 
     let res: Response
     if (isNova) {
@@ -310,6 +321,23 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
                 )}
               </div>
               <div className="ed-field">
+                <label className="ed-field-label">Agente SDR vinculado</label>
+                <p className="ed-desc" style={{margin:0}}>O agente selecionado enviará o link <code>/agendar/{slug || 'seu-slug'}</code> automaticamente quando o lead quiser agendar.</p>
+                <select
+                  className="ed-input ed-select"
+                  value={agenteId}
+                  onChange={e => setAgenteId(e.target.value)}
+                >
+                  <option value="">— Nenhum agente vinculado —</option>
+                  {agentes.map(ag => (
+                    <option key={ag.id} value={ag.id}>
+                      {ag.nome}{!ag.ativo ? ' (inativo)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="ed-field">
                 <label className="ed-field-label">Status</label>
                 <div className="ed-toggle-row">
                   <button className={`ed-toggle ${ativo ? 'tog-on' : 'tog-off'}`} onClick={() => setAtivo(!ativo)} type="button">
@@ -407,6 +435,8 @@ const css = `
   .ed-field-label{font-size:11px;font-weight:600;color:#7a6e5e;letter-spacing:.5px;}
   .ed-input{background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;font-size:14px;color:#fff9e6;font-family:inherit;outline:none;transition:border-color .2s;width:100%;}
   .ed-input:focus{border-color:rgba(194,144,77,.4);}
+  .ed-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a3e30' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;cursor:pointer;}
+  .ed-select option{background:#1a1410;color:#fff9e6;}
   .ed-textarea{background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;font-size:14px;color:#fff9e6;font-family:inherit;outline:none;resize:vertical;transition:border-color .2s;width:100%;}
   .ed-textarea:focus{border-color:rgba(194,144,77,.4);}
   .ed-role-row{display:flex;flex-direction:column;gap:8px;}

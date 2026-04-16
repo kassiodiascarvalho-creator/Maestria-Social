@@ -2,7 +2,7 @@ export type NivelQS = 'Negligente' | 'Iniciante' | 'Intermediário' | 'Avançado
 export type StatusLead = 'frio' | 'morno' | 'quente'
 export type RoleMensagem = 'user' | 'assistant'
 export type CampoQualificacao = 'maior_dor' | 'contexto' | 'interesse' | 'objecao' | 'objetivo' | 'urgencia' | 'orcamento' | 'outro'
-export type EventoWebhook = 'novo_lead' | 'lead_qualificado' | 'mensagem_recebida' | 'status_atualizado'
+export type EventoWebhook = 'novo_lead' | 'lead_qualificado' | 'mensagem_recebida' | 'status_atualizado' | 'link_agendamento_enviado'
 
 export type ScoresPilares = {
   A: number

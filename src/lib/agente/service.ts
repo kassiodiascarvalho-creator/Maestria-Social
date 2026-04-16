@@ -20,6 +20,8 @@ interface QualificacaoItem {
 
 interface AgenteJSON {
   status_lead?: string
+  fase?: string
+  enviar_link?: boolean
   qualificacoes?: QualificacaoItem[]
 }
 
@@ -121,6 +123,7 @@ type AgenteDB = {
   modelo: string
   ativo: boolean
   canais: Array<{ provider: string; id: string }>
+  link_agendamento: string | null
 }
 
 // Busca o agente configurado para um canal específico
@@ -236,9 +239,30 @@ export async function responderAgenteParaLead(
   const temperatura = agenteDB ? Number(agenteDB.temperatura) : parseFloat((await getConfig('AGENT_TEMPERATURE')) || '0.2')
   const modelo = agenteDB?.modelo || (await getConfig('AGENT_MODEL')) || MODEL
   const promptRaw = agenteDB?.prompt || (await getConfig('AGENT_SYSTEM_PROMPT')) || ''
+  // Descobre o link de agendamento: agenda_pessoas.agente_id → slug → URL
+  // Prioridade: 1) pessoa da agenda vinculada ao agente, 2) campo link_agendamento do agente, 3) config global
+  let linkAgendamento = agenteDB?.link_agendamento || ''
+  if (!linkAgendamento && agenteDB?.id) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+    const { data: pessoaAgenda } = await (supabase as any)
+      .from('agenda_pessoas')
+      .select('slug')
+      .eq('agente_id', agenteDB.id)
+      .eq('ativo', true)
+      .single()
+    if (pessoaAgenda?.slug) {
+      linkAgendamento = `${appUrl}/agendar/${pessoaAgenda.slug}`
+    }
+  }
+  if (!linkAgendamento) {
+    linkAgendamento = (await getConfig('LINK_AGENDAMENTO')) || ''
+  }
   const systemPrompt = promptRaw
-    ? promptRaw.replace('{{nome}}', lead.nome).replace('{{pilar}}', lead.pilar_fraco ?? 'Comunicação')
-    : buildSystemPrompt(lead)
+    ? promptRaw
+        .replace(/\{\{nome\}\}/g, lead.nome)
+        .replace(/\{\{pilar\}\}/g, lead.pilar_fraco ?? 'Comunicação')
+        .replace(/\{\{link_agendamento\}\}/g, linkAgendamento)
+    : buildSystemPrompt(lead, linkAgendamento)
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },
@@ -308,6 +332,21 @@ export async function responderAgenteParaLead(
       lead_id: lead.id,
       status_anterior: lead.status_lead,
       status_atual: dados.status_lead,
+    })
+  }
+
+  // Quando o agente enviar o link de agendamento, marcar o lead como aguardando agendamento
+  if (dados.enviar_link) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('leads')
+      .update({ etiqueta: 'aguardando_agendamento' })
+      .eq('id', leadId)
+
+    await dispararWebhookSaida('link_agendamento_enviado', {
+      lead_id: lead.id,
+      nome: lead.nome,
+      whatsapp: lead.whatsapp,
     })
   }
 

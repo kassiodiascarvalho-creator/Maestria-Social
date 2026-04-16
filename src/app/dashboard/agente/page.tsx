@@ -47,6 +47,7 @@ type Agente = {
   modelo: string;
   ativo: boolean;
   canais: Canal[];
+  link_agendamento: string | null;
 };
 
 export default function AgentePage() {
@@ -286,6 +287,21 @@ export default function AgentePage() {
                   )}
                 </div>
 
+                {/* Link de agendamento */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Link de agendamento</div>
+                  <p className="ag-card-desc">
+                    Quando o lead quiser agendar, este agente enviará este link. Use <code>{"{{link_agendamento}}"}</code> no prompt para injetar automaticamente.
+                  </p>
+                  <input
+                    className="ag-link-input"
+                    value={selecionado.link_agendamento || ""}
+                    onChange={e => update({ link_agendamento: e.target.value || null })}
+                    placeholder="https://www.maestriasocial.com/agendar/nome-do-mentor"
+                    type="url"
+                  />
+                </div>
+
                 {/* Temperatura */}
                 <div className="ag-card">
                   <div className="ag-card-label">Temperatura</div>
@@ -437,6 +453,10 @@ const css = `
   .ag-canal-nome{font-size:13px;font-weight:600;color:#fff9e6;margin-bottom:2px;}
   .ag-canal-phone{font-size:11px;color:#7a6e5e;font-family:monospace;}
   .ag-canal-offline{font-size:11px;color:#e07070;margin-top:3px;}
+  .ag-link-input{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:11px 14px;font-size:13px;color:#fff9e6;font-family:monospace;outline:none;transition:border-color .2s;}
+  .ag-link-input:focus{border-color:rgba(194,144,77,.4);}
+  .ag-link-input::placeholder{color:#4a3e30;}
+  .ag-card code{font-size:12px;background:rgba(194,144,77,.1);color:#c2904d;padding:1px 6px;border-radius:4px;font-family:monospace;}
   .ag-temp-row{display:flex;flex-direction:column;gap:10px;}
   .ag-slider{width:100%;accent-color:#c2904d;cursor:pointer;}
   .ag-temp-labels{display:flex;justify-content:space-between;font-size:12px;color:#7a6e5e;}

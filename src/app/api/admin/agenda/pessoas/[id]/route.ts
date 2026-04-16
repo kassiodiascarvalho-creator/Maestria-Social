@@ -37,7 +37,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   // Campos permitidos para atualização (não expõe google_refresh_token aqui)
   const campos: Record<string, unknown> = {}
-  const permitidos = ['nome', 'bio', 'role', 'email', 'foto_url', 'foto_pos_x', 'foto_pos_y', 'foto_scale', 'slug', 'duracao_slot', 'ativo']
+  const permitidos = ['nome', 'bio', 'role', 'email', 'foto_url', 'foto_pos_x', 'foto_pos_y', 'foto_scale', 'slug', 'duracao_slot', 'ativo', 'agente_id']
   for (const k of permitidos) {
     if (k in body) campos[k] = body[k]
   }

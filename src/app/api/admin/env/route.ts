@@ -25,6 +25,7 @@ const ALLOWED_KEYS = [
   'AGENT_SYSTEM_PROMPT',
   'AGENT_ATIVO',
   'AGENT_MODEL',
+  'LINK_AGENDAMENTO',
 ]
 
 export async function POST(req: NextRequest) {

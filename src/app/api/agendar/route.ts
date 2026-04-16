@@ -151,12 +151,13 @@ export async function POST(req: NextRequest) {
     .single()
   if (pErr || !pessoa) return NextResponse.json({ error: 'Pessoa não encontrada' }, { status: 404 })
 
-  // Montar datas ISO para o Google Calendar
-  const dtInicio = new Date(`${data}T${horario}:00`)
-  const dtFim = new Date(dtInicio.getTime() + duracao * 60 * 1000)
-  const isoInicio = dtInicio.toISOString()
-  const isoFim = dtFim.toISOString()
-  const horaFimStr = `${String(dtFim.getHours()).padStart(2, '0')}:${String(dtFim.getMinutes()).padStart(2, '0')}`
+  // Montar datas locais para o Google Calendar (sem conversão UTC)
+  const [hh, mm] = horario.split(':').map(Number)
+  const totalMin = hh * 60 + mm + duracao
+  const horaFimStr = `${String(Math.floor(totalMin / 60) % 24).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`
+  // Strings locais — o campo timeZone: 'America/Sao_Paulo' no evento garante a interpretação correta
+  const isoInicio = `${data}T${horario}:00`
+  const isoFim = `${data}T${horaFimStr}:00`
 
   // Extrair dados do lead dos campos preenchidos
   const nomeCliente: string = campos?.['Nome completo'] ?? campos?.['nome'] ?? campos?.['Nome'] ?? 'Cliente'
