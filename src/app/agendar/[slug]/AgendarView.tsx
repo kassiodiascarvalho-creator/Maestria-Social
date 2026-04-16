@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 
 type Horario = { id: string; dia_semana: number; inicio: string; fim: string; ativo: boolean }
-type Excecao = { id: string; data: string; tipo: 'bloqueio' | 'horario_extra'; inicio: string | null; fim: string | null }
+type Excecao = { id: string; data: string; tipo: 'bloqueado' | 'extra'; inicio: string | null; fim: string | null }
 type Campo = { id: string; nome: string; tipo: string; obrigatorio: boolean; ordem: number }
 type Pessoa = { id: string; nome: string; role: string; foto_url: string | null; foto_pos_x: number; foto_pos_y: number; foto_scale: number; duracao_slot: number; slug: string }
 
@@ -21,29 +21,31 @@ function addMinutes(time: string, mins: number): string {
 function gerarSlots(data: Date, horarios: Horario[], excecoes: Excecao[], duracao: number): string[] {
   const dataStr = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`
   const diaSemana = data.getDay()
-  const excecaoDia = excecoes.find(e => e.data === dataStr)
 
-  if (excecaoDia?.tipo === 'bloqueio') return []
+  // Dia inteiro bloqueado
+  if (excecoes.some(e => e.data === dataStr && e.tipo === 'bloqueado' && !e.inicio)) return []
 
-  let periodos: { inicio: string; fim: string }[] = []
+  // Períodos base do dia (horários regulares + horários extras)
+  const periodos: { inicio: string; fim: string }[] = []
+  horarios.filter(h => h.dia_semana === diaSemana && h.ativo)
+    .forEach(h => periodos.push({ inicio: h.inicio.slice(0, 5), fim: h.fim.slice(0, 5) }))
+  excecoes.filter(e => e.data === dataStr && e.tipo === 'extra' && e.inicio && e.fim)
+    .forEach(e => periodos.push({ inicio: e.inicio!.slice(0, 5), fim: e.fim!.slice(0, 5) }))
 
-  if (excecaoDia?.tipo === 'horario_extra' && excecaoDia.inicio && excecaoDia.fim) {
-    periodos = [{ inicio: excecaoDia.inicio.slice(0, 5), fim: excecaoDia.fim.slice(0, 5) }]
-  } else {
-    periodos = horarios
-      .filter(h => h.dia_semana === diaSemana && h.ativo)
-      .map(h => ({ inicio: h.inicio.slice(0, 5), fim: h.fim.slice(0, 5) }))
-  }
+  // Slots bloqueados individualmente
+  const bloqueadosInd = new Set(
+    excecoes.filter(e => e.data === dataStr && e.tipo === 'bloqueado' && e.inicio).map(e => e.inicio!.slice(0, 5))
+  )
 
   const slots: string[] = []
   for (const p of periodos) {
     let atual = p.inicio
     while (addMinutes(atual, duracao) <= p.fim) {
-      slots.push(atual)
+      if (!bloqueadosInd.has(atual)) slots.push(atual)
       atual = addMinutes(atual, duracao)
     }
   }
-  return slots
+  return slots.sort()
 }
 
 function temDisponibilidade(data: Date, horarios: Horario[], excecoes: Excecao[], duracao: number): boolean {
