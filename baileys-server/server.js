@@ -33,6 +33,12 @@ try {
 const instances = {}
 // estrutura: { client, status, phone, qrDataUrl, label }
 
+// ── Debounce de mensagens ──────────────────────────────────────────────────────
+// Acumula mensagens picadas do mesmo lead e aguarda ele terminar de escrever
+const DEBOUNCE_MS = 4000 // aguarda 4s sem nova mensagem antes de responder
+const pendingMessages = {}
+// estrutura: { [instanceId:phone]: { timer, textos: [], lastMessageId, lastMsg } }
+
 // ── Utilitários ────────────────────────────────────────────────────────────────
 function formatarTelefone(phone) {
   const digits = phone.replace(/\D/g, '')
@@ -76,6 +82,51 @@ async function enviarMensagem(inst, type, phone, content, caption, filename) {
     await inst.client.sendMessage(chatId, media)
   } else {
     throw new Error(`Tipo "${type}" não suportado`)
+  }
+}
+
+// Processa mensagens acumuladas após o debounce
+async function processarMensagensPendentes(id, phone) {
+  const key = `${id}:${phone}`
+  const pending = pendingMessages[key]
+  if (!pending) return
+
+  // Verifica se o lead ainda está digitando ou gravando
+  try {
+    const chat = await pending.lastMsg.getChat()
+    const state = await chat.getState()
+    if (state === 'composing' || state === 'recording') {
+      // Ainda digitando — adia mais 2s e verifica de novo
+      console.log(`[${id}] ⌛ Lead ${phone} ainda está ${state === 'composing' ? 'digitando' : 'gravando'} — aguardando...`)
+      pending.timer = setTimeout(() => processarMensagensPendentes(id, phone), 2000)
+      return
+    }
+  } catch (_) {
+    // getState pode falhar em algumas versões — ignora e processa normalmente
+  }
+
+  // Coleta os textos acumulados e limpa o buffer
+  const textos = pending.textos.splice(0)
+  const messageId = pending.lastMessageId
+  delete pendingMessages[key]
+
+  if (!textos.length) return
+
+  const textoFinal = textos.join('\n')
+  console.log(`[${id}] 📨 Enviando ${textos.length > 1 ? `${textos.length} mensagens agrupadas` : 'mensagem'} de ${phone} para o agente`)
+
+  try {
+    await fetch(config.agentWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-baileys-secret': config.agentWebhookSecret || '',
+      },
+      body: JSON.stringify({ instanceId: id, phone, texto: textoFinal, messageId }),
+      signal: AbortSignal.timeout(10000),
+    })
+  } catch (err) {
+    console.error(`[${id}] Erro ao encaminhar mensagem para agente:`, err.message)
   }
 }
 
@@ -144,7 +195,7 @@ function criarInstancia(id, label) {
   client.on('message', async (msg) => {
     if (msg.fromMe) return
     if (!config.agentWebhookUrl) return
-    if (config.agentInstances && !config.agentInstances.includes(id)) return
+    // Não filtra por instância aqui — o Next.js decide qual agente responde
 
     const phone = msg.from.replace(/@c\.us$|@s\.whatsapp\.net$/, '')
     let texto = msg.body || ''
@@ -185,19 +236,18 @@ function criarInstancia(id, label) {
 
     if (!texto) return
 
-    try {
-      await fetch(config.agentWebhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-baileys-secret': config.agentWebhookSecret || '',
-        },
-        body: JSON.stringify({ instanceId: id, phone, texto, messageId: msg.id?.id || msg.id?._serialized }),
-        signal: AbortSignal.timeout(10000),
-      })
-    } catch (err) {
-      console.error(`[${id}] Erro ao encaminhar mensagem para agente:`, err.message)
+    // ── Debounce: acumula mensagens e aguarda o lead terminar de escrever ──────
+    const key = `${id}:${phone}`
+    if (!pendingMessages[key]) {
+      pendingMessages[key] = { timer: null, textos: [], lastMessageId: null, lastMsg: null }
     }
+    pendingMessages[key].textos.push(texto)
+    pendingMessages[key].lastMessageId = msg.id?.id || msg.id?._serialized
+    pendingMessages[key].lastMsg = msg
+
+    // Reinicia o timer a cada nova mensagem
+    if (pendingMessages[key].timer) clearTimeout(pendingMessages[key].timer)
+    pendingMessages[key].timer = setTimeout(() => processarMensagensPendentes(id, phone), DEBOUNCE_MS)
   })
 
   client.initialize()

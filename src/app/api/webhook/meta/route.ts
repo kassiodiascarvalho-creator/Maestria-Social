@@ -203,16 +203,66 @@ export async function POST(req: NextRequest) {
       console.error('[webhook/meta] erro ao atualizar ultima_msg_user:', err)
     )
 
-    const lead = await buscarLeadPorTelefone(from)
-    if (!lead) {
-      await saveDebug('lead_nao_encontrado', { from, texto })
+    // ── Debounce: acumula mensagens picadas e aguarda o lead terminar ──────────
+    const DEBOUNCE_META_MS = 5000 // 5 segundos sem nova mensagem → responde
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+    const chegouEm = new Date().toISOString()
+
+    // 1. Salva mensagem na fila
+    await supabase.from('mensagens_fila_meta').insert({
+      phone: from,
+      texto,
+      message_id: messageId,
+      criado_em: chegouEm,
+    })
+
+    // 2. Aguarda a janela de debounce
+    await new Promise(r => setTimeout(r, DEBOUNCE_META_MS))
+
+    // 3. Verifica se chegou mensagem mais nova do mesmo lead durante a espera
+    const { data: maisNova } = await supabase
+      .from('mensagens_fila_meta')
+      .select('id')
+      .eq('phone', from)
+      .gt('criado_em', chegouEm)
+      .limit(1)
+      .maybeSingle()
+
+    if (maisNova) {
+      // Outra mensagem mais recente vai processar tudo — esta pode sair
+      await saveDebug('debounce_meta_skip', { from, motivo: 'mensagem mais nova aguardando' })
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    await saveDebug('disparando_agente', { leadId: lead.id, texto })
+    // 4. Esta é a mensagem mais recente — coleta todas da fila deste lead
+    const { data: fila } = await supabase
+      .from('mensagens_fila_meta')
+      .select('texto, message_id')
+      .eq('phone', from)
+      .order('criado_em', { ascending: true })
+
+    // 5. Limpa a fila deste lead
+    await supabase.from('mensagens_fila_meta').delete().eq('phone', from)
+
+    const textoFinal = (fila ?? []).map((m: { texto: string }) => m.texto).join('\n')
+    const msgIdFinal = messageId
+
+    if (!textoFinal) return NextResponse.json({ status: 'ok' }, { status: 200 })
+
+    const msgCount = (fila ?? []).length
+    if (msgCount > 1) await saveDebug('debounce_meta_agrupou', { from, total: msgCount, textoFinal })
+
+    const lead = await buscarLeadPorTelefone(from)
+    if (!lead) {
+      await saveDebug('lead_nao_encontrado', { from, texto: textoFinal })
+      return NextResponse.json({ status: 'ok' }, { status: 200 })
+    }
+
+    await saveDebug('disparando_agente', { leadId: lead.id, texto: textoFinal })
     try {
       const agente = await encontrarAgentePorCanal('meta')
-      const result = await responderAgenteParaLead(lead.id, texto, true, { provider: 'meta' }, agente, messageId)
+      const result = await responderAgenteParaLead(lead.id, textoFinal, true, { provider: 'meta' }, agente, msgIdFinal)
       await saveDebug('agente_respondeu', { leadId: lead.id, resposta: result.resposta })
     } catch (agenteErr) {
       await saveDebug('agente_erro', { leadId: lead.id, erro: String(agenteErr) })
