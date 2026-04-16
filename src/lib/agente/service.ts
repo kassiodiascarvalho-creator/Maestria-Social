@@ -25,23 +25,30 @@ interface AgenteJSON {
   qualificacoes?: QualificacaoItem[]
 }
 
-function parseAgenteJSON(texto: string): { resposta: string; dados: AgenteJSON } {
+function parseAgenteJSON(texto: string, linkAgendamento?: string): { resposta: string; dados: AgenteJSON } {
   const separador = '---JSON---'
   const partes = texto.split(separador)
 
-  if (partes.length < 3) {
-    return { resposta: texto.trim(), dados: {} }
+  let resposta = texto.trim()
+  let dados: AgenteJSON = {}
+
+  if (partes.length >= 3) {
+    resposta = partes[0].trim()
+    try {
+      dados = JSON.parse(partes[1].trim()) as AgenteJSON
+    } catch {
+      dados = {}
+    }
   }
 
-  const resposta = partes[0].trim()
-  const jsonBruto = partes[1].trim()
-
-  try {
-    const dados = JSON.parse(jsonBruto) as AgenteJSON
-    return { resposta, dados }
-  } catch {
-    return { resposta, dados: {} }
+  // Detecta automaticamente se o link de agendamento está na resposta
+  // independente do que o modelo retornou no JSON
+  if (!dados.enviar_link && linkAgendamento && resposta.includes(linkAgendamento)) {
+    dados.enviar_link = true
+    dados.fase = 'link_enviado'
   }
+
+  return { resposta, dados }
 }
 
 export async function iniciarAgenteParaLead(leadId: string, force = false, agenteId?: string): Promise<{ ok: boolean; ignorado?: boolean; erroWhatsApp?: string }> {
@@ -294,7 +301,7 @@ export async function responderAgenteParaLead(
   })
 
   const respostaCompleta = completion.choices[0]?.message?.content ?? ''
-  const { resposta, dados } = parseAgenteJSON(respostaCompleta)
+  const { resposta, dados } = parseAgenteJSON(respostaCompleta, linkAgendamento)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from('conversas').insert({

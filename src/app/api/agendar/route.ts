@@ -199,39 +199,71 @@ export async function POST(req: NextRequest) {
     fim: horaFimStr,
   })
 
-  // Enviar WhatsApp de confirmação para o lead
+  // Enviar WhatsApp de confirmação e registrar no histórico
   if (whatsCliente) {
     // Prioridade 1: agente vinculado diretamente à pessoa da agenda
     let instanciaId: string | null = null
-    if (pessoa.agente_id) {
+    let agenteId: string | null = pessoa.agente_id ?? null
+
+    if (agenteId) {
       const { data: agente } = await admin
         .from('agentes')
-        .select('canais')
-        .eq('id', pessoa.agente_id)
+        .select('id, canais')
+        .eq('id', agenteId)
         .single()
       const canais: Array<{ provider: string; id: string }> = agente?.canais ?? []
       instanciaId = canais.find((c: { provider: string; id: string }) => c.provider === 'baileys')?.id ?? null
     }
 
-    // Prioridade 2: histórico de conversa do lead (fallback para leads do disparo)
+    // Prioridade 2: histórico de conversa do lead (fallback)
     if (!instanciaId) {
       instanciaId = await descobrirInstanciaBaileys(whatsCliente)
     }
 
+    const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {
+      weekday: 'long', day: 'numeric', month: 'long',
+    })
+    let mensagem = `Olá, ${nomeCliente}! ✅ Seu agendamento com *${pessoa.nome}* está confirmado!\n\n📅 *${dataFormatada}* às *${horario}*\n⏱ Duração: ${duracao} minutos`
+    if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
+    mensagem += '\n\nAté lá! 😊'
+
     if (instanciaId) {
-      const dataFormatada = new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', {
-        weekday: 'long', day: 'numeric', month: 'long',
-      })
-      let mensagem = `Olá, ${nomeCliente}! ✅ Seu agendamento com *${pessoa.nome}* está confirmado!\n\n📅 *${dataFormatada}* às *${horario}*\n⏱ Duração: ${duracao} minutos`
-      if (meetLink) mensagem += `\n\n🎥 Link da reunião:\n${meetLink}`
-      mensagem += '\n\nAté lá! 😊'
       try {
         await enviarViaBaileys(whatsCliente, mensagem, instanciaId)
       } catch (err) {
         console.warn('[agendar] Falha ao enviar confirmação WhatsApp:', err)
       }
-    } else {
-      console.warn('[agendar] Nenhuma instância Baileys disponível para enviar confirmação. whatsapp:', whatsCliente)
+    }
+
+    // Buscar lead pelo WhatsApp para salvar no histórico e atualizar etiqueta
+    const tel = whatsCliente.replace(/\D/g, '')
+    const variacoes = Array.from(new Set([
+      tel,
+      tel.startsWith('55') ? tel.slice(2) : `55${tel}`,
+      `55${tel}`,
+    ]))
+
+    const { data: leadRow } = await admin
+      .from('leads')
+      .select('id')
+      .or(variacoes.map((v: string) => `whatsapp.eq.${v}`).join(','))
+      .limit(1)
+      .single()
+
+    if (leadRow?.id) {
+      // Salvar mensagem de confirmação no histórico de conversas
+      await admin.from('conversas').insert({
+        lead_id: leadRow.id,
+        role: 'assistant',
+        mensagem,
+        agente_id: agenteId,
+      })
+
+      // Atualizar etiqueta do lead para agendado
+      await admin
+        .from('leads')
+        .update({ etiqueta: 'agendado' })
+        .eq('id', leadRow.id)
     }
   }
 
