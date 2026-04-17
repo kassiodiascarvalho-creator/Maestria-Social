@@ -38,7 +38,7 @@ const SECTIONS = [
     ],
   },
   {
-    id: "C", label: "Seção C — Relacionamento", title: "Relacionamento", sub: "Pilar 2",
+    id: "C", label: "Seção C — Relação", title: "Relação", sub: "Pilar 2",
     desc: "Sua capacidade de transformar interações em vínculos reais, construir redes de alto nível e manter relações estratégicas.",
     questions: [
       { type: "a", text: "Tenho a habilidade de transformar um primeiro contato em um relacionamento real — sei conduzir a conexão além do superficial." },
@@ -278,9 +278,8 @@ export default function QuizApp() {
               <div className="sec-sub">{sec.sub}</div>
               <p className="sec-desc">{sec.desc}</p>
               <div className="scale-info">
-                <span>Avalie de 1 a 5</span>
                 <div className="pips">{[1,2,3,4,5].map(v => <div key={v} className="pip">{v}</div>)}</div>
-                <span>1 = Discordo totalmente &nbsp;·&nbsp; 5 = Concordo totalmente</span>
+                <span>1 = Discordo totalmente &nbsp;·&nbsp; 2 = Discordo parcialmente &nbsp;·&nbsp; 3 = Neutro &nbsp;·&nbsp; 4 = Concordo parcialmente &nbsp;·&nbsp; 5 = Concordo totalmente</span>
               </div>
             </div>
             <div className="questions">

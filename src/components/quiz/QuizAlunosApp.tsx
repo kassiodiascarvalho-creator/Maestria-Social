@@ -128,7 +128,7 @@ const css = `
   .card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:24px;}
   .card-head{padding:32px 40px 24px;border-bottom:1px solid var(--border);}
   .sec-badge{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;}
-  .sec-title{font-size:28px;font-weight:300;margin-bottom:4px;}
+  .sec-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(24px,4vw,32px);font-weight:700;line-height:1.2;margin-bottom:4px;}
   .sec-sub{font-size:12px;color:var(--muted);margin-bottom:12px;}
   .sec-desc{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
   .scale-info{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:#9a8e7e;padding:10px 16px;background:rgba(192,138,32,.07);border:1px solid rgba(192,138,32,.2);border-radius:10px;letter-spacing:.3px;}
