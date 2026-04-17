@@ -65,11 +65,11 @@ function secLevel(score: number) {
 
 function qsLevel(total: number) {
   const pct = Math.round((total / 250) * 100);
-  if (total <= 100) return { name: "Negligente", color: "#e08080", pct, desc: "Com ##SCORE## (##PCT##%) no QS, o padrão é identificável: você sabe que a vida social importa, mas consistentemente não investe nisso. O impacto já está acontecendo — em relações que ficam rasas, em oportunidades que vão para quem tem a habilidade que você ainda não desenvolveu." };
-  if (total <= 150) return { name: "Iniciante", color: "#d4aa55", pct, desc: "Com ##SCORE## (##PCT##%) no QS, há consciência, mas ainda falta estrutura. Você se conecta quando as circunstâncias facilitam. O problema: as maiores oportunidades da sua vida não vão esperar que as circunstâncias sejam favoráveis." };
-  if (total <= 200) return { name: "Intermediário", color: "#c08a20", pct, desc: "Com ##SCORE## (##PCT##%) no QS, a base é real — e o gap é específico. Você é percebido(a) como competente, mas raramente como referência. A diferença entre esses dois lugares é menor do que parece." };
-  if (total <= 225) return { name: "Avançado", color: "#a8c8f0", pct, desc: "Com ##SCORE## (##PCT##%) no QS, a maioria dos pilares está desenvolvida com consistência. O que ainda limita está nos detalhes — os contextos de alta pressão onde ainda há perda de precisão." };
-  return { name: "Mestre", color: "#7acca0", pct, desc: "Com ##SCORE## (##PCT##%) no QS, você alcançou algo que pouquíssimas pessoas conseguem: consistência real em todos os pilares. Não é apenas habilidade — é identidade." };
+  if (total <= 100) return { name: "Negligente", color: "#e08080", pct, desc: "Com ##PCT##% no QS, o padrão é identificável: você sabe que a vida social importa, mas consistentemente não investe nisso. O impacto já está acontecendo — em relações que ficam rasas, em oportunidades que vão para quem tem a habilidade que você ainda não desenvolveu." };
+  if (total <= 150) return { name: "Iniciante", color: "#d4aa55", pct, desc: "Com ##PCT##% no QS, há consciência, mas ainda falta estrutura. Você se conecta quando as circunstâncias facilitam. O problema: as maiores oportunidades da sua vida não vão esperar que as circunstâncias sejam favoráveis." };
+  if (total <= 200) return { name: "Intermediário", color: "#c08a20", pct, desc: "Com ##PCT##% no QS, a base é real — e o gap é específico. Você é percebido(a) como competente, mas raramente como referência. A diferença entre esses dois lugares é menor do que parece." };
+  if (total <= 225) return { name: "Avançado", color: "#a8c8f0", pct, desc: "Com ##PCT##% no QS, a maioria dos pilares está desenvolvida com consistência. O que ainda limita está nos detalhes — os contextos de alta pressão onde ainda há perda de precisão." };
+  return { name: "Mestre", color: "#7acca0", pct, desc: "Com ##PCT##% no QS, você alcançou algo que pouquíssimas pessoas conseguem: consistência real em todos os pilares. Não é apenas habilidade — é identidade." };
 }
 
 // ── Ring SVG ──────────────────────────────────────────────────────────────────
@@ -119,10 +119,10 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
     if (baixando) return;
     setBaixando(true);
     try {
-      const card = document.getElementById("share-card");
-      if (!card) return;
+      const wrap = document.querySelector(".rc-wrap") as HTMLElement | null;
+      if (!wrap) return;
       const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(card, { scale: 2, useCORS: true, backgroundColor: "#1a1410", logging: false });
+      const canvas = await html2canvas(wrap, { scale: 2, useCORS: true, backgroundColor: "#0e0f09", logging: false, height: wrap.scrollHeight, windowHeight: wrap.scrollHeight });
       canvas.toBlob((blob) => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
@@ -224,7 +224,6 @@ export default function ResultadoCompleto({
           <div className="rc-level-badge">Nível {lead.nivel_qs}</div>
           <p className="rc-level-desc">
             {ql.desc
-              .replace("##SCORE##", String(lead.qs_total))
               .replace("##PCT##", String(lead.qs_percentual))}
           </p>
         </div>
@@ -268,9 +267,6 @@ export default function ResultadoCompleto({
             <p className="sc-cta-url">maestriasocial.com</p>
           </div>
         </div>
-
-        {/* ── Ações (download / compartilhar) ────────────────────── */}
-        {fromQuiz && <AcoesResultado nome={lead.nome} leadId={leadId} />}
 
         {/* ── Resultado por pilar ────────────────────────────────── */}
         <div className="rc-section">
@@ -347,6 +343,8 @@ export default function ResultadoCompleto({
           )}
 
           <p className="rc-cta-sub">Diagnóstico individual · Plano personalizado · Método Maestria Social</p>
+
+          {fromQuiz && <AcoesResultado nome={lead.nome} leadId={leadId} />}
         </div>
 
       </main>
@@ -401,7 +399,7 @@ const css = `
   .sc-cta-url { font-size:11px; color:#4a3e30; letter-spacing:1px; }
 
   /* ── Ações ── */
-  .rc-acoes { display:flex; gap:10px; margin-bottom:32px; flex-wrap:wrap; }
+  .rc-acoes { display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; justify-content:center; }
   .rc-acao-btn { flex:1; min-width:140px; background:rgba(194,144,77,.06); border:1px solid rgba(194,144,77,.2); color:#c2904d; font-size:13px; font-weight:600; padding:11px 14px; border-radius:10px; cursor:pointer; font-family:inherit; transition:background .15s,border-color .15s; }
   .rc-acao-btn:hover { background:rgba(194,144,77,.12); border-color:rgba(194,144,77,.4); }
   .rc-acao-btn:disabled { opacity:.5; cursor:default; }
