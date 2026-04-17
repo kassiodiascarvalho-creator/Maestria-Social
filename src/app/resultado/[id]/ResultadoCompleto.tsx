@@ -139,7 +139,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             wrap.style.flexDirection = "column";
             wrap.style.alignItems = "center";
             wrap.style.justifyContent = "flex-start";
-            wrap.style.paddingTop = "36px";
+            wrap.style.paddingTop = "0px";
             wrap.style.boxSizing = "border-box";
             wrap.style.position = "relative";
             wrap.style.width = "160px";
@@ -170,17 +170,17 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             }
           });
 
-          // 3. Pilares: alinhar pelo fundo da linha — números grandes e /100 pareados
+          // 3. Pilares: alinhar pelo centro, levantar /100 para parear com o número
           el.querySelectorAll<HTMLElement>(".rc-pillar-score").forEach((ps) => {
             ps.style.display = "flex";
-            ps.style.alignItems = "flex-end";
+            ps.style.alignItems = "center";
             ps.style.gap = "1px";
             ps.style.lineHeight = "1";
           });
           el.querySelectorAll<HTMLElement>(".rc-pillar-score span").forEach((span) => {
             span.style.lineHeight = "1";
             span.style.display = "inline-block";
-            span.style.paddingBottom = "3px";
+            span.style.paddingBottom = "8px";
           });
 
           // 4. Badge: padding igual em cima e embaixo para centralizar
@@ -189,7 +189,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             b.style.textAlign = "center";
             b.style.border = "1px solid #c2904d";
             b.style.borderRadius = "40px";
-            b.style.padding = "6px 18px 8px";
+            b.style.padding = "4px 18px 12px";
             b.style.lineHeight = "1.3";
             b.style.transform = "none";
           });
