@@ -153,6 +153,9 @@ function AcoesResultado({ nome, leadId, score }: { nome: string; leadId: string;
               svg.style.bottom = "-3px";
               svg.style.left = "-3px";
               svg.style.zIndex = "0";
+              // Substituir calc() por pixels fixos — html2canvas não computa calc() corretamente
+              svg.style.width = "166px";
+              svg.style.height = "166px";
             }
 
             const num = wrap.querySelector(".rc-score-num") as HTMLElement | null;
