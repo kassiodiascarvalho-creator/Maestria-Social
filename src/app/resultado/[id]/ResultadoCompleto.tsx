@@ -160,7 +160,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
               num.style.position = "relative";
               num.style.zIndex = "1";
               num.style.lineHeight = "0.75";
-              num.style.marginTop = "-18px";
+              num.style.marginTop = "-9px";
               num.style.marginBottom = "0px";
             }
             const den = wrap.querySelector(".rc-score-den") as HTMLElement | null;
@@ -179,7 +179,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
           });
           el.querySelectorAll<HTMLElement>(".rc-pillar-score span").forEach((span) => {
             span.style.lineHeight = "1";
-            span.style.paddingBottom = "2px";
+            span.style.paddingBottom = "5px";
           });
 
           // 4. Badge: renderização limpa
@@ -198,13 +198,16 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             t.style.color = "#fff9e6";
           });
 
-          // 6. Botão CTA: centralizar texto verticalmente
+          // 6. Botão CTA: flex para centralizar mesmo com texto longo/quebrado
           el.querySelectorAll<HTMLElement>(".rc-cta-btn").forEach((btn) => {
-            btn.style.display = "block";
+            btn.style.display = "flex";
+            btn.style.alignItems = "center";
+            btn.style.justifyContent = "center";
             btn.style.textAlign = "center";
-            btn.style.lineHeight = "50px";
-            btn.style.height = "50px";
-            btn.style.padding = "0 32px";
+            btn.style.padding = "15px 32px";
+            btn.style.lineHeight = "1.2";
+            btn.style.minHeight = "50px";
+            btn.style.height = "auto";
           });
         },
       });
