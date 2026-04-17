@@ -1,11 +1,24 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildPrimeiraMsg, buildSystemPrompt } from '@/lib/agente/prompts'
 import { createOpenAIClient, MODEL } from '@/lib/openai'
-import { enviarMensagemInicialWhatsApp, enviarMensagemWhatsApp } from '@/lib/meta'
-import { enviarViaBaileys } from '@/lib/baileys'
+import { enviarMensagemInicialWhatsApp, enviarMensagemWhatsApp, enviarAudioViaMeta } from '@/lib/meta'
+import { enviarViaBaileys, enviarAudioViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 import { dispararWebhookSaida } from '@/lib/webhooks'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
+
+interface AudioAgente { nome: string; url: string }
+
+/** Extrai marcadores [[AUDIO:nome]] da resposta e retorna texto limpo + lista de URLs */
+function extrairAudios(resposta: string, audios: AudioAgente[]): { texto: string; urls: string[] } {
+  const urls: string[] = []
+  const texto = resposta.replace(/\[\[AUDIO:([^\]]+)\]\]/g, (_, nome: string) => {
+    const audio = audios.find(a => a.nome.toLowerCase() === nome.trim().toLowerCase())
+    if (audio) urls.push(audio.url)
+    return ''
+  }).trim()
+  return { texto, urls }
+}
 
 const CAMPOS_VALIDOS: CampoQualificacao[] = [
   'maior_dor', 'contexto', 'interesse', 'objecao', 'objetivo', 'urgencia', 'orcamento', 'outro',
@@ -270,6 +283,17 @@ export async function responderAgenteParaLead(
   if (!linkAgendamento) {
     linkAgendamento = (await getConfig('LINK_AGENDAMENTO')) || ''
   }
+
+  // Carrega áudios configurados para este agente
+  let audiosAgente: AudioAgente[] = []
+  if (agenteDB?.id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: audiosDB } = await (supabase as any)
+      .from('agente_audios')
+      .select('nome, url')
+      .eq('agente_id', agenteDB.id)
+    audiosAgente = (audiosDB ?? []) as AudioAgente[]
+  }
   const systemPrompt = promptRaw
     ? promptRaw
         .replace(/\{\{nome\}\}/g, lead.nome)
@@ -309,7 +333,9 @@ export async function responderAgenteParaLead(
   })
 
   const respostaCompleta = completion.choices[0]?.message?.content ?? ''
-  const { resposta, dados } = parseAgenteJSON(respostaCompleta, linkAgendamento)
+  // Extrai marcadores [[AUDIO:nome]] antes de fazer o parseAgenteJSON
+  const { texto: respostaSemAudio, urls: audioUrls } = extrairAudios(respostaCompleta, audiosAgente)
+  const { resposta, dados } = parseAgenteJSON(respostaSemAudio, linkAgendamento)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from('conversas').insert({
@@ -365,12 +391,24 @@ export async function responderAgenteParaLead(
     })
   }
 
-  if (enviarWhatsApp && lead.whatsapp && resposta) {
+  if (enviarWhatsApp && lead.whatsapp) {
     try {
-      if (canal?.provider === 'baileys') {
-        await enviarViaBaileys(lead.whatsapp, resposta, canal.instanceId)
-      } else {
-        await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+      // Envia texto (se houver)
+      if (resposta) {
+        if (canal?.provider === 'baileys') {
+          await enviarViaBaileys(lead.whatsapp, resposta, canal.instanceId)
+        } else {
+          await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+        }
+      }
+
+      // Envia áudios extraídos do marcador [[AUDIO:nome]]
+      for (const audioUrl of audioUrls) {
+        if (canal?.provider === 'baileys') {
+          await enviarAudioViaBaileys(lead.whatsapp, audioUrl, canal.instanceId)
+        } else {
+          await enviarAudioViaMeta(lead.whatsapp, audioUrl)
+        }
       }
     } catch (err) {
       console.error('[agente] Falha ao enviar resposta via WhatsApp:', err)

@@ -171,7 +171,16 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 ---JSON---
 
 Quando incluir o link na resposta, defina "enviar_link": true e "fase": "link_enviado".
-Se não houver novas informações relevantes, retorne qualificacoes como array vazio.`
+Se não houver novas informações relevantes, retorne qualificacoes como array vazio.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENVIO DE ÁUDIOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Você pode enviar áudios pré-gravados usando o marcador [[AUDIO:nome_do_audio]] no corpo da mensagem.
+O marcador será substituído pelo envio real do arquivo de áudio — não aparecerá para o lead.
+Exemplo: "Ótimo! Deixa eu te mandar um recado rápido em áudio. [[AUDIO:boas-vindas]]"
+Use apenas nomes de áudios que foram configurados para este agente.
+Você pode combinar texto e múltiplos áudios na mesma resposta.`
 }
 
 export function buildPrimeiraMsg(lead: Lead): string {

@@ -158,3 +158,32 @@ export async function marcarMensagemComoLida(messageId: string): Promise<void> {
     message_id: messageId,
   })
 }
+
+/**
+ * Envia áudio via Meta WhatsApp API (URL pública).
+ */
+export async function enviarAudioViaMeta(para: string, audioUrl: string): Promise<void> {
+  const to = normalizarTelefone(para)
+  const mode = await getWhatsAppMode()
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'audio',
+    audio: { link: audioUrl },
+  }
+
+  if (mode === 'coexistencia') {
+    await enviarViaCoexistencia({ to, type: 'audio', audio: { link: audioUrl } })
+    return
+  }
+
+  try {
+    await postMeta(payload)
+  } catch (err) {
+    const coexistenciaUrl = await getCoexistenciaUrl()
+    if (!coexistenciaUrl) throw err
+    console.warn('[meta] Falha ao enviar áudio via Meta, tentando coexistência.')
+    await enviarViaCoexistencia({ to, type: 'audio', audio: { link: audioUrl } })
+  }
+}

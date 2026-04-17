@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const MODELS = [
   { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", desc: "Rápido e econômico. Ideal para volume alto.", cost: "Baixo custo" },
@@ -50,6 +50,15 @@ type Agente = {
   link_agendamento: string | null;
 };
 
+type AudioAgente = {
+  id: string;
+  nome: string;
+  url: string;
+  tamanho: number | null;
+  mimetype: string;
+  criado_em: string;
+};
+
 export default function AgentePage() {
   const [agentes, setAgentes] = useState<Agente[]>([]);
   const [selecionado, setSelecionado] = useState<Agente | null>(null);
@@ -62,6 +71,14 @@ export default function AgentePage() {
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
   const [error, setError] = useState("");
   const [vistaLista, setVistaLista] = useState(true); // mobile: alterna entre lista e editor
+
+  // Áudios
+  const [audios, setAudios] = useState<AudioAgente[]>([]);
+  const [loadingAudios, setLoadingAudios] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [audioNome, setAudioNome] = useState("");
+  const [audioError, setAudioError] = useState("");
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const carregarCanaisDisponiveis = useCallback(async (metaId: string) => {
     const canais: CanalDisponivel[] = [];
@@ -77,6 +94,35 @@ export default function AgentePage() {
     setCanaisDisponiveis(canais);
   }, []);
 
+  const carregarAudios = useCallback(async (agenteId: string) => {
+    setLoadingAudios(true);
+    const res = await fetch(`/api/admin/agentes/${agenteId}/audios`).then(r => r.json()).catch(() => []);
+    setAudios(Array.isArray(res) ? res : []);
+    setLoadingAudios(false);
+  }, []);
+
+  async function uploadAudio(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!selecionado || !e.target.files?.length) return;
+    const file = e.target.files[0];
+    if (!audioNome.trim()) { setAudioError("Digite um nome para o áudio antes de selecionar o arquivo."); e.target.value = ""; return; }
+    setAudioError("");
+    setUploadingAudio(true);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("nome", audioNome.trim());
+    const res = await fetch(`/api/admin/agentes/${selecionado.id}/audios`, { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) { setAudioError(data.error || "Erro ao fazer upload"); } else { setAudios(prev => [...prev, data]); setAudioNome(""); }
+    setUploadingAudio(false);
+    e.target.value = "";
+  }
+
+  async function deletarAudio(audioId: string) {
+    if (!selecionado) return;
+    const res = await fetch(`/api/admin/agentes/${selecionado.id}/audios`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ audioId }) });
+    if (res.ok) setAudios(prev => prev.filter(a => a.id !== audioId));
+  }
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -86,12 +132,15 @@ export default function AgentePage() {
       ]);
       const lista: Agente[] = Array.isArray(agentesRes) ? agentesRes : [];
       setAgentes(lista);
-      if (lista.length > 0) setSelecionado(lista[0]);
+      if (lista.length > 0) {
+        setSelecionado(lista[0]);
+        await carregarAudios(lista[0].id);
+      }
       await carregarCanaisDisponiveis(metaRes.value || "");
       setLoading(false);
     }
     load();
-  }, [carregarCanaisDisponiveis]);
+  }, [carregarCanaisDisponiveis, carregarAudios]);
 
   async function criarAgente() {
     setCriando(true);
@@ -175,7 +224,7 @@ export default function AgentePage() {
               <button
                 key={ag.id}
                 className={`ag-item ${selecionado?.id === ag.id ? "ag-item-ativo" : ""}`}
-                onClick={() => { setSelecionado(ag); setVistaLista(false); setConfirmarExclusao(false); setError(""); }}
+                onClick={() => { setSelecionado(ag); setVistaLista(false); setConfirmarExclusao(false); setError(""); setAudioError(""); setAudioNome(""); carregarAudios(ag.id); }}
               >
                 <span className={`ag-status-dot ${ag.ativo ? "dot-on" : "dot-off"}`} />
                 <div className="ag-item-info">
@@ -343,6 +392,57 @@ export default function AgentePage() {
                   </div>
                 </div>
 
+                {/* Áudios */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Áudios do agente</div>
+                  <p className="ag-card-desc">
+                    Faça upload de áudios pré-gravados. Use <code>{"[[AUDIO:nome]]"}</code> no prompt para o agente enviar o áudio no momento certo.
+                  </p>
+
+                  {/* Upload */}
+                  <div className="ag-audio-upload">
+                    <input
+                      className="ag-audio-nome-input"
+                      value={audioNome}
+                      onChange={e => setAudioNome(e.target.value)}
+                      placeholder="Nome do áudio (ex: boas-vindas)"
+                    />
+                    <button
+                      className="ag-audio-upload-btn"
+                      onClick={() => { if (!audioNome.trim()) { setAudioError("Digite um nome antes de selecionar o arquivo."); return; } audioInputRef.current?.click(); }}
+                      disabled={uploadingAudio}
+                    >
+                      {uploadingAudio ? "Enviando…" : "+ Upload"}
+                    </button>
+                    <input ref={audioInputRef} type="file" accept="audio/*" style={{ display: "none" }} onChange={uploadAudio} />
+                  </div>
+                  {audioError && <div className="ag-audio-error">{audioError}</div>}
+
+                  {/* Lista */}
+                  {loadingAudios ? (
+                    <div className="ag-audio-loading">Carregando áudios…</div>
+                  ) : audios.length === 0 ? (
+                    <div className="ag-audio-vazio">Nenhum áudio cadastrado ainda.</div>
+                  ) : (
+                    <div className="ag-audio-list">
+                      {audios.map(audio => (
+                        <div key={audio.id} className="ag-audio-item">
+                          <div className="ag-audio-icon">♪</div>
+                          <div className="ag-audio-info">
+                            <div className="ag-audio-item-nome">{audio.nome}</div>
+                            <div className="ag-audio-item-meta">
+                              <code className="ag-audio-marker">{"[[AUDIO:" + audio.nome + "]]"}</code>
+                              {audio.tamanho && <span className="ag-audio-size">{(audio.tamanho / 1024).toFixed(0)} KB</span>}
+                            </div>
+                          </div>
+                          <a href={audio.url} target="_blank" rel="noreferrer" className="ag-audio-play">▶</a>
+                          <button className="ag-audio-del" onClick={() => deletarAudio(audio.id)} title="Remover">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Prompt */}
                 <div className="ag-card">
                   <div className="ag-prompt-header">
@@ -489,6 +589,30 @@ const css = `
   .ag-excluir-btn-desktop:disabled{opacity:.3;cursor:not-allowed;}
 
   /* Mobile */
+  /* Áudios */
+  .ag-audio-upload{display:flex;gap:10px;margin-bottom:10px;}
+  .ag-audio-nome-input{flex:1;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;font-size:13px;color:#fff9e6;font-family:monospace;outline:none;transition:border-color .2s;}
+  .ag-audio-nome-input:focus{border-color:rgba(194,144,77,.4);}
+  .ag-audio-nome-input::placeholder{color:#4a3e30;}
+  .ag-audio-upload-btn{background:rgba(194,144,77,.1);border:1px solid rgba(194,144,77,.3);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;color:#c2904d;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;}
+  .ag-audio-upload-btn:hover:not(:disabled){background:rgba(194,144,77,.18);}
+  .ag-audio-upload-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .ag-audio-error{font-size:12px;color:#e07070;margin-bottom:10px;}
+  .ag-audio-loading{font-size:13px;color:#4a3e30;padding:8px 0;}
+  .ag-audio-vazio{font-size:13px;color:#4a3e30;font-style:italic;}
+  .ag-audio-list{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+  .ag-audio-item{display:flex;align-items:center;gap:10px;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;}
+  .ag-audio-icon{font-size:18px;color:#c2904d;flex-shrink:0;width:22px;text-align:center;}
+  .ag-audio-info{flex:1;min-width:0;}
+  .ag-audio-item-nome{font-size:13px;font-weight:600;color:#fff9e6;margin-bottom:3px;}
+  .ag-audio-item-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .ag-audio-marker{font-size:11px;background:rgba(194,144,77,.1);color:#c2904d;padding:2px 7px;border-radius:4px;font-family:monospace;}
+  .ag-audio-size{font-size:11px;color:#4a3e30;}
+  .ag-audio-play{width:28px;height:28px;border-radius:50%;background:rgba(106,204,160,.1);border:1px solid rgba(106,204,160,.25);color:#6acca0;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;text-decoration:none;flex-shrink:0;transition:all .15s;}
+  .ag-audio-play:hover{background:rgba(106,204,160,.2);}
+  .ag-audio-del{width:28px;height:28px;border-radius:50%;background:none;border:1px solid rgba(224,88,64,.2);color:#e07070;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s;}
+  .ag-audio-del:hover{background:rgba(224,88,64,.1);border-color:rgba(224,88,64,.4);}
+
   @media(max-width:768px){
     .ag-root{flex-direction:column;height:auto;min-height:calc(100vh - 60px);}
     .ag-sidebar{width:100%;border-right:none;border-bottom:1px solid #2a1f18;}
