@@ -81,7 +81,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
     return () => clearTimeout(t);
   }, [pct, circ]);
   return (
-    <svg style={{ position: "absolute", inset: -3, width: "calc(100% + 6px)", height: "calc(100% + 6px)", transform: "rotate(-90deg)" }} viewBox="0 0 140 140">
+    <svg style={{ position: "absolute", top: -3, right: -3, bottom: -3, left: -3, width: "calc(100% + 6px)", height: "calc(100% + 6px)", transform: "rotate(-90deg)" }} viewBox="0 0 140 140">
       <circle cx="70" cy="70" r={r} fill="none" stroke="#2a1f18" strokeWidth="3" />
       <circle cx="70" cy="70" r={r} fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round"
         strokeDasharray={circ} strokeDashoffset={offset}
@@ -122,7 +122,25 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
       const wrap = document.querySelector(".rc-wrap") as HTMLElement | null;
       if (!wrap) return;
       const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(wrap, { scale: 2, useCORS: true, backgroundColor: "#0e0f09", logging: false, height: wrap.scrollHeight, windowHeight: wrap.scrollHeight });
+      const canvas = await html2canvas(wrap, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#0e0f09",
+        logging: false,
+        height: wrap.scrollHeight,
+        onclone: (_doc: Document, el: HTMLElement) => {
+          // ocultar botões na captura
+          const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
+          if (acoes) acoes.style.display = "none";
+          // garantir top/right/bottom/left explícitos no SVG do ring (evita distorção)
+          el.querySelectorAll<SVGElement>(".rc-ring-wrap svg").forEach((svg) => {
+            svg.style.top = "-3px";
+            svg.style.right = "-3px";
+            svg.style.bottom = "-3px";
+            svg.style.left = "-3px";
+          });
+        },
+      });
       canvas.toBlob((blob) => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
