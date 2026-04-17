@@ -38,7 +38,7 @@ const SECTIONS = [
     ],
   },
   {
-    id: "C", label: "Seção C — Relacionamento", title: "Relacionamento", sub: "Pilar 2",
+    id: "C", label: "Seção C — Relação", title: "Relação", sub: "Pilar 2",
     desc: "Sua capacidade de transformar interações em vínculos reais, construir redes de alto nível e manter relações estratégicas.",
     questions: [
       { type: "a", text: "Tenho a habilidade de transformar um primeiro contato em um relacionamento real — sei conduzir a conexão além do superficial." },
@@ -113,7 +113,7 @@ const css = `
   .header{text-align:center;padding:60px 0 40px;}
   .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:24px;}
   .eyebrow svg{width:8px;height:8px;fill:var(--gold);}
-  .h1{font-size:clamp(36px,6vw,64px);font-weight:300;line-height:1.08;letter-spacing:-1px;margin-bottom:20px;}
+  .h1{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(54px,10vw,88px);font-weight:700;line-height:1.02;letter-spacing:-.5px;margin-bottom:20px;}
   .h1 em{font-style:italic;color:var(--gold);}
   .subtitle{font-size:16px;color:var(--muted);line-height:1.6;max-width:520px;margin:0 auto 32px;}
   .meta-row{display:flex;justify-content:center;gap:32px;flex-wrap:wrap;}
@@ -131,7 +131,7 @@ const css = `
   .sec-title{font-size:28px;font-weight:300;margin-bottom:4px;}
   .sec-sub{font-size:12px;color:var(--muted);margin-bottom:12px;}
   .sec-desc{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
-  .scale-info{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap;}
+  .scale-info{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:#9a8e7e;padding:10px 16px;background:rgba(192,138,32,.07);border:1px solid rgba(192,138,32,.2);border-radius:10px;letter-spacing:.3px;}
   .pips{display:flex;gap:4px;}
   .pip{width:22px;height:22px;border-radius:6px;background:var(--muted2);display:flex;align-items:center;justify-content:center;font-size:11px;}
   .questions{padding:0 40px 32px;}
@@ -274,9 +274,8 @@ export default function QuizAlunosApp() {
               <div className="sec-sub">{sec.sub}</div>
               <p className="sec-desc">{sec.desc}</p>
               <div className="scale-info">
-                <span>Avalie de 1 a 5</span>
                 <div className="pips">{[1,2,3,4,5].map(v => <div key={v} className="pip">{v}</div>)}</div>
-                <span>1 = Discordo totalmente &nbsp;·&nbsp; 5 = Concordo totalmente</span>
+                <span>1 = Discordo totalmente &nbsp;·&nbsp; 2 = Discordo parcialmente &nbsp;·&nbsp; 3 = Neutro &nbsp;·&nbsp; 4 = Concordo parcialmente &nbsp;·&nbsp; 5 = Concordo totalmente</span>
               </div>
             </div>
             <div className="questions">
