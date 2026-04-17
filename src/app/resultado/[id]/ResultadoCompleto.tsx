@@ -133,13 +133,17 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
           const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
           if (acoes) acoes.style.display = "none";
 
-          // 2. Ring: posicionamento absoluto com pixels fixos (não depende de flex)
+          // 2. Ring: manter flex, retirar SVG do fluxo, puxar número para cima
           el.querySelectorAll<HTMLElement>(".rc-ring-wrap").forEach((wrap) => {
+            wrap.style.display = "flex";
+            wrap.style.flexDirection = "column";
+            wrap.style.alignItems = "center";
+            wrap.style.justifyContent = "center";
             wrap.style.position = "relative";
-            wrap.style.display = "block";
             wrap.style.width = "160px";
             wrap.style.height = "160px";
 
+            // SVG fora do fluxo flex
             const svg = wrap.querySelector("svg") as SVGElement | null;
             if (svg) {
               svg.style.position = "absolute";
@@ -150,32 +154,37 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
               svg.style.zIndex = "0";
             }
 
-            // Número: centralizado com pixels absolutos
-            // Container: 160px. Fonte ~68px cap-height ~44px. Total ~44+4+12=60px. Topo=(160-60)/2=50
+            // Número: margem negativa para compensar descenders da fonte
             const num = wrap.querySelector(".rc-score-num") as HTMLElement | null;
             if (num) {
-              num.style.position = "absolute";
-              num.style.top = "42px";
-              num.style.left = "0";
-              num.style.right = "0";
-              num.style.textAlign = "center";
-              num.style.lineHeight = "1";
+              num.style.position = "relative";
               num.style.zIndex = "1";
+              num.style.lineHeight = "0.75";
+              num.style.marginTop = "-18px";
+              num.style.marginBottom = "0px";
             }
             const den = wrap.querySelector(".rc-score-den") as HTMLElement | null;
             if (den) {
-              den.style.position = "absolute";
-              den.style.top = "114px";
-              den.style.left = "0";
-              den.style.right = "0";
-              den.style.textAlign = "center";
+              den.style.position = "relative";
               den.style.zIndex = "1";
+              den.style.marginTop = "6px";
             }
           });
 
-          // 3. Badge: pixels fixos, sem depender de inline-block do navegador
+          // 3. Pilares: alinhar número grande e /100 no centro vertical
+          el.querySelectorAll<HTMLElement>(".rc-pillar-score").forEach((ps) => {
+            ps.style.display = "flex";
+            ps.style.alignItems = "center";
+            ps.style.gap = "1px";
+          });
+          el.querySelectorAll<HTMLElement>(".rc-pillar-score span").forEach((span) => {
+            span.style.lineHeight = "1";
+            span.style.paddingBottom = "2px";
+          });
+
+          // 4. Badge: renderização limpa
           el.querySelectorAll<HTMLElement>(".rc-level-badge").forEach((b) => {
-            b.style.display = "block";
+            b.style.display = "inline-block";
             b.style.textAlign = "center";
             b.style.border = "1px solid #c2904d";
             b.style.borderRadius = "40px";
@@ -184,12 +193,12 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             b.style.transform = "none";
           });
 
-          // 4. Cor herdada do body que html2canvas não propaga
+          // 5. Cor do CTA (html2canvas não herda do body)
           el.querySelectorAll<HTMLElement>(".rc-cta-title, .rc-cta-sub").forEach((t) => {
             t.style.color = "#fff9e6";
           });
 
-          // 5. Botão CTA: block com height e line-height iguais para centralizar
+          // 6. Botão CTA: centralizar texto verticalmente
           el.querySelectorAll<HTMLElement>(".rc-cta-btn").forEach((btn) => {
             btn.style.display = "block";
             btn.style.textAlign = "center";
