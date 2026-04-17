@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
     const nivel_qs = calcularNivel(qs_total)
     const pilar_fraco = calcularPilarFraco(typedScores)
 
-    const supabase = createAdminClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
 
     // Cria lead anônimo — sem nome, email ou whatsapp obrigatórios
     const { data: lead, error } = await supabase
