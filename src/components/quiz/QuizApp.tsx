@@ -247,7 +247,7 @@ export default function QuizApp() {
               Maestria Social
             </div>
             <h1 className="h1">Seu <em>Quociente</em><br />Social</h1>
-            <p className="subtitle">Um diagnóstico preciso do seu nível de Inteligência Social — avaliando Sociabilidade, Comunicação, Relacionamento, Persuasão e Influência.</p>
+            <p className="subtitle">Um diagnóstico preciso do seu nível de Inteligência Social — avaliando Sociabilidade, Comunicação, Relação, Persuasão e Influência.</p>
             <div className="meta-row">
               <span className="meta-item"><span className="meta-dot"/>50 questões</span>
               <span className="meta-item"><span className="meta-dot"/>5 pilares avaliados</span>
