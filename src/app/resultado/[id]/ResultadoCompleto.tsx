@@ -166,7 +166,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             if (den) {
               den.style.position = "relative";
               den.style.zIndex = "1";
-              den.style.marginTop = "3px";
+              den.style.marginTop = "14px";
             }
           });
 
@@ -180,7 +180,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
           el.querySelectorAll<HTMLElement>(".rc-pillar-score span").forEach((span) => {
             span.style.lineHeight = "1";
             span.style.display = "inline-block";
-            span.style.paddingBottom = "8px";
+            span.style.paddingBottom = "1px";
           });
 
           // 4. Badge: padding igual em cima e embaixo para centralizar
