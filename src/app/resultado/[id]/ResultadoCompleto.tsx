@@ -129,57 +129,73 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
         logging: false,
         height: wrap.scrollHeight,
         onclone: (_doc: Document, el: HTMLElement) => {
-          // 1. Ocultar botões na captura
+          // 1. Ocultar botões
           const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
           if (acoes) acoes.style.display = "none";
 
-          // 2. Corrigir SVG do ring
-          el.querySelectorAll<SVGElement>(".rc-ring-wrap svg").forEach((svg) => {
-            svg.style.position = "absolute";
-            svg.style.top = "-3px";
-            svg.style.right = "-3px";
-            svg.style.bottom = "-3px";
-            svg.style.left = "-3px";
-            svg.style.zIndex = "0";
+          // 2. Ring: posicionamento absoluto com pixels fixos (não depende de flex)
+          el.querySelectorAll<HTMLElement>(".rc-ring-wrap").forEach((wrap) => {
+            wrap.style.position = "relative";
+            wrap.style.display = "block";
+            wrap.style.width = "160px";
+            wrap.style.height = "160px";
+
+            const svg = wrap.querySelector("svg") as SVGElement | null;
+            if (svg) {
+              svg.style.position = "absolute";
+              svg.style.top = "-3px";
+              svg.style.right = "-3px";
+              svg.style.bottom = "-3px";
+              svg.style.left = "-3px";
+              svg.style.zIndex = "0";
+            }
+
+            // Número: centralizado com pixels absolutos
+            // Container: 160px. Fonte ~68px cap-height ~44px. Total ~44+4+12=60px. Topo=(160-60)/2=50
+            const num = wrap.querySelector(".rc-score-num") as HTMLElement | null;
+            if (num) {
+              num.style.position = "absolute";
+              num.style.top = "42px";
+              num.style.left = "0";
+              num.style.right = "0";
+              num.style.textAlign = "center";
+              num.style.lineHeight = "1";
+              num.style.zIndex = "1";
+            }
+            const den = wrap.querySelector(".rc-score-den") as HTMLElement | null;
+            if (den) {
+              den.style.position = "absolute";
+              den.style.top = "114px";
+              den.style.left = "0";
+              den.style.right = "0";
+              den.style.textAlign = "center";
+              den.style.zIndex = "1";
+            }
           });
 
-          // 3. Centralizar números dentro do ring — compensar descenders da fonte
-          el.querySelectorAll<HTMLElement>(".rc-score-num").forEach((n) => {
-            n.style.position = "relative";
-            n.style.zIndex = "1";
-            n.style.lineHeight = "0.85";
-            n.style.marginTop = "-6px";
-          });
-          el.querySelectorAll<HTMLElement>(".rc-score-den").forEach((n) => {
-            n.style.position = "relative";
-            n.style.zIndex = "1";
-            n.style.marginTop = "2px";
-          });
-
-          // 4. Badge — forçar renderização limpa
+          // 3. Badge: pixels fixos, sem depender de inline-block do navegador
           el.querySelectorAll<HTMLElement>(".rc-level-badge").forEach((b) => {
-            b.style.border = "1px solid #c2904d";
-            b.style.transform = "none";
-            b.style.borderRadius = "40px";
-            b.style.display = "inline-block";
+            b.style.display = "block";
             b.style.textAlign = "center";
-            b.style.padding = "6px 18px";
-            b.style.lineHeight = "1.4";
+            b.style.border = "1px solid #c2904d";
+            b.style.borderRadius = "40px";
+            b.style.padding = "7px 18px 5px";
+            b.style.lineHeight = "1.3";
+            b.style.transform = "none";
           });
 
-          // 5. Cor no CTA
+          // 4. Cor herdada do body que html2canvas não propaga
           el.querySelectorAll<HTMLElement>(".rc-cta-title, .rc-cta-sub").forEach((t) => {
             t.style.color = "#fff9e6";
           });
 
-          // 6. Botão CTA — centralizar texto verticalmente
+          // 5. Botão CTA: block com height e line-height iguais para centralizar
           el.querySelectorAll<HTMLElement>(".rc-cta-btn").forEach((btn) => {
-            btn.style.display = "flex";
-            btn.style.alignItems = "center";
-            btn.style.justifyContent = "center";
-            btn.style.lineHeight = "1";
-            btn.style.padding = "14px 32px";
+            btn.style.display = "block";
             btn.style.textAlign = "center";
+            btn.style.lineHeight = "50px";
+            btn.style.height = "50px";
+            btn.style.padding = "0 32px";
           });
         },
       });
