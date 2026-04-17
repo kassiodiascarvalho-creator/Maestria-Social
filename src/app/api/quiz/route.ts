@@ -108,27 +108,27 @@ export async function POST(req: NextRequest) {
         Sociabilidade: [
           `Oi {nome}! Uma pergunta rápida: quando você está num ambiente com pessoas que não conhece, o que acontece internamente? Quero entender melhor sua situação.`,
           `{nome}, a maioria das pessoas com dificuldade de iniciar conexões não sabe que o problema não é timidez — é ausência de método. Posso te mostrar o primeiro passo?`,
-          `{nome}, você ainda pensa naquele resultado? {qs_total}/250 em Sociabilidade significa oportunidades concretas passando pela sua frente toda semana. Vamos resolver isso?`,
+          `{nome}, você ainda pensa naquele resultado? {qs_percentual}/100 em Sociabilidade significa oportunidades concretas passando pela sua frente toda semana. Vamos resolver isso?`,
         ],
         Comunicação: [
           `Oi {nome}! Me conta: já perdeu uma oportunidade importante porque não conseguiu se expressar da forma certa na hora certa?`,
           `{nome}, comunicação de impacto não é dom — é estrutura. Tem 3 elementos específicos que qualquer pessoa pode aprender. Curioso pra saber quais são?`,
-          `{nome}, {qs_total}/250 em Comunicação. Cada reunião sem impacto, cada proposta rejeitada — tem custo real acumulado. Bora virar esse jogo?`,
+          `{nome}, {qs_percentual}/100 em Comunicação. Cada reunião sem impacto, cada proposta rejeitada — tem custo real acumulado. Bora virar esse jogo?`,
         ],
         Relacionamento: [
           `Oi {nome}! Pergunta direta: quantas pessoas na sua rede entrariam em contato com você hoje com uma oportunidade? Seja honesto.`,
           `{nome}, a diferença entre quem tem indicações chegando todo mês e quem fica esperando não é sorte — é intencionalidade. Posso te mostrar o sistema?`,
-          `{nome}, rede superficial tem validade curta. {qs_total}/250 em Relacionamento é o ponto exato onde networking para de funcionar. Uma conversa pode mudar isso.`,
+          `{nome}, rede superficial tem validade curta. {qs_percentual}/100 em Relacionamento é o ponto exato onde networking para de funcionar. Uma conversa pode mudar isso.`,
         ],
         Persuasão: [
           `Oi {nome}! Me conta: qual foi a última negociação ou conversa importante que você saiu sentindo que poderia ter ido melhor?`,
           `{nome}, persuasão não é manipulação — é fazer a outra pessoa enxergar o que você já enxerga. Tem uma técnica específica pra isso. Quer conhecer?`,
-          `{nome}, {qs_total}/250 em Persuasão. Cada "vou pensar" que nunca voltou, cada venda perdida — tem um número real por trás disso. Vamos destravá-lo?`,
+          `{nome}, {qs_percentual}/100 em Persuasão. Cada "vou pensar" que nunca voltou, cada venda perdida — tem um número real por trás disso. Vamos destravá-lo?`,
         ],
         Influência: [
           `Oi {nome}! Me diz: as pessoas ao seu redor buscam sua opinião antes de tomar decisões — ou só depois, pra validar o que já decidiram?`,
           `{nome}, influência não se pede — se constrói. E começa com uma mudança muito específica de como você se posiciona. Posso te mostrar?`,
-          `{nome}, {qs_total}/250 em Influência. Em 2 anos, onde você quer ser visto no seu meio? Esse resultado é o ponto de partida — mas só se você agir agora.`,
+          `{nome}, {qs_percentual}/100 em Influência. Em 2 anos, onde você quer ser visto no seu meio? Esse resultado é o ponto de partida — mas só se você agir agora.`,
         ],
       }
 

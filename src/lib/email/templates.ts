@@ -26,7 +26,7 @@ export function emailDia0(lead: Lead): EmailTemplate {
   const linkResultado = `${SITE_URL}/resultado/${lead.id}`
   const assunto = `${lead.nome}, seu Quociente Social está pronto`
   const html = wrap(
-    `${lead.qs_total ?? 0}/250 — Nível ${lead.nivel_qs ?? ''}`,
+    `${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100 — Nível ${lead.nivel_qs ?? ''}`,
     `<p>Olá, ${lead.nome}!</p>
      <p>Seu diagnóstico foi registrado. Seu pilar de maior oportunidade é <strong>${lead.pilar_fraco}</strong>.</p>
      <p>Esse é o ponto que mais está te custando oportunidades hoje — e também onde a evolução acontece mais rápido.</p>`,
@@ -35,7 +35,7 @@ export function emailDia0(lead: Lead): EmailTemplate {
   return {
     assunto,
     html,
-    texto: `Olá ${lead.nome}, seu QS é ${lead.qs_total}/250. Veja: ${linkResultado}`,
+    texto: `Olá ${lead.nome}, seu QS é ${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100. Veja: ${linkResultado}`,
   }
 }
 
@@ -82,7 +82,7 @@ export function emailDia7(lead: Lead): EmailTemplate {
   const assunto = `${lead.nome}, última chamada`
   const html = wrap(
     `Sua janela de evolução`,
-    `<p>Faz uma semana desde seu diagnóstico. ${lead.qs_total}/250 não é um número para guardar — é um ponto de partida.</p>
+    `<p>Faz uma semana desde seu diagnóstico. ${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100 não é um número para guardar — é um ponto de partida.</p>
      <p>Quem age na primeira semana costuma transformar o resultado em 90 dias. Quem deixa para depois, raramente volta.</p>
      <p>Bora conversar?</p>`,
     { texto: 'Quero evoluir agora', url: `${SITE_URL}/obrigado` }

@@ -66,7 +66,7 @@ function buildWppLink(lead: Lead, numero: string): string {
   const scores = (lead.scores ?? {}) as Record<string, number>
   const key = NOME_KEY[lead.pilar_fraco ?? ''] ?? 'B'
   const pct = Math.round(((scores[key] ?? 0) / 50) * 100)
-  const texto = `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_total ?? 0}/250 — ${lead.nivel_qs ?? 'N/A'}. Meu pilar mais fraco é ${lead.pilar_fraco ?? 'Comunicação'} com ${pct}%. Quero entender meu próximo passo.`
+  const texto = `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100 — ${lead.nivel_qs ?? 'N/A'}. Meu pilar mais fraco é ${lead.pilar_fraco ?? 'Comunicação'} com ${pct}%. Quero entender meu próximo passo.`
   return `https://wa.me/${numero.replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`
 }
 

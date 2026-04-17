@@ -106,8 +106,8 @@ export async function GET(
 
           {/* Pontuação */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 8 }}>
-            <div style={{ fontSize: 160, fontWeight: 700, color: '#c2904d', lineHeight: '1' }}>{lead.qs_total}</div>
-            <div style={{ fontSize: 40, color: '#7a6e5e' }}>/250</div>
+            <div style={{ fontSize: 160, fontWeight: 700, color: '#c2904d', lineHeight: '1' }}>{lead.qs_percentual}</div>
+            <div style={{ fontSize: 40, color: '#7a6e5e' }}>/100</div>
           </div>
 
           {/* Nível */}

@@ -70,7 +70,7 @@ export default function ObrigadoPage() {
     setCompartilhando(true);
     try {
       const urlResultado = `https://maestriasocial.com/resultado/${leadId}`;
-      const texto = `Fiz o Diagnóstico de Quociente Social e tirei ${resumo.total ?? 0}/250 — nível ${resumo.nivel ?? ""}. Faça o seu:`;
+      const texto = `Fiz o Diagnóstico de Quociente Social e tirei ${resumo.percentual ?? Math.round(((resumo.total ?? 0) / 250) * 100)}/100 — nível ${resumo.nivel ?? ""}. Faça o seu:`;
 
       if (navigator.share) {
         await navigator.share({ title: "Meu Quociente Social — Maestria Social", text: texto, url: urlResultado });
@@ -96,7 +96,7 @@ export default function ObrigadoPage() {
           <h1 className="obg-title">Seu próximo passo já está claro.</h1>
           <p className="obg-desc">
             Seu diagnóstico foi registrado com sucesso.
-            {resumo.total ? ` Resultado: ${resumo.total}/250 (${resumo.percentual ?? 0}%), nível ${resumo.nivel}.` : ""}
+            {resumo.total ? ` Resultado: ${resumo.percentual ?? Math.round(((resumo.total ?? 0) / 250) * 100)}/100, nível ${resumo.nivel}.` : ""}
             {` Agora vamos evoluir seu pilar de ${titulo}.`}
           </p>
 

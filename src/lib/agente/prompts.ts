@@ -92,7 +92,7 @@ Você é esse especialista. Continue de onde os áudios pararam — não repita 
 
 PERFIL DO LEAD:
 - Nome: ${lead.nome}
-- Nível QS: ${lead.nivel_qs || 'Não avaliado'} (${lead.qs_total || 0}/250 pontos)
+- Nível QS: ${lead.nivel_qs || 'Não avaliado'} (${(lead as Record<string, unknown>).qs_percentual ?? Math.round(((lead.qs_total || 0) / 250) * 100)}/100 pontos)
 - Pilar mais fraco: ${pilar}
 ${profissao ? `- Profissão: ${profissao}` : ''}
 ${renda ? `- Faixa de renda: ${renda}` : ''}

@@ -90,8 +90,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <div className="lead-card">
                 <div className="card-label">Quociente Social</div>
                 <div className="qs-display">
-                  <span className="qs-num">{lead.qs_total}</span>
-                  <span className="qs-den">/250</span>
+                  <span className="qs-num">{lead.qs_percentual ?? lead.qs_total}</span>
+                  <span className="qs-den">/100</span>
                 </div>
                 <div className="qs-nivel">{lead.nivel_qs} · {lead.qs_percentual}%</div>
                 {lead.pilar_fraco && (

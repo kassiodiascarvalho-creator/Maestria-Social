@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     }
   }
 
-  const titulo = `${lead.nome}: ${lead.qs_total}/250 no Quociente Social — Nível ${lead.nivel_qs}`
+  const titulo = `${lead.nome}: ${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100 no Quociente Social — Nível ${lead.nivel_qs}`
   const descricao = `Pilar mais fraco: ${lead.pilar_fraco}. Faça você também o teste e descubra seu QS.`
   const ogImage = `${SITE_URL}/api/og/resultado/${id}`
 
@@ -66,7 +66,7 @@ async function gerarWhatsappLink(lead: {
     const scorePilar = lead.scores[keyPilar] ?? 0
     const percentualPilar = Math.round((scorePilar / 50) * 100)
     const texto = [
-      `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_total}/250 — ${lead.nivel_qs}.`,
+      `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100 — ${lead.nivel_qs}.`,
       `Meu pilar mais fraco é ${lead.pilar_fraco} com ${percentualPilar}%.`,
       'Quero entender meu próximo passo.',
     ].join(' ')

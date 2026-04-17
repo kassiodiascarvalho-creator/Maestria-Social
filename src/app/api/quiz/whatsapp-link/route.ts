@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const percentualPilar = Math.round((scorePilar / 50) * 100)
 
     const texto = [
-      `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_total ?? 0}/250 — ${lead.nivel_qs ?? 'N/A'}.`,
+      `Oi, fiz o Teste de Quociente Social e meu resultado foi ${lead.qs_percentual ?? Math.round(((lead.qs_total ?? 0) / 250) * 100)}/100 — ${lead.nivel_qs ?? 'N/A'}.`,
       `Meu pilar mais fraco é ${lead.pilar_fraco ?? 'Comunicação'} com ${percentualPilar}%.`,
       'Quero entender meu próximo passo.',
     ].join(' ')
