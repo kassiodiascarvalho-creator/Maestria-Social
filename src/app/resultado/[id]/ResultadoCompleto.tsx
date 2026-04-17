@@ -110,7 +110,7 @@ function useCountUp(target: number, delay = 300) {
 }
 
 // ── Download / Compartilhar ────────────────────────────────────────────────────
-function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
+function AcoesResultado({ nome, leadId, score }: { nome: string; leadId: string; score: number }) {
   const [baixando, setBaixando] = useState(false);
   const [compartilhando, setCompartilhando] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -133,7 +133,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
           const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
           if (acoes) acoes.style.display = "none";
 
-          // 2. Ring: flex do topo com paddingTop fixo — 1 valor controla tudo
+          // 2. Ring: corrigir número animado (pode estar no meio da animação) + layout
           el.querySelectorAll<HTMLElement>(".rc-ring-wrap").forEach((wrap) => {
             wrap.style.display = "flex";
             wrap.style.flexDirection = "column";
@@ -157,6 +157,8 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
 
             const num = wrap.querySelector(".rc-score-num") as HTMLElement | null;
             if (num) {
+              // Forçar o valor real — evita capturar número no meio da animação
+              num.textContent = String(score);
               num.style.position = "relative";
               num.style.zIndex = "1";
               num.style.lineHeight = "1";
@@ -166,21 +168,22 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             if (den) {
               den.style.position = "relative";
               den.style.zIndex = "1";
-              den.style.marginTop = "14px";
+              den.style.marginTop = "8px";
+              den.style.lineHeight = "1";
             }
           });
 
-          // 3. Pilares: alinhar pelo centro, levantar /100 para parear com o número
+          // 3. Pilares: baseline para alinhar número grande com /100 na mesma linha
           el.querySelectorAll<HTMLElement>(".rc-pillar-score").forEach((ps) => {
             ps.style.display = "flex";
-            ps.style.alignItems = "center";
+            ps.style.alignItems = "baseline";
             ps.style.gap = "1px";
             ps.style.lineHeight = "1";
           });
           el.querySelectorAll<HTMLElement>(".rc-pillar-score span").forEach((span) => {
             span.style.lineHeight = "1";
             span.style.display = "inline-block";
-            span.style.paddingBottom = "1px";
+            span.style.paddingBottom = "0px";
           });
 
           // 4. Badge: padding igual em cima e embaixo para centralizar
@@ -438,7 +441,7 @@ export default function ResultadoCompleto({
 
           <p className="rc-cta-sub">Diagnóstico individual · Plano personalizado · Método Maestria Social</p>
 
-          {fromQuiz && <AcoesResultado nome={lead.nome} leadId={leadId} />}
+          {fromQuiz && <AcoesResultado nome={lead.nome} leadId={leadId} score={lead.qs_percentual} />}
         </div>
 
       </main>
