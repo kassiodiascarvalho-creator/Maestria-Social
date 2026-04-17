@@ -129,15 +129,44 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
         logging: false,
         height: wrap.scrollHeight,
         onclone: (_doc: Document, el: HTMLElement) => {
-          // ocultar botões na captura
+          // 1. Ocultar botões na captura
           const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
           if (acoes) acoes.style.display = "none";
-          // garantir top/right/bottom/left explícitos no SVG do ring (evita distorção)
+
+          // 2. Corrigir SVG do ring — garantir position absolute e z-index abaixo dos números
           el.querySelectorAll<SVGElement>(".rc-ring-wrap svg").forEach((svg) => {
+            svg.style.position = "absolute";
             svg.style.top = "-3px";
             svg.style.right = "-3px";
             svg.style.bottom = "-3px";
             svg.style.left = "-3px";
+            svg.style.zIndex = "0";
+          });
+
+          // 3. Garantir que os números fiquem sobre o SVG e centralizados
+          el.querySelectorAll<HTMLElement>(".rc-score-num, .rc-score-den").forEach((n) => {
+            n.style.position = "relative";
+            n.style.zIndex = "1";
+          });
+
+          // 4. Corrigir badge — border sólida e sem transform residual
+          el.querySelectorAll<HTMLElement>(".rc-level-badge").forEach((b) => {
+            b.style.border = "1px solid #c2904d";
+            b.style.transform = "none";
+            b.style.borderRadius = "40px";
+          });
+
+          // 5. Corrigir herança de cor no CTA (html2canvas não herda do body)
+          el.querySelectorAll<HTMLElement>(".rc-cta-title, .rc-cta-sub").forEach((t) => {
+            t.style.color = "#fff9e6";
+          });
+
+          // 6. Centralizar texto do botão CTA
+          el.querySelectorAll<HTMLElement>(".rc-cta-btn").forEach((btn) => {
+            btn.style.display = "flex";
+            btn.style.alignItems = "center";
+            btn.style.justifyContent = "center";
+            btn.style.lineHeight = "1";
           });
         },
       });
