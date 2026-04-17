@@ -56,6 +56,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 async function gerarWhatsappLink(lead: {
   nome: string;
   qs_total: number;
+  qs_percentual?: number | null;
   nivel_qs: string;
   pilar_fraco: string;
   scores: Record<string, number>;
