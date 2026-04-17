@@ -133,17 +133,18 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
           const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
           if (acoes) acoes.style.display = "none";
 
-          // 2. Ring: manter flex, retirar SVG do fluxo, puxar número para cima
+          // 2. Ring: flex do topo com paddingTop fixo — 1 valor controla tudo
           el.querySelectorAll<HTMLElement>(".rc-ring-wrap").forEach((wrap) => {
             wrap.style.display = "flex";
             wrap.style.flexDirection = "column";
             wrap.style.alignItems = "center";
-            wrap.style.justifyContent = "center";
+            wrap.style.justifyContent = "flex-start";
+            wrap.style.paddingTop = "36px";
+            wrap.style.boxSizing = "border-box";
             wrap.style.position = "relative";
             wrap.style.width = "160px";
             wrap.style.height = "160px";
 
-            // SVG fora do fluxo flex
             const svg = wrap.querySelector("svg") as SVGElement | null;
             if (svg) {
               svg.style.position = "absolute";
@@ -154,59 +155,61 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
               svg.style.zIndex = "0";
             }
 
-            // Número: margem negativa para compensar descenders da fonte
             const num = wrap.querySelector(".rc-score-num") as HTMLElement | null;
             if (num) {
               num.style.position = "relative";
               num.style.zIndex = "1";
-              num.style.lineHeight = "0.75";
-              num.style.marginTop = "-9px";
-              num.style.marginBottom = "0px";
+              num.style.lineHeight = "1";
+              num.style.margin = "0";
             }
             const den = wrap.querySelector(".rc-score-den") as HTMLElement | null;
             if (den) {
               den.style.position = "relative";
               den.style.zIndex = "1";
-              den.style.marginTop = "6px";
+              den.style.marginTop = "3px";
             }
           });
 
-          // 3. Pilares: alinhar número grande e /100 no centro vertical
+          // 3. Pilares: alinhar pelo fundo da linha — números grandes e /100 pareados
           el.querySelectorAll<HTMLElement>(".rc-pillar-score").forEach((ps) => {
             ps.style.display = "flex";
-            ps.style.alignItems = "center";
+            ps.style.alignItems = "flex-end";
             ps.style.gap = "1px";
+            ps.style.lineHeight = "1";
           });
           el.querySelectorAll<HTMLElement>(".rc-pillar-score span").forEach((span) => {
             span.style.lineHeight = "1";
-            span.style.paddingBottom = "5px";
+            span.style.display = "inline-block";
+            span.style.paddingBottom = "3px";
           });
 
-          // 4. Badge: renderização limpa
+          // 4. Badge: padding igual em cima e embaixo para centralizar
           el.querySelectorAll<HTMLElement>(".rc-level-badge").forEach((b) => {
             b.style.display = "inline-block";
             b.style.textAlign = "center";
             b.style.border = "1px solid #c2904d";
             b.style.borderRadius = "40px";
-            b.style.padding = "7px 18px 5px";
+            b.style.padding = "6px 18px 8px";
             b.style.lineHeight = "1.3";
             b.style.transform = "none";
           });
 
-          // 5. Cor do CTA (html2canvas não herda do body)
+          // 5. Cor do CTA
           el.querySelectorAll<HTMLElement>(".rc-cta-title, .rc-cta-sub").forEach((t) => {
             t.style.color = "#fff9e6";
           });
 
-          // 6. Botão CTA: flex para centralizar mesmo com texto longo/quebrado
+          // 6. Botão: padding maior embaixo para equalizar com a parte de cima
           el.querySelectorAll<HTMLElement>(".rc-cta-btn").forEach((btn) => {
             btn.style.display = "flex";
             btn.style.alignItems = "center";
             btn.style.justifyContent = "center";
             btn.style.textAlign = "center";
-            btn.style.padding = "15px 32px";
+            btn.style.paddingTop = "13px";
+            btn.style.paddingBottom = "17px";
+            btn.style.paddingLeft = "32px";
+            btn.style.paddingRight = "32px";
             btn.style.lineHeight = "1.2";
-            btn.style.minHeight = "50px";
             btn.style.height = "auto";
           });
         },
