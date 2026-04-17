@@ -17,7 +17,7 @@ export interface LeadResult {
 const PILARES = [
   { id: "A", name: "Sociabilidade" },
   { id: "B", name: "Comunicação" },
-  { id: "C", name: "Relacionamento" },
+  { id: "C", name: "Relação" },
   { id: "D", name: "Persuasão" },
   { id: "E", name: "Influência" },
 ];
@@ -36,10 +36,10 @@ const INSIGHTS: Record<string, Record<string, string>> = {
     strong: "##SC## em Comunicação indica domínio de algo que poucos desenvolvem conscientemente: a capacidade de ajustar expressão, presença e mensagem ao contexto. Isso cria atração genuína — pessoas procuram quem se comunica assim.",
   },
   C: {
-    neglect: "##SC## em Relacionamento indica uma rede que existe, mas não trabalha. Quando surge uma oportunidade que precisaria de uma indicação — essa porta não existe. As melhores oportunidades da sua vida vão chegar por pessoas.",
-    weak: "##SC## em Relacionamento indica conexões circunstanciais — não intencionais. Você tem contatos, mas foram fruto do acaso. Isso gera uma rede que existe no papel, mas não tem profundidade para gerar oportunidades consistentes.",
-    ok: "##SC## em Relacionamento indica uma rede funcional — mas ainda muito transacional. Você ativa as conexões quando precisa, mas não as cultiva quando não precisa. As relações de alto nível exigem investimento antes de qualquer retorno.",
-    strong: "##SC## em Relacionamento indica que você entende algo que a maioria nunca aprende: relacionamentos são ativos estratégicos que se constroem no longo prazo. As oportunidades chegam até você, não o contrário.",
+    neglect: "##SC## em Relação indica uma rede que existe, mas não trabalha. Quando surge uma oportunidade que precisaria de uma indicação — essa porta não existe. As melhores oportunidades da sua vida vão chegar por pessoas.",
+    weak: "##SC## em Relação indica conexões circunstanciais — não intencionais. Você tem contatos, mas foram fruto do acaso. Isso gera uma rede que existe no papel, mas não tem profundidade para gerar oportunidades consistentes.",
+    ok: "##SC## em Relação indica uma rede funcional — mas ainda muito transacional. Você ativa as conexões quando precisa, mas não as cultiva quando não precisa. As relações de alto nível exigem investimento antes de qualquer retorno.",
+    strong: "##SC## em Relação indica que você entende algo que a maioria nunca aprende: relacionamentos são ativos estratégicos que se constroem no longo prazo. As oportunidades chegam até você, não o contrário.",
   },
   D: {
     neglect: "##SC## em Persuasão indica dependência da boa vontade alheia. Sem a habilidade de influenciar decisões, não há como fechar sem que o outro já esteja convencido antes da conversa. Isso limita estruturalmente qualquer resultado que dependa de mover pessoas.",
@@ -133,7 +133,7 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
           const acoes = el.querySelector(".rc-acoes") as HTMLElement | null;
           if (acoes) acoes.style.display = "none";
 
-          // 2. Corrigir SVG do ring — garantir position absolute e z-index abaixo dos números
+          // 2. Corrigir SVG do ring
           el.querySelectorAll<SVGElement>(".rc-ring-wrap svg").forEach((svg) => {
             svg.style.position = "absolute";
             svg.style.top = "-3px";
@@ -143,30 +143,43 @@ function AcoesResultado({ nome, leadId }: { nome: string; leadId: string }) {
             svg.style.zIndex = "0";
           });
 
-          // 3. Garantir que os números fiquem sobre o SVG e centralizados
-          el.querySelectorAll<HTMLElement>(".rc-score-num, .rc-score-den").forEach((n) => {
+          // 3. Centralizar números dentro do ring — compensar descenders da fonte
+          el.querySelectorAll<HTMLElement>(".rc-score-num").forEach((n) => {
             n.style.position = "relative";
             n.style.zIndex = "1";
+            n.style.lineHeight = "0.85";
+            n.style.marginTop = "-6px";
+          });
+          el.querySelectorAll<HTMLElement>(".rc-score-den").forEach((n) => {
+            n.style.position = "relative";
+            n.style.zIndex = "1";
+            n.style.marginTop = "2px";
           });
 
-          // 4. Corrigir badge — border sólida e sem transform residual
+          // 4. Badge — forçar renderização limpa
           el.querySelectorAll<HTMLElement>(".rc-level-badge").forEach((b) => {
             b.style.border = "1px solid #c2904d";
             b.style.transform = "none";
             b.style.borderRadius = "40px";
+            b.style.display = "inline-block";
+            b.style.textAlign = "center";
+            b.style.padding = "6px 18px";
+            b.style.lineHeight = "1.4";
           });
 
-          // 5. Corrigir herança de cor no CTA (html2canvas não herda do body)
+          // 5. Cor no CTA
           el.querySelectorAll<HTMLElement>(".rc-cta-title, .rc-cta-sub").forEach((t) => {
             t.style.color = "#fff9e6";
           });
 
-          // 6. Centralizar texto do botão CTA
+          // 6. Botão CTA — centralizar texto verticalmente
           el.querySelectorAll<HTMLElement>(".rc-cta-btn").forEach((btn) => {
             btn.style.display = "flex";
             btn.style.alignItems = "center";
             btn.style.justifyContent = "center";
             btn.style.lineHeight = "1";
+            btn.style.padding = "14px 32px";
+            btn.style.textAlign = "center";
           });
         },
       });
@@ -246,7 +259,10 @@ export default function ResultadoCompleto({
     return () => clearTimeout(t);
   }, [lead.scores]);
 
-  const pilarFracoObj = PILARES.find((p) => p.name === lead.pilar_fraco) ?? PILARES[1];
+  const PILAR_FRACO_MAP: Record<string, string> = {
+    Sociabilidade: "A", Comunicação: "B", Relacionamento: "C", Relação: "C", Persuasão: "D", Influência: "E",
+  };
+  const pilarFracoObj = PILARES.find((p) => p.id === (PILAR_FRACO_MAP[lead.pilar_fraco] ?? "B")) ?? PILARES[1];
 
   return (
     <>
