@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const supabase = createAdminClient()
   const { data: lead } = await supabase
     .from('leads')
-    .select('nome,qs_total,nivel_qs,pilar_fraco')
+    .select('nome,qs_total,qs_percentual,nivel_qs,pilar_fraco')
     .eq('id', id)
     .single()
 
