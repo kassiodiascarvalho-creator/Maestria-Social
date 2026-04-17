@@ -4,6 +4,7 @@ import Link from "next/link";
 import ChatInput from "./ChatInput";
 import EtiquetaSelector from "./EtiquetaSelector";
 import ExcluirLead from "./ExcluirLead";
+import RealtimeRefresher from "@/components/RealtimeRefresher";
 
 const STATUS_COLOR: Record<string, string> = { quente: "#e07070", morno: "#d4a055", frio: "#7a9ec0" };
 const STATUS_EMOJI: Record<string, string> = { quente: "🔴", morno: "🟡", frio: "🔵" };
@@ -34,6 +35,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
+      {/* Realtime: atualiza conversas, qualificações e dados do lead sem recarregar */}
+      <RealtimeRefresher table="conversas" filter={`lead_id=eq.${id}`} event="INSERT" throttleMs={500} />
+      <RealtimeRefresher table="qualificacoes" filter={`lead_id=eq.${id}`} event="INSERT" throttleMs={500} />
+      <RealtimeRefresher table="leads" filter={`id=eq.${id}`} event="UPDATE" throttleMs={500} />
       <style>{css}</style>
       <div className="lead-page">
         {/* Header */}

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
+import RealtimeRefresher from "@/components/RealtimeRefresher";
 
 const STATUS_COLOR: Record<string, string> = {
   quente: "#e07070",
@@ -75,6 +76,7 @@ export default async function LeadsPage({
     <>
       <style>{css}</style>
       <div className="leads-page">
+        <RealtimeRefresher table="leads" event="*" throttleMs={1500} />
         <div className="leads-header">
           <h1 className="leads-title">Leads</h1>
           <p className="leads-sub">{leads?.length ?? 0} resultado(s)</p>

@@ -106,7 +106,9 @@ export default function CRMPage() {
   // ── Supabase Realtime ───────────────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
+
+    // Canal 1: novas mensagens (conversas INSERT)
+    const chConversas = supabase
       .channel("crm-conversas")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversas" }, payload => {
         const nova = payload.new as { lead_id: string; id: string; role: string; mensagem: string; criado_em: string };
@@ -114,22 +116,15 @@ export default function CRMPage() {
         setConversas(prev => {
           const idx = prev.findIndex(c => c.id === nova.lead_id);
           if (idx === -1) {
-            // Lead novo com conversa: recarrega a lista
             carregarLista();
             return prev;
           }
           const updated = [...prev];
-          updated[idx] = {
-            ...updated[idx],
-            ultima_mensagem: nova.mensagem,
-            ultima_role: nova.role,
-            ultima_atividade: nova.criado_em,
-          };
-          // Move para o topo
+          updated[idx] = { ...updated[idx], ultima_mensagem: nova.mensagem, ultima_role: nova.role, ultima_atividade: nova.criado_em };
           const [item] = updated.splice(idx, 1);
           return [item, ...updated];
         });
-        // Se a mensagem é do lead selecionado, adiciona no chat
+        // Adiciona no chat se for o lead selecionado
         setLeadSelecionado(prev => {
           if (prev?.id === nova.lead_id) {
             setMensagens(m => [...m, { id: nova.id, role: nova.role as "user" | "assistant", mensagem: nova.mensagem, criado_em: nova.criado_em }]);
@@ -139,7 +134,28 @@ export default function CRMPage() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Canal 2: etiqueta / status_lead mudaram (leads UPDATE)
+    const chLeads = supabase
+      .channel("crm-leads")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "leads" }, payload => {
+        const atualizado = payload.new as { id: string; etiqueta: string; status_lead: string };
+        setConversas(prev => prev.map(c =>
+          c.id === atualizado.id
+            ? { ...c, etiqueta: atualizado.etiqueta, status_lead: atualizado.status_lead }
+            : c
+        ));
+        setLeadSelecionado(prev =>
+          prev?.id === atualizado.id
+            ? { ...prev, etiqueta: atualizado.etiqueta, status_lead: atualizado.status_lead }
+            : prev
+        );
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chConversas);
+      supabase.removeChannel(chLeads);
+    };
   }, [carregarLista]);
 
   // ── scroll ao fundo quando mensagens mudam ──────────────────────────────────

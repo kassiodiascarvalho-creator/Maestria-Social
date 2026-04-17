@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import RealtimeRefresher from "@/components/RealtimeRefresher";
 
 export default async function DashboardPage() {
   const supabase = createAdminClient();
@@ -20,6 +21,7 @@ export default async function DashboardPage() {
 
   return (
     <>
+      <RealtimeRefresher table="leads" event="*" throttleMs={2000} />
       <style>{css}</style>
       <div className="db-page">
         <div className="db-header">
