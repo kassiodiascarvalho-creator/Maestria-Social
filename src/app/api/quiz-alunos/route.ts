@@ -45,13 +45,16 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
 
-    // Cria lead anônimo — sem nome, email ou whatsapp obrigatórios
+    // Gera identificadores únicos para campos obrigatórios (leads anônimos)
+    const uid = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+    // Cria lead anônimo — campos de contato preenchidos com placeholder único
     const { data: lead, error } = await supabase
       .from('leads')
       .insert({
         nome: 'Aluno',
-        email: '',
-        whatsapp: '',
+        email: `anon_${uid}@quiz-alunos.local`,
+        whatsapp: `anon_${uid}`,
         origem: 'quiz-alunos',
         qs_total,
         qs_percentual,

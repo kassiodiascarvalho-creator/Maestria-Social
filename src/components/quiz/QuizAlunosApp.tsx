@@ -168,6 +168,7 @@ export default function QuizAlunosApp() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(SECTIONS.map(s => Array(s.questions.length).fill(0)));
+  const [erroFinal, setErroFinal] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
   const sec = SECTIONS[step];
@@ -202,9 +203,11 @@ export default function QuizAlunosApp() {
       .then(data => {
         if (data.lead_id) {
           router.push(`/resultado/${data.lead_id}?from=quiz`);
+        } else {
+          setErroFinal(true);
         }
       })
-      .catch(() => undefined);
+      .catch(() => setErroFinal(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -308,12 +311,24 @@ export default function QuizAlunosApp() {
           </div>
         )}
 
-        {step === SECTIONS.length && (
+        {step === SECTIONS.length && !erroFinal && (
           <div style={{ textAlign: "center", padding: "100px 20px", color: "#7a6e5e" }}>
             <div style={{ fontSize: 13, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>
               ◆ Calculando seu Quociente Social...
             </div>
             <div style={{ fontSize: 12, color: "#4a3e30" }}>Aguarde um momento</div>
+          </div>
+        )}
+
+        {step === SECTIONS.length && erroFinal && (
+          <div style={{ textAlign: "center", padding: "100px 20px", color: "#7a6e5e" }}>
+            <div style={{ fontSize: 16, marginBottom: 16, color: "#e08080" }}>Ops, algo deu errado ao gerar seu resultado.</div>
+            <button
+              style={{ padding: "12px 28px", background: "#c2904d", color: "#0a0907", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+              onClick={() => { setStep(0); setAnswers(SECTIONS.map(s => Array(s.questions.length).fill(0))); setErroFinal(false); }}
+            >
+              Tentar novamente
+            </button>
           </div>
         )}
 
