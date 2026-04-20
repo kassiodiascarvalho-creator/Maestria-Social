@@ -56,6 +56,7 @@ export default function WhatsAppNumerosPage() {
 
   const [deletando, setDeletando] = useState<string | null>(null);
   const [tornandoPrincipal, setTornandoPrincipal] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Instancia | null>(null);
 
   const carregarInstancias = useCallback(async () => {
     try {
@@ -119,23 +120,58 @@ export default function WhatsAppNumerosPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instancias, statusMap]);
 
+  function abrirEdicao(inst: Instancia) {
+    setEditando(inst);
+    setModalTab(inst.tipo);
+    if (inst.tipo === "meta") {
+      setFormMeta({
+        label: inst.label,
+        phone: inst.phone ?? "",
+        meta_phone_number_id: inst.meta_phone_number_id ?? "",
+        meta_access_token: inst.meta_access_token ?? "",
+        meta_waba_id: inst.meta_waba_id ?? "",
+        meta_template_name: inst.meta_template_name ?? "",
+        meta_template_language: inst.meta_template_language ?? "pt_BR",
+      });
+    } else {
+      setFormBaileys({ label: inst.label });
+    }
+    setErroForm("");
+    setShowModal(true);
+  }
+
   async function salvarInstancia() {
     setErroForm("");
     setSalvando(true);
     try {
-      const body = modalTab === "meta"
-        ? { tipo: "meta", ...formMeta }
-        : { tipo: "baileys", ...formBaileys };
-
-      const res = await fetch("/api/admin/whatsapp/instancias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) { setErroForm(data.error ?? "Erro ao salvar"); return; }
+      if (editando) {
+        // Modo edição — PATCH
+        const body = editando.tipo === "meta"
+          ? { ...formMeta }
+          : { label: formBaileys.label };
+        const res = await fetch(`/api/admin/whatsapp/instancias/${editando.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) { setErroForm(data.error ?? "Erro ao salvar"); return; }
+      } else {
+        // Modo criação — POST
+        const body = modalTab === "meta"
+          ? { tipo: "meta", ...formMeta }
+          : { tipo: "baileys", ...formBaileys };
+        const res = await fetch("/api/admin/whatsapp/instancias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) { setErroForm(data.error ?? "Erro ao salvar"); return; }
+      }
 
       setShowModal(false);
+      setEditando(null);
       setFormMeta(FORM_VAZIO_META);
       setFormBaileys(FORM_VAZIO_BAILEYS);
       await carregarInstancias();
@@ -275,6 +311,14 @@ export default function WhatsAppNumerosPage() {
                     </button>
                     {!eAuto && (
                       <button
+                        className="wn-btn-edit"
+                        onClick={() => abrirEdicao(inst)}
+                      >
+                        ✎ Editar
+                      </button>
+                    )}
+                    {!eAuto && (
+                      <button
                         className="wn-btn-del"
                         onClick={() => deletar(inst.id)}
                         disabled={deletando === inst.id}
@@ -291,20 +335,21 @@ export default function WhatsAppNumerosPage() {
 
         {/* Modal */}
         {showModal && (
-          <div className="wn-overlay" onClick={() => setShowModal(false)}>
+          <div className="wn-overlay" onClick={() => { setShowModal(false); setEditando(null); }}>
             <div className="wn-modal" onClick={(e) => e.stopPropagation()}>
               <div className="wn-modal-header">
-                <h2 className="wn-modal-title">Adicionar número</h2>
-                <button className="wn-modal-close" onClick={() => setShowModal(false)}>✕</button>
+                <h2 className="wn-modal-title">{editando ? "Editar número" : "Adicionar número"}</h2>
+                <button className="wn-modal-close" onClick={() => { setShowModal(false); setEditando(null); }}>✕</button>
               </div>
 
-              {/* Tabs */}
+              {/* Tabs — desativado no modo edição */}
               <div className="wn-tabs">
                 {(["meta", "baileys"] as const).map((tab) => (
                   <button
                     key={tab}
                     className={`wn-tab${modalTab === tab ? " wn-tab-active" : ""}`}
-                    onClick={() => { setModalTab(tab); setErroForm(""); }}
+                    onClick={() => { if (!editando) { setModalTab(tab); setErroForm(""); } }}
+                    style={editando ? { pointerEvents: "none", opacity: .5 } : {}}
                   >
                     {tab === "meta" ? "Meta API Oficial" : "Baileys (local)"}
                   </button>
@@ -361,9 +406,9 @@ export default function WhatsAppNumerosPage() {
               {erroForm && <div className="wn-erro">{erroForm}</div>}
 
               <div className="wn-modal-footer">
-                <button className="wn-btn-cancel" onClick={() => setShowModal(false)}>Cancelar</button>
+                <button className="wn-btn-cancel" onClick={() => { setShowModal(false); setEditando(null); }}>Cancelar</button>
                 <button className="wn-btn-save" onClick={salvarInstancia} disabled={salvando}>
-                  {salvando ? "Salvando…" : "Adicionar"}
+                  {salvando ? "Salvando…" : editando ? "Salvar alterações" : "Adicionar"}
                 </button>
               </div>
             </div>
@@ -475,6 +520,10 @@ const css = `
                    background:transparent; color:#7a6e5e; cursor:pointer; font-family:inherit;
                    transition:background .15s; }
   .wn-btn-status:hover { background:rgba(255,255,255,.04); color:#c8b99a; }
+  .wn-btn-edit   { font-size:11px; padding:5px 10px; border-radius:7px; border:1px solid #2a1f18;
+                   background:transparent; color:#7a6e5e; cursor:pointer; font-family:inherit;
+                   transition:background .15s,color .15s; }
+  .wn-btn-edit:hover { background:rgba(255,255,255,.04); color:#c8b99a; }
   .wn-btn-del    { font-size:11px; padding:5px 10px; border-radius:7px; border:1px solid transparent;
                    background:transparent; color:#4a3e30; cursor:pointer; font-family:inherit;
                    margin-left:auto; transition:color .15s; }
