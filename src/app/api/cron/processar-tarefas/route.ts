@@ -279,6 +279,17 @@ export async function POST(req: NextRequest) {
   let fail = 0
 
   for (const t of lista) {
+    // Claim atômico: só processa se conseguir mudar status de 'pendente' → 'processando'.
+    // Se outra invocação do cron já processou, o UPDATE não afeta nenhuma linha → skip.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: claimed } = await (supabase as any)
+      .from('tarefas_agendadas')
+      .update({ status: 'processando' })
+      .eq('id', t.id)
+      .eq('status', 'pendente')
+      .select('id')
+    if (!claimed?.length) continue // já processado por outra invocação simultânea
+
     try {
       await executar(t)
       await supabase

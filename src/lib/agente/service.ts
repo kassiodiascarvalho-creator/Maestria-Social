@@ -172,12 +172,14 @@ type AgenteDB = {
 
 async function buscarPessoaAgenda(agenteId: string): Promise<{ id: string; nome: string } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (createAdminClient() as any)
+  const { data, error } = await (createAdminClient() as any)
     .from('agenda_pessoas')
     .select('id, nome')
     .eq('agente_id', agenteId)
     .eq('ativo', true)
-    .single()
+    .maybeSingle()
+  if (error) console.error('[buscarPessoaAgenda] erro:', error.message, '— agenteId:', agenteId)
+  if (!data) console.warn('[buscarPessoaAgenda] nenhuma agenda_pessoas ativa para agenteId:', agenteId)
   return data ?? null
 }
 
@@ -429,20 +431,34 @@ export async function responderAgenteParaLead(
     respostaImediata = partesSequencia[0]
     const pausaSeg = agenteDB?.config?.pausa_sequencia_seg ?? 30
     const agora = Date.now()
-    for (let i = 1; i < partesSequencia.length; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('tarefas_agendadas').insert({
-        lead_id: leadId,
-        tipo: 'whatsapp_msg',
-        payload: {
-          texto: partesSequencia[i],
-          agente_id: agenteDB?.id ?? null,
-          canal_provider: canal?.provider ?? 'meta',
-          canal_instance_id: canal?.instanceId ?? null,
-        },
-        agendado_para: new Date(agora + i * pausaSeg * 1000).toISOString(),
-        status: 'pendente',
-      })
+
+    // Dedup: evita agendar M3-M7 duas vezes para a mesma mensagem do lead.
+    // Usa o dedupId (ext_message_id ou hash) como chave de sequência.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: jaAgendado } = await (supabase as any)
+      .from('tarefas_agendadas')
+      .select('id', { count: 'exact', head: true })
+      .eq('lead_id', leadId)
+      .in('status', ['pendente', 'processando'])
+      .filter('payload->>sequencia_id', 'eq', dedupId)
+
+    if (!jaAgendado) {
+      for (let i = 1; i < partesSequencia.length; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('tarefas_agendadas').insert({
+          lead_id: leadId,
+          tipo: 'whatsapp_msg',
+          payload: {
+            texto: partesSequencia[i],
+            agente_id: agenteDB?.id ?? null,
+            canal_provider: canal?.provider ?? 'meta',
+            canal_instance_id: canal?.instanceId ?? null,
+            sequencia_id: dedupId,
+          },
+          agendado_para: new Date(agora + i * pausaSeg * 1000).toISOString(),
+          status: 'pendente',
+        })
+      }
     }
     resposta = respostaImediata
   }
