@@ -736,11 +736,14 @@ export default function CRMPage() {
                   {!gravando && (
                     <div className="crm-toolbar">
                       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip" style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) setArquivo(e.target.files[0]); e.target.value = ""; }} />
-                      <button className="crm-tool-btn" onClick={() => fileInputRef.current?.click()} title="Enviar arquivo">📎</button>
-                      <button className="crm-tool-btn" onClick={iniciarGravacao} title="Gravar áudio">🎤</button>
-                      <div className="crm-tool-sep" />
+                      {/* Esquerda: arquivo + templates + agendar */}
+                      <button className="crm-tool-btn" onClick={() => fileInputRef.current?.click()} title="Enviar arquivo">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                      </button>
                       <div className="crm-tpl-wrap">
-                        <button className="crm-tool-btn" onClick={() => setMostrarTemplates(v => !v)} title="Templates de follow-up">📋</button>
+                        <button className="crm-tool-btn" onClick={() => setMostrarTemplates(v => !v)} title="Templates">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        </button>
                         {mostrarTemplates && (
                           <div className="crm-tpl-dropdown">
                             <div className="crm-tpl-header">Templates</div>
@@ -758,9 +761,13 @@ export default function CRMPage() {
                           </div>
                         )}
                       </div>
-                      <button className="crm-tool-btn" onClick={() => setMostrarAgendar(v => !v)} title="Agendar mensagem">⏰</button>
+                      <button className="crm-tool-btn" onClick={() => setMostrarAgendar(v => !v)} title="Agendar mensagem">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                      </button>
                       {texto.trim() && (
-                        <button className="crm-tool-btn crm-tool-save" onClick={() => setMostrarSalvarTpl(v => !v)} title="Salvar como template">💾</button>
+                        <button className="crm-tool-btn crm-tool-save" onClick={() => setMostrarSalvarTpl(v => !v)} title="Salvar como template">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        </button>
                       )}
                     </div>
                   )}
@@ -772,9 +779,18 @@ export default function CRMPage() {
                       ) : (
                         <textarea ref={inputRef} className="crm-textarea" placeholder="Digite uma mensagem…" value={texto} rows={1} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }} />
                       )}
-                      <button className="crm-send-btn" onClick={enviar} disabled={enviando || (!texto.trim() && !arquivo)}>
-                        {enviando ? "…" : "➤"}
-                      </button>
+                      {/* Áudio: fica no canto direito, substitui envio quando não há texto */}
+                      {!texto.trim() && !arquivo ? (
+                        <button className="crm-mic-btn" onClick={iniciarGravacao} title="Gravar áudio">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                        </button>
+                      ) : (
+                        <button className="crm-send-btn" onClick={enviar} disabled={enviando || (!texto.trim() && !arquivo)}>
+                          {enviando ? "…" : (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+                          )}
+                        </button>
+                      )}
                     </div>
                   )}
                   {!gravando && !mostrarAgendar && (
@@ -1083,6 +1099,8 @@ const css = `
   .crm-send-btn{width:38px;height:38px;background:#c2904d;border:none;border-radius:8px;color:#0e0f09;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;transition:background .15s;}
   .crm-send-btn:hover:not(:disabled){background:#d4a05d;}
   .crm-send-btn:disabled{opacity:.4;cursor:default;}
+  .crm-mic-btn{width:38px;height:38px;background:#1e1a12;border:1px solid #2a1f18;border-radius:8px;color:#7a6e5e;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s;}
+  .crm-mic-btn:hover{background:#2a1f18;color:#c2904d;}
   .crm-input-hint{font-size:10px;color:#2a2218;text-align:center;}
 
   /* Overlays */

@@ -80,17 +80,41 @@ export default function AgentePage() {
   const [audioError, setAudioError] = useState("");
   const audioInputRef = useRef<HTMLInputElement>(null);
 
-  const carregarCanaisDisponiveis = useCallback(async (metaId: string) => {
+  const carregarCanaisDisponiveis = useCallback(async () => {
     const canais: CanalDisponivel[] = [];
-    if (metaId) {
-      canais.push({ provider: "meta", id: metaId, label: "Meta API Oficial", phone: metaId, conectado: true });
+
+    // Todas as instâncias Meta cadastradas em whatsapp_instancias
+    const instRes = await fetch("/api/admin/whatsapp/instancias").then(r => r.json()).catch(() => []);
+    if (Array.isArray(instRes)) {
+      for (const inst of instRes) {
+        if (inst.tipo === "meta" && inst.meta_phone_number_id) {
+          canais.push({
+            provider: "meta",
+            id: inst.meta_phone_number_id,
+            label: inst.label,
+            phone: inst.phone ?? inst.meta_phone_number_id,
+            conectado: true,
+          });
+        }
+      }
     }
+
+    // Fallback: Meta da config global (se não houver nenhuma instância cadastrada)
+    if (!canais.some(c => c.provider === "meta")) {
+      const metaRes = await fetch("/api/admin/env/value?key=META_PHONE_NUMBER_ID").then(r => r.json()).catch(() => ({ value: null }));
+      if (metaRes.value) {
+        canais.push({ provider: "meta", id: metaRes.value, label: "Meta API Oficial", phone: metaRes.value, conectado: true });
+      }
+    }
+
+    // Instâncias Baileys
     const baileysRes = await fetch("/api/admin/wpp/baileys-status").then(r => r.json()).catch(() => []);
     if (Array.isArray(baileysRes)) {
       for (const inst of baileysRes) {
         canais.push({ provider: "baileys", id: inst.id, label: inst.label, phone: inst.phone ? `+${inst.phone}` : null, conectado: inst.connected });
       }
     }
+
     setCanaisDisponiveis(canais);
   }, []);
 
@@ -126,17 +150,14 @@ export default function AgentePage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [agentesRes, metaRes] = await Promise.all([
-        fetch("/api/admin/agentes").then(r => r.json()).catch(() => []),
-        fetch("/api/admin/env/value?key=META_PHONE_NUMBER_ID").then(r => r.json()).catch(() => ({ value: null })),
-      ]);
+      const agentesRes = await fetch("/api/admin/agentes").then(r => r.json()).catch(() => []);
       const lista: Agente[] = Array.isArray(agentesRes) ? agentesRes : [];
       setAgentes(lista);
       if (lista.length > 0) {
         setSelecionado(lista[0]);
         await carregarAudios(lista[0].id);
       }
-      await carregarCanaisDisponiveis(metaRes.value || "");
+      await carregarCanaisDisponiveis();
       setLoading(false);
     }
     load();

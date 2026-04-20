@@ -58,6 +58,10 @@ export default function WhatsAppNumerosPage() {
   const [tornandoPrincipal, setTornandoPrincipal] = useState<string | null>(null);
   const [editando, setEditando] = useState<Instancia | null>(null);
 
+  // Calculadora de custos Meta
+  const [calcContatos, setCalcContatos] = useState("1000");
+  const [calcCategoria, setCalcCategoria] = useState<"marketing" | "utility" | "authentication">("marketing");
+
   const carregarInstancias = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/whatsapp/instancias");
@@ -242,6 +246,46 @@ export default function WhatsAppNumerosPage() {
             </div>
           ))}
         </div>
+
+        {/* Calculadora de custos Meta */}
+        {(() => {
+          const PRECOS: Record<string, { usd: number; label: string; cor: string }> = {
+            marketing:      { usd: 0.0625, label: "Marketing",      cor: "#e07070" },
+            utility:        { usd: 0.0175, label: "Utilitário",     cor: "#4caf82" },
+            authentication: { usd: 0.0315, label: "Autenticação",   cor: "#4a90d9" },
+          };
+          const USD_BRL = 5.55; // taxa aproximada — atualize conforme necessário
+          const n = Math.max(0, parseInt(calcContatos) || 0);
+          const p = PRECOS[calcCategoria];
+          const totalUsd = n * p.usd;
+          const totalBrl = totalUsd * USD_BRL;
+          return (
+            <div className="wn-calc-card">
+              <div className="wn-calc-title">Calculadora de custos — Meta WhatsApp</div>
+              <div className="wn-calc-desc">Preços por conversa iniciada (Brasil, 2024). 1 USD ≈ R$ {USD_BRL.toFixed(2)}</div>
+              <div className="wn-calc-precos">
+                {Object.entries(PRECOS).map(([k, v]) => (
+                  <button key={k} className={`wn-calc-cat ${calcCategoria === k ? "wn-calc-cat-ativo" : ""}`}
+                    style={calcCategoria === k ? { borderColor: v.cor, color: v.cor, background: v.cor + "18" } : {}}
+                    onClick={() => setCalcCategoria(k as typeof calcCategoria)}>
+                    <span className="wn-calc-cat-label">{v.label}</span>
+                    <span className="wn-calc-cat-price">${v.usd.toFixed(4)} / conversa</span>
+                  </button>
+                ))}
+              </div>
+              <div className="wn-calc-row">
+                <label className="wn-calc-label">Contatos:</label>
+                <input className="wn-calc-input" type="number" min="1" value={calcContatos}
+                  onChange={e => setCalcContatos(e.target.value)} placeholder="Ex: 1000" />
+                <div className="wn-calc-resultado">
+                  <span className="wn-calc-usd">${totalUsd.toFixed(2)} USD</span>
+                  <span className="wn-calc-brl">≈ R$ {totalBrl.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="wn-calc-note">* Preços oficiais Meta. Mensagens dentro da janela de 24h (Service) são gratuitas.</div>
+            </div>
+          );
+        })()}
 
         {/* Lista */}
         {carregando ? (
@@ -589,6 +633,30 @@ const css = `
                    font-size:13px; cursor:pointer; font-family:inherit; transition:background .15s; }
   .wn-btn-save:hover   { background:#d4a564; }
   .wn-btn-save:disabled { opacity:.6; cursor:default; }
+
+  /* Calculadora */
+  .wn-calc-card { background:#111009; border:1px solid #2a1f18; border-radius:14px;
+                  padding:20px 24px; margin-bottom:28px; display:flex; flex-direction:column; gap:12px; }
+  .wn-calc-title { font-size:14px; font-weight:700; color:#fff9e6; }
+  .wn-calc-desc  { font-size:12px; color:#4a3e30; }
+  .wn-calc-precos { display:flex; gap:8px; flex-wrap:wrap; }
+  .wn-calc-cat   { background:transparent; border:1px solid #2a1f18; border-radius:9px;
+                   padding:8px 14px; cursor:pointer; font-family:inherit; display:flex;
+                   flex-direction:column; gap:2px; transition:border-color .15s,background .15s; }
+  .wn-calc-cat:hover { border-color:#3a2e20; }
+  .wn-calc-cat-label { font-size:12px; font-weight:600; color:#c8b99a; }
+  .wn-calc-cat-price { font-size:11px; color:#7a6e5e; }
+  .wn-calc-cat-ativo .wn-calc-cat-label { color:inherit; }
+  .wn-calc-row   { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .wn-calc-label { font-size:12px; color:#7a6e5e; font-weight:600; white-space:nowrap; }
+  .wn-calc-input { background:#0e0f09; border:1px solid #2a1f18; border-radius:8px;
+                   padding:7px 12px; font-size:13px; color:#fff9e6; font-family:inherit;
+                   outline:none; width:120px; transition:border-color .15s; }
+  .wn-calc-input:focus { border-color:rgba(194,144,77,.4); }
+  .wn-calc-resultado { display:flex; gap:10px; align-items:baseline; }
+  .wn-calc-usd  { font-size:16px; font-weight:700; color:#fff9e6; }
+  .wn-calc-brl  { font-size:13px; color:#c2904d; font-weight:600; }
+  .wn-calc-note { font-size:11px; color:#2a1f18; }
 
   @media(max-width:600px) {
     .wn-page { padding:16px; }
