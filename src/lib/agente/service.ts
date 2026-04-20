@@ -394,6 +394,14 @@ export async function responderAgenteParaLead(
   }
 
   // ── Ação: confirmar agendamento diretamente ──────────────────────────────────
+  if (dados.acao === 'confirmar_agendamento') {
+    console.log('[agente] confirmar_agendamento detectado:', {
+      slot_data: dados.slot_data,
+      slot_horario: dados.slot_horario,
+      email_lead: dados.email_lead,
+      agenteId: agenteDB?.id ?? 'sem agente',
+    })
+  }
   if (dados.acao === 'confirmar_agendamento' && dados.slot_data && dados.slot_horario) {
     const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
     if (!pessoaAgenda) {
@@ -402,6 +410,7 @@ export async function responderAgenteParaLead(
     } else if (lead.whatsapp) {
       try {
         const emailLead = dados.email_lead || (lead as Record<string, unknown>).email as string || ''
+        console.log('[agente] chamando agendarParaLead:', { pessoaId: pessoaAgenda.id, data: dados.slot_data, horario: dados.slot_horario, emailLead })
         await agendarParaLead({
           pessoaId: pessoaAgenda.id,
           data: dados.slot_data,
@@ -432,17 +441,17 @@ export async function responderAgenteParaLead(
     const pausaSeg = agenteDB?.config?.pausa_sequencia_seg ?? 30
     const agora = Date.now()
 
-    // Dedup: evita agendar M3-M7 duas vezes para a mesma mensagem do lead.
-    // Usa o dedupId (ext_message_id ou hash) como chave de sequência.
+    // Dedup: evita agendar M3-M7 duas vezes caso o lead responda antes do cron processar.
+    // Verifica se já há tarefas whatsapp_msg pendentes/em processamento para este lead.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { count: jaAgendado } = await (supabase as any)
+    const { count: tarefasPendentes } = await (supabase as any)
       .from('tarefas_agendadas')
       .select('id', { count: 'exact', head: true })
       .eq('lead_id', leadId)
+      .eq('tipo', 'whatsapp_msg')
       .in('status', ['pendente', 'processando'])
-      .filter('payload->>sequencia_id', 'eq', dedupId)
 
-    if (!jaAgendado) {
+    if (!tarefasPendentes) {
       for (let i = 1; i < partesSequencia.length; i++) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from('tarefas_agendadas').insert({
@@ -453,7 +462,6 @@ export async function responderAgenteParaLead(
             agente_id: agenteDB?.id ?? null,
             canal_provider: canal?.provider ?? 'meta',
             canal_instance_id: canal?.instanceId ?? null,
-            sequencia_id: dedupId,
           },
           agendado_para: new Date(agora + i * pausaSeg * 1000).toISOString(),
           status: 'pendente',

@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: claimed } = await (supabase as any)
       .from('tarefas_agendadas')
-      .update({ status: 'processando' })
+      .update({ status: 'processando' as string })
       .eq('id', t.id)
       .eq('status', 'pendente')
       .select('id')

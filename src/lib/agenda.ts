@@ -182,10 +182,17 @@ export async function agendarParaLead(p: AgendarParams): Promise<{ meetLink: str
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
 
-  const { data: pessoa } = await admin
+  // Validação de formato antes de qualquer chamada ao banco
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.data)) throw new Error(`Data inválida: "${p.data}" (esperado YYYY-MM-DD)`)
+  if (!/^\d{1,2}:\d{2}$/.test(p.horario)) throw new Error(`Horário inválido: "${p.horario}" (esperado HH:MM)`)
+
+  console.log('[agendarParaLead] iniciando:', { pessoaId: p.pessoaId, data: p.data, horario: p.horario, emailCliente: p.emailCliente })
+
+  const { data: pessoa, error: errPessoa } = await admin
     .from('agenda_pessoas')
     .select('id, nome, google_refresh_token, duracao_slot')
     .eq('id', p.pessoaId).single()
+  if (errPessoa) console.error('[agendarParaLead] busca pessoa erro:', errPessoa)
   if (!pessoa) throw new Error('Pessoa da agenda não encontrada')
 
   const duracao: number = pessoa.duracao_slot ?? 60
