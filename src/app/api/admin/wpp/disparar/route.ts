@@ -260,9 +260,10 @@ function preencherVarsTemplate(
   const pilar = (contato.pilar_fraco as string) || 'N/A'
   const pool = [nome, qs_total, pilar]
 
-  // Quantas variáveis o template tem (0 = sem info, assume todas do pool)
+  // Quantas variáveis o template tem
+  // 0 = não foi informado → não envia componentes (evita erro de contagem na Meta)
   const count = msg.template_param_count ?? 0
-  const vars = count > 0 ? pool.slice(0, count) : []
+  const vars = count > 0 ? pool.slice(0, Math.min(count, pool.length)) : []
 
   return { ...msg, template_vars: vars }
 }
@@ -736,12 +737,19 @@ export async function POST(req: NextRequest) {
             }
           } else if (templatePadrao) {
             const c = contato as Record<string, unknown>
+            // Usa template_param_count do config para não enviar params errados.
+            // Se META_TEMPLATE_PARAM_COUNT não estiver definido, envia sem vars
+            // (templates sem parâmetros funcionam; com params o user precisa configurar a contagem)
+            const paramCountStr = await getConfig('META_TEMPLATE_PARAM_COUNT')
+            const paramCount = paramCountStr ? parseInt(paramCountStr, 10) : 0
+            const pool = [(contato.nome || 'Lead') as string, String(c.qs_total ?? 0), (c.pilar_fraco as string) || 'N/A']
+            const fallbackVars = paramCount > 0 ? pool.slice(0, Math.min(paramCount, pool.length)) : []
             try {
               await enviarMeta(phoneNumberId!, accessToken!, contato.telefone, {
                 tipo: 'template',
                 template_name: templatePadrao,
                 template_lang: 'pt_BR',
-                template_vars: [(contato.nome || 'Lead') as string, String(c.qs_total ?? 0), (c.pilar_fraco as string) || 'N/A'],
+                template_vars: fallbackVars,
               })
               if (!primeiroTextoEnviado) primeiroTextoEnviado = `[template: ${templatePadrao}]`
             } catch (err) {

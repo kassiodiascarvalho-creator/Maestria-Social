@@ -28,6 +28,7 @@ interface TemplateInfo {
   name: string
   language: string
   category: string
+  status?: string
   components: Array<{ type: string; text?: string; parameters?: Array<{ type: string }> }>
 }
 
@@ -81,6 +82,35 @@ export default function WhatsAppPage() {
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [templateCarregando, setTemplateCarregando] = useState(false)
   const [templateErro, setTemplateErro] = useState("")
+
+  // Diagnóstico de template (testar envio único)
+  const [diagAberto, setDiagAberto] = useState(false)
+  const [diagTelefone, setDiagTelefone] = useState("")
+  const [diagTemplate, setDiagTemplate] = useState("")
+  const [diagVars, setDiagVars] = useState("")
+  const [diagCarregando, setDiagCarregando] = useState(false)
+  const [diagResult, setDiagResult] = useState<{
+    ok: boolean; message_id: string | null; erro: string | null
+    codigo_erro: number | null; telefone_enviado: string; resposta_meta: unknown
+  } | null>(null)
+
+  async function testarEnvio() {
+    if (!diagTelefone || !diagTemplate) return
+    setDiagCarregando(true)
+    setDiagResult(null)
+    try {
+      const vars = diagVars.trim() ? diagVars.split(",").map(v => v.trim()).filter(Boolean) : []
+      const res = await fetch("/api/admin/wpp/testar-envio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: diagTelefone, template_name: diagTemplate, vars }),
+      })
+      const data = await res.json()
+      setDiagResult(data)
+    } finally {
+      setDiagCarregando(false)
+    }
+  }
 
   // Filtros (só para lista Leads MS)
   const [filtros, setFiltros] = useState({ pilar: "", nivel: "", status: "", janela: "", renda: "" })
@@ -1053,6 +1083,135 @@ export default function WhatsAppPage() {
                         <span style={{ fontSize: 11, color: "#c2904d", marginLeft: 4 }}>Sem restrição 24h</span>
                       )}
                     </div>
+
+                    {/* Aviso Meta API — contatos frios */}
+                    {apiProvider === "meta" && (
+                      <div style={{
+                        background: "rgba(194,144,77,.07)", border: "1px solid rgba(194,144,77,.2)",
+                        borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#c8b99a", lineHeight: 1.6,
+                      }}>
+                        <strong style={{ color: "#c2904d" }}>⚠ Meta API e contatos frios</strong><br />
+                        A Meta API <strong>só entrega templates MARKETING</strong> para quem já iniciou conversa no seu WhatsApp Business (opt-in).
+                        Para compradores ou cadastros de página que nunca te enviaram mensagem, use <strong>Baileys</strong> — funciona como um WhatsApp normal, sem essa restrição.{" "}
+                        <button
+                          onClick={() => setDiagAberto(v => !v)}
+                          style={{ background: "none", border: "none", color: "#c2904d", cursor: "pointer",
+                            fontSize: 12, padding: 0, textDecoration: "underline", fontFamily: "inherit" }}
+                        >
+                          {diagAberto ? "Fechar diagnóstico" : "Testar envio de template →"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Painel de diagnóstico de template */}
+                    {apiProvider === "meta" && diagAberto && (
+                      <div style={{
+                        background: "#0e0f09", border: "1px solid #2a1f18", borderRadius: 12,
+                        padding: "16px", display: "flex", flexDirection: "column", gap: 10,
+                      }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#fff9e6" }}>
+                          Diagnóstico — testar template em número único
+                        </span>
+                        <p style={{ fontSize: 12, color: "#7a6e5e", margin: 0 }}>
+                          Envia para 1 número e mostra a resposta exata da Meta API (erros, message_id, etc).
+                        </p>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <input
+                            className="wpp-input"
+                            style={{ flex: "1 1 160px" }}
+                            placeholder="Telefone (ex: 11999990000)"
+                            value={diagTelefone}
+                            onChange={e => setDiagTelefone(e.target.value)}
+                          />
+                          <select
+                            className="wpp-input"
+                            style={{ flex: "1 1 160px" }}
+                            value={diagTemplate}
+                            onChange={e => setDiagTemplate(e.target.value)}
+                          >
+                            <option value="">Selecione template...</option>
+                            {templates.map(t => (
+                              <option key={t.name} value={t.name}>
+                                {t.name} ({t.status})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <input
+                          className="wpp-input"
+                          placeholder='Variáveis separadas por vírgula (ex: João, 85, Persuasão) — deixe vazio se o template não tem variáveis'
+                          value={diagVars}
+                          onChange={e => setDiagVars(e.target.value)}
+                        />
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <button
+                            className="wpp-btn wpp-btn-primary"
+                            onClick={testarEnvio}
+                            disabled={diagCarregando || !diagTelefone || !diagTemplate}
+                            style={{ padding: "8px 18px" }}
+                          >
+                            {diagCarregando ? "Testando…" : "▶ Testar agora"}
+                          </button>
+                          {templates.length === 0 && (
+                            <span style={{ fontSize: 11, color: "#4a3e30" }}>
+                              Carregue os templates acima primeiro
+                            </span>
+                          )}
+                        </div>
+
+                        {diagResult && (
+                          <div style={{
+                            background: diagResult.ok ? "rgba(76,175,130,.08)" : "rgba(224,92,92,.08)",
+                            border: `1px solid ${diagResult.ok ? "rgba(76,175,130,.25)" : "rgba(224,92,92,.25)"}`,
+                            borderRadius: 8, padding: "12px 14px", fontSize: 12, color: "#c8b99a",
+                          }}>
+                            {diagResult.ok ? (
+                              <>
+                                <div style={{ color: "#4caf82", fontWeight: 700, marginBottom: 6 }}>
+                                  ✓ Mensagem aceita pela Meta API
+                                </div>
+                                <div>Número enviado: <code style={{ color: "#c2904d" }}>{diagResult.telefone_enviado}</code></div>
+                                <div>Message ID: <code style={{ color: "#c2904d" }}>{diagResult.message_id ?? "—"}</code></div>
+                                <div style={{ marginTop: 8, color: "#7a6e5e" }}>
+                                  ⚠ &quot;Aceito&quot; não garante entrega — se o destinatário nunca iniciou conversa, a Meta pode bloquear silenciosamente.
+                                  Verifique os webhooks de status para confirmar entrega.
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ color: "#e07070", fontWeight: 700, marginBottom: 6 }}>
+                                  ✕ Erro na Meta API (código {diagResult.codigo_erro ?? "?"})
+                                </div>
+                                <div style={{ color: "#e07070" }}>{diagResult.erro}</div>
+                                {diagResult.codigo_erro === 131047 && (
+                                  <div style={{ marginTop: 8, color: "#c8b99a" }}>
+                                    → Código 131047: contato fora da janela 24h e sem opt-in. Use <strong>Baileys</strong>.
+                                  </div>
+                                )}
+                                {diagResult.codigo_erro === 132000 && (
+                                  <div style={{ marginTop: 8, color: "#c8b99a" }}>
+                                    → Código 132000: número de parâmetros incorreto. Verifique quantas variáveis o template tem.
+                                  </div>
+                                )}
+                                {diagResult.codigo_erro === 132001 && (
+                                  <div style={{ marginTop: 8, color: "#c8b99a" }}>
+                                    → Código 132001: template não encontrado ou não aprovado. Verifique o nome exato.
+                                  </div>
+                                )}
+                                <details style={{ marginTop: 8 }}>
+                                  <summary style={{ cursor: "pointer", color: "#4a3e30", fontSize: 11 }}>
+                                    Ver resposta completa da Meta
+                                  </summary>
+                                  <pre style={{ fontSize: 10, color: "#4a3e30", whiteSpace: "pre-wrap", marginTop: 6 }}>
+                                    {JSON.stringify(diagResult.resposta_meta, null, 2)}
+                                  </pre>
+                                </details>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Seletor de instância Baileys */}
                     {apiProvider === "baileys" && (
