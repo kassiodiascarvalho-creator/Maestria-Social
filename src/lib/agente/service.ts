@@ -5,6 +5,7 @@ import { enviarMensagemInicialWhatsApp, enviarMensagemWhatsApp, enviarAudioViaMe
 import { enviarViaBaileys, enviarAudioViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 import { dispararWebhookSaida } from '@/lib/webhooks'
+import { buscarSlotsComEscassez, formatarSlotsParaAgente, agendarParaLead } from '@/lib/agenda'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
 
 interface AudioAgente { nome: string; url: string }
@@ -46,6 +47,11 @@ interface AgenteJSON {
   pipeline_etapa?: string
   enviar_link?: boolean
   qualificacoes?: QualificacaoItem[]
+  // Agendamento automático
+  acao?: 'buscar_disponibilidade' | 'confirmar_agendamento'
+  email_lead?: string
+  slot_data?: string    // YYYY-MM-DD
+  slot_horario?: string // HH:MM
 }
 
 function parseAgenteJSON(texto: string, linkAgendamento?: string): { resposta: string; dados: AgenteJSON } {
@@ -154,6 +160,17 @@ type AgenteDB = {
   ativo: boolean
   canais: Array<{ provider: string; id: string }>
   link_agendamento: string | null
+}
+
+async function buscarPessoaAgenda(agenteId: string): Promise<{ id: string; nome: string } | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (createAdminClient() as any)
+    .from('agenda_pessoas')
+    .select('id, nome')
+    .eq('agente_id', agenteId)
+    .eq('ativo', true)
+    .single()
+  return data ?? null
 }
 
 // Busca o agente configurado para um canal específico
@@ -343,9 +360,55 @@ export async function responderAgenteParaLead(
   })
 
   const respostaCompleta = completion.choices[0]?.message?.content ?? ''
-  // Extrai marcadores [[AUDIO:nome]] antes de fazer o parseAgenteJSON
   const { texto: respostaSemAudio, urls: audioUrls } = extrairAudios(respostaCompleta, audiosAgente)
-  const { resposta, dados } = parseAgenteJSON(respostaSemAudio, linkAgendamento)
+  let { resposta, dados } = parseAgenteJSON(respostaSemAudio, linkAgendamento)
+
+  // ── Ação: buscar disponibilidade e re-chamar IA com slots filtrados ─────────
+  if (dados.acao === 'buscar_disponibilidade') {
+    const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
+    if (pessoaAgenda) {
+      const dias = await buscarSlotsComEscassez(pessoaAgenda.id)
+      const slotsTexto = formatarSlotsParaAgente(dias)
+      const mensagensComSlots: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        ...mensagensOpenAI,
+        { role: 'assistant', content: respostaCompleta },
+        { role: 'system', content: `SLOTS DISPONÍVEIS (use APENAS esses, nunca invente outros):\n${slotsTexto}\n\nApresente ao lead de forma natural com urgência e escassez. Não mostre quantos horários há no total — apenas os que estão aqui.` },
+      ]
+      const comp2 = await openai.chat.completions.create({ model: modelo, messages: mensagensComSlots, temperature: temperatura, max_tokens: 300 })
+      const raw2 = comp2.choices[0]?.message?.content ?? ''
+      const { texto: sem2 } = extrairAudios(raw2, audiosAgente)
+      const parsed2 = parseAgenteJSON(sem2, linkAgendamento)
+      resposta = parsed2.resposta || raw2
+      dados = { ...dados, ...parsed2.dados }
+    }
+  }
+
+  // ── Ação: confirmar agendamento diretamente ──────────────────────────────────
+  if (dados.acao === 'confirmar_agendamento' && dados.slot_data && dados.slot_horario) {
+    const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
+    if (pessoaAgenda && lead.whatsapp) {
+      try {
+        const emailLead = dados.email_lead || (lead as Record<string, unknown>).email as string || ''
+        await agendarParaLead({
+          pessoaId: pessoaAgenda.id,
+          data: dados.slot_data,
+          horario: dados.slot_horario,
+          nomeCliente: lead.nome,
+          emailCliente: emailLead,
+          whatsCliente: lead.whatsapp,
+          leadId,
+          agenteId: agenteDB?.id ?? null,
+          canalProvider: canal?.provider,
+          canalInstanciaId: canal?.instanceId,
+        })
+        // agendarParaLead já enviou WhatsApp e salvou em conversas — encerra aqui
+        return { ok: true, resposta: resposta || 'Agendamento confirmado!' }
+      } catch (err) {
+        console.error('[agente] Falha ao agendar:', err)
+        // Continua com o fluxo normal em caso de erro
+      }
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from('conversas').insert({
