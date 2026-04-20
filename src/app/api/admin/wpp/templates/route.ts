@@ -1,17 +1,36 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getConfig } from '@/lib/config'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
 
-// GET — busca templates da conta WhatsApp Business (todos os status)
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const wabaId = await getConfig('META_WABA_ID')
-    const accessToken = await getConfig('META_ACCESS_TOKEN')
+    const instanciaId = req.nextUrl.searchParams.get('instancia_id')
+
+    let wabaId: string | null = null
+    let accessToken: string | null = null
+
+    if (instanciaId) {
+      // Busca credenciais da instância específica
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (createAdminClient() as any)
+        .from('whatsapp_instancias')
+        .select('meta_waba_id, meta_access_token')
+        .eq('id', instanciaId)
+        .eq('tipo', 'meta')
+        .single()
+      wabaId = data?.meta_waba_id ?? null
+      accessToken = data?.meta_access_token ?? null
+    }
+
+    // Fallback para config global se não veio da instância
+    if (!wabaId) wabaId = await getConfig('META_WABA_ID')
+    if (!accessToken) accessToken = await getConfig('META_ACCESS_TOKEN')
 
     if (!wabaId || !accessToken) {
       return NextResponse.json(
-        { error: 'META_WABA_ID ou META_ACCESS_TOKEN não configurados nas Integrações' },
+        { error: 'META_WABA_ID ou META_ACCESS_TOKEN não configurados' },
         { status: 500 }
       )
     }

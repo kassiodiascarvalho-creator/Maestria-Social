@@ -158,6 +158,13 @@ export default function WhatsAppPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiProvider])
 
+  // Re-busca templates quando o número Meta selecionado mudar
+  useEffect(() => {
+    if (apiProvider !== "meta" || !metaInstSelecionada) return
+    fetchTemplates(metaInstSelecionada)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metaInstSelecionada])
+
   // Baileys job — progresso em tempo real
   type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "concluido" | "erro"; erroGeral?: string }
   const [baileysJob, setBaileysJob] = useState<BaileysJob | null>(null)
@@ -288,18 +295,20 @@ export default function WhatsAppPage() {
     setSincronizando(false)
   }
 
-  async function fetchTemplates() {
+  async function fetchTemplates(instanciaId?: string) {
     setTemplateCarregando(true)
     setTemplateErro("")
     try {
-      const res = await fetch("/api/admin/wpp/templates")
+      const id = instanciaId ?? (apiProvider === "meta" ? metaInstSelecionada : undefined)
+      const url = id ? `/api/admin/wpp/templates?instancia_id=${id}` : "/api/admin/wpp/templates"
+      const res = await fetch(url)
       const data = await res.json()
       if (!res.ok) {
         setTemplateErro(data.error ?? "Erro ao carregar templates")
       } else {
         setTemplates(Array.isArray(data) ? data : [])
         if (Array.isArray(data) && data.length === 0) {
-          setTemplateErro("Nenhum template encontrado. Verifique o META_WABA_ID nas Integrações.")
+          setTemplateErro("Nenhum template encontrado. Verifique o WABA ID da instância.")
         }
       }
     } catch (e) {
@@ -928,7 +937,7 @@ export default function WhatsAppPage() {
                                     </select>
                                     <button
                                       className="wpp-btn wpp-btn-outline"
-                                      onClick={fetchTemplates}
+                                      onClick={() => fetchTemplates()}
                                       disabled={templateCarregando}
                                       style={{ whiteSpace: "nowrap", flexShrink: 0 }}
                                     >
