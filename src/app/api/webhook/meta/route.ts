@@ -75,6 +75,21 @@ function variacoesTelefone(raw: string): string[] {
   return Array.from(variações).filter(Boolean)
 }
 
+async function buscarInstanciaMetaPorPhoneId(
+  phoneNumberId: string
+): Promise<{ meta_access_token: string } | null> {
+  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('whatsapp_instancias')
+    .select('meta_access_token')
+    .eq('tipo', 'meta')
+    .eq('meta_phone_number_id', phoneNumberId)
+    .eq('ativo', true)
+    .single()
+  return data ?? null
+}
+
 async function buscarLeadPorTelefone(raw: string): Promise<{ id: string } | null> {
   const supabase = createAdminClient()
   const tentativas = variacoesTelefone(raw)
@@ -143,25 +158,33 @@ export async function POST(req: NextRequest) {
     const maestriaPhoneId = await getConfig('META_PHONE_NUMBER_ID')
     const forwardUrl = await getConfig('META_FORWARD_WEBHOOK_URL')
 
-    // Em modo coexistência, ignora a verificação de phone_number_id — a mensagem
-    // pode vir encaminhada por outra plataforma com um ID diferente.
-    if (!coexistencia && phoneNumberId && maestriaPhoneId && phoneNumberId !== maestriaPhoneId) {
-      await saveDebug('forward_outro_numero', { phoneNumberId, forwardUrl })
-      if (forwardUrl) {
-        try {
-          // IMPORTANTE: em serverless precisa ser await, senão a função encerra
-          // antes do fetch completar e a mensagem da clínica nunca chega.
-          const res = await fetch(forwardUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          })
-          await saveDebug('forward_resultado', { status: res.status, ok: res.ok })
-        } catch (err) {
-          await saveDebug('forward_erro', { erro: String(err) })
+    // Em modo coexistência, processa tudo. Fora dele, aceita o número principal
+    // OU qualquer instância registrada em whatsapp_instancias.
+    let accessTokenInstancia: string | null = null
+    if (!coexistencia && phoneNumberId) {
+      const ehPrincipal = !maestriaPhoneId || phoneNumberId === maestriaPhoneId
+      if (!ehPrincipal) {
+        const instancia = await buscarInstanciaMetaPorPhoneId(phoneNumberId)
+        if (!instancia) {
+          // Número desconhecido — encaminha se configurado e ignora
+          await saveDebug('forward_outro_numero', { phoneNumberId, forwardUrl })
+          if (forwardUrl) {
+            try {
+              const res = await fetch(forwardUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              })
+              await saveDebug('forward_resultado', { status: res.status, ok: res.ok })
+            } catch (err) {
+              await saveDebug('forward_erro', { erro: String(err) })
+            }
+          }
+          return NextResponse.json({ status: 'ok' }, { status: 200 })
         }
+        // Número secundário registrado — usa o token dele para marcar como lida
+        accessTokenInstancia = instancia.meta_access_token
       }
-      return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
     const messages = value.messages as MetaMessage[] | undefined
@@ -191,9 +214,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    // Marca como lida apenas no modo Meta (coexistência não acessa Meta API diretamente)
+    // Marca como lida — usa credenciais da instância secundária se for o caso
     if (!coexistencia && messageId) {
-      marcarMensagemComoLida(messageId).catch((err) =>
+      const credLida = accessTokenInstancia && phoneNumberId
+        ? { phoneNumberId, accessToken: accessTokenInstancia }
+        : undefined
+      marcarMensagemComoLida(messageId, credLida).catch((err) =>
         console.error('[webhook/meta] erro ao marcar lida:', err)
       )
     }

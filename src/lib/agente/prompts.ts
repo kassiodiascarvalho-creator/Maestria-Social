@@ -163,6 +163,7 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 {
   "status_lead": "frio|morno|quente",
   "fase": "acolhimento|sondagem|proposta_call|link_enviado",
+  "pipeline_etapa": "em_contato|qualificado|proposta|agendado|convertido|perdido",
   "enviar_link": false,
   "qualificacoes": [
     { "campo": "maior_dor|contexto|interesse|objecao|objetivo|urgencia|orcamento|outro", "valor": "texto extraído" }
@@ -170,6 +171,15 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 }
 ---JSON---
 
+Regras para pipeline_etapa:
+- "em_contato": lead respondeu, conversa iniciada
+- "qualificado": dor clara identificada, lead engajado na sondagem
+- "proposta": você apresentou a call de descoberta
+- "agendado": lead confirmou que vai agendar ou já agendou
+- "convertido": lead fechou / virou cliente
+- "perdido": lead descartou, bloqueou ou é claramente desinteressado
+
+Só avance a etapa, nunca retroceda. Omita "pipeline_etapa" se a etapa não mudou.
 Quando incluir o link na resposta, defina "enviar_link": true e "fase": "link_enviado".
 Se não houver novas informações relevantes, retorne qualificacoes como array vazio.
 

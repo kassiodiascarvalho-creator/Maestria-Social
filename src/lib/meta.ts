@@ -151,12 +151,19 @@ export async function enviarMensagemInicialWhatsApp(
   await enviarMensagemWhatsApp(para, textoFallback)
 }
 
-export async function marcarMensagemComoLida(messageId: string): Promise<void> {
-  await postMeta({
-    messaging_product: 'whatsapp',
-    status: 'read',
-    message_id: messageId,
-  })
+export async function marcarMensagemComoLida(
+  messageId: string,
+  credenciais?: { phoneNumberId: string; accessToken: string }
+): Promise<void> {
+  if (credenciais) {
+    await fetch(`${META_API_URL}/${credenciais.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${credenciais.accessToken}` },
+      body: JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: messageId }),
+    })
+    return
+  }
+  await postMeta({ messaging_product: 'whatsapp', status: 'read', message_id: messageId })
 }
 
 /**

@@ -25,6 +25,15 @@ const CAMPOS_VALIDOS: CampoQualificacao[] = [
 ]
 
 const STATUS_VALIDOS: StatusLead[] = ['frio', 'morno', 'quente']
+const ETAPAS_VALIDAS = ['novo', 'em_contato', 'qualificado', 'proposta', 'agendado', 'convertido', 'perdido']
+
+// Mapeamento automático de fase → pipeline_etapa
+const FASE_PARA_ETAPA: Record<string, string> = {
+  acolhimento:   'em_contato',
+  sondagem:      'em_contato',
+  proposta_call: 'proposta',
+  link_enviado:  'proposta',
+}
 
 interface QualificacaoItem {
   campo: string
@@ -34,6 +43,7 @@ interface QualificacaoItem {
 interface AgenteJSON {
   status_lead?: string
   fase?: string
+  pipeline_etapa?: string
   enviar_link?: boolean
   qualificacoes?: QualificacaoItem[]
 }
@@ -374,6 +384,27 @@ export async function responderAgenteParaLead(
       status_anterior: lead.status_lead,
       status_atual: dados.status_lead,
     })
+  }
+
+  // Avança etapa do pipeline automaticamente
+  const etapaExplicita = dados.pipeline_etapa && ETAPAS_VALIDAS.includes(dados.pipeline_etapa)
+    ? dados.pipeline_etapa
+    : dados.fase ? FASE_PARA_ETAPA[dados.fase] : undefined
+
+  if (etapaExplicita) {
+    const etapaAtual = (lead as Record<string, unknown>).pipeline_etapa as string | undefined
+    // Só avança, nunca regride (exceto para perdido/convertido que são finais)
+    const ordemEtapas = ETAPAS_VALIDAS
+    const idxAtual = ordemEtapas.indexOf(etapaAtual ?? 'novo')
+    const idxNova = ordemEtapas.indexOf(etapaExplicita)
+    const finaliza = etapaExplicita === 'perdido' || etapaExplicita === 'convertido'
+    if (finaliza || idxNova > idxAtual) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('leads')
+        .update({ pipeline_etapa: etapaExplicita })
+        .eq('id', leadId)
+    }
   }
 
   // Quando o agente enviar o link de agendamento, marcar o lead como aguardando agendamento
