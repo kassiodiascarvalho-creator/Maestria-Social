@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 
 type TipoInstancia = "meta" | "baileys";
-type StatusConexao = "conectado" | "aguardando_qr" | "erro" | "offline" | "carregando";
+type StatusConexao = "conectado" | "configurado" | "aguardando_qr" | "erro" | "offline" | "carregando";
 
 interface Instancia {
   id: string;
@@ -19,6 +19,11 @@ interface Instancia {
   principal: boolean;
   ativo: boolean;
   criado_em: string;
+  // campos adicionados pelo GET para itens auto-detectados
+  _inline_status?: string;
+  _inline_detalhe?: string | null;
+  _inline_qr?: string | null;
+  _auto?: boolean;
 }
 
 interface StatusInfo {
@@ -32,6 +37,10 @@ const FORM_VAZIO_META = {
   meta_waba_id: "", meta_template_name: "", meta_template_language: "pt_BR",
 };
 const FORM_VAZIO_BAILEYS = { label: "" };
+
+function isAutoId(id: string) {
+  return id.startsWith("env-meta-") || id.startsWith("baileys-auto-");
+}
 
 export default function WhatsAppNumerosPage() {
   const [instancias, setInstancias] = useState<Instancia[]>([]);
@@ -54,12 +63,28 @@ export default function WhatsAppNumerosPage() {
       if (res.ok) {
         const data: Instancia[] = await res.json();
         setInstancias(data);
-        // Carrega status de cada uma em paralelo (silenciosamente)
-        data.forEach((inst) => carregarStatus(inst.id));
+
+        // Pré-popula statusMap com dados inline (auto-detectados) e
+        // dispara busca de status para itens no DB
+        const novoStatus: Record<string, StatusInfo> = {};
+        data.forEach((inst) => {
+          if (inst._inline_status) {
+            novoStatus[inst.id] = {
+              status: inst._inline_status as StatusConexao,
+              detalhe: inst._inline_detalhe ?? null,
+              qr: inst._inline_qr ?? null,
+            };
+          }
+        });
+        setStatusMap(novoStatus);
+
+        // Busca status via endpoint apenas para itens do DB (UUIDs reais)
+        data.filter((i) => !isAutoId(i.id)).forEach((inst) => carregarStatus(inst.id));
       }
     } finally {
       setCarregando(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function carregarStatus(id: string) {
@@ -77,16 +102,21 @@ export default function WhatsAppNumerosPage() {
 
   useEffect(() => { carregarInstancias(); }, [carregarInstancias]);
 
-  // Polling automático para instâncias aguardando QR (a cada 5s)
+  // Polling para Baileys aguardando QR (a cada 5s — recarrega tudo pois o QR vem do GET)
   useEffect(() => {
     const aguardando = instancias.filter(
       (i) => i.tipo === "baileys" && statusMap[i.id]?.status === "aguardando_qr"
     );
     if (aguardando.length === 0) return;
     const timer = setInterval(() => {
-      aguardando.forEach((i) => carregarStatus(i.id));
+      // Para itens auto-detectados: recarrega a lista toda (QR vem inline no GET)
+      const temAuto = aguardando.some((i) => isAutoId(i.id));
+      if (temAuto) carregarInstancias();
+      // Para itens no DB: chama endpoint de status
+      aguardando.filter((i) => !isAutoId(i.id)).forEach((i) => carregarStatus(i.id));
     }, 5000);
     return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instancias, statusMap]);
 
   async function salvarInstancia() {
@@ -140,7 +170,10 @@ export default function WhatsAppNumerosPage() {
   }
 
   const total = instancias.length;
-  const conectados = instancias.filter((i) => statusMap[i.id]?.status === "conectado").length;
+  const conectados = instancias.filter((i) => {
+    const st = statusMap[i.id]?.status;
+    return st === "conectado" || st === "configurado";
+  }).length;
   const numMeta = instancias.filter((i) => i.tipo === "meta").length;
   const numBaileys = instancias.filter((i) => i.tipo === "baileys").length;
 
@@ -187,6 +220,7 @@ export default function WhatsAppNumerosPage() {
           <div className="wn-grid">
             {instancias.map((inst) => {
               const st = statusMap[inst.id];
+              const eAuto = inst._auto === true;
               return (
                 <div key={inst.id} className={`wn-card${inst.principal ? " wn-card-principal" : ""}`}>
                   {/* Topo do card */}
@@ -196,6 +230,7 @@ export default function WhatsAppNumerosPage() {
                         {inst.tipo === "meta" ? "Meta API" : "Baileys"}
                       </span>
                       {inst.principal && <span className="wn-badge-principal">★ Principal</span>}
+                      {eAuto && <span className="wn-badge-auto">auto-detectado</span>}
                     </div>
                     <StatusBadge status={st?.status ?? "carregando"} />
                   </div>
@@ -214,40 +249,39 @@ export default function WhatsAppNumerosPage() {
                       <p className="wn-qr-hint">Escaneie o QR code com o WhatsApp</p>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={st.qr} alt="QR Code" className="wn-qr-img" />
-                      <p className="wn-qr-hint" style={{ color: "#4a3e30" }}>
-                        Atualizando automaticamente…
-                      </p>
+                      <p className="wn-qr-hint" style={{ color: "#4a3e30" }}>Atualizando automaticamente…</p>
                     </div>
                   )}
-
                   {inst.tipo === "baileys" && st?.status === "aguardando_qr" && !st.qr && (
                     <div className="wn-qr-placeholder">Aguardando QR…</div>
                   )}
 
                   {/* Ações */}
                   <div className="wn-card-actions">
-                    {!inst.principal && (
+                    {!eAuto && !inst.principal && (
                       <button
                         className="wn-btn-sec"
                         onClick={() => definirPrincipal(inst.id)}
                         disabled={tornandoPrincipal === inst.id}
                       >
-                        {tornandoPrincipal === inst.id ? "..." : "★ Definir principal"}
+                        {tornandoPrincipal === inst.id ? "..." : "★ Principal"}
                       </button>
                     )}
                     <button
                       className="wn-btn-status"
-                      onClick={() => carregarStatus(inst.id)}
+                      onClick={() => eAuto ? carregarInstancias() : carregarStatus(inst.id)}
                     >
-                      ↻ Status
+                      ↻ Atualizar
                     </button>
-                    <button
-                      className="wn-btn-del"
-                      onClick={() => deletar(inst.id)}
-                      disabled={deletando === inst.id}
-                    >
-                      {deletando === inst.id ? "..." : "Remover"}
-                    </button>
+                    {!eAuto && (
+                      <button
+                        className="wn-btn-del"
+                        onClick={() => deletar(inst.id)}
+                        disabled={deletando === inst.id}
+                      >
+                        {deletando === inst.id ? "..." : "Remover"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -342,11 +376,12 @@ export default function WhatsAppNumerosPage() {
 
 function StatusBadge({ status }: { status: StatusConexao }) {
   const map: Record<StatusConexao, { label: string; cor: string; bg: string }> = {
-    conectado:    { label: "Conectado",    cor: "#4caf82", bg: "rgba(76,175,130,.12)" },
-    aguardando_qr:{ label: "Aguard. QR",  cor: "#c2904d", bg: "rgba(194,144,77,.12)"  },
-    erro:         { label: "Erro",         cor: "#e05c5c", bg: "rgba(224,92,92,.12)"   },
-    offline:      { label: "Offline",      cor: "#4a3e30", bg: "rgba(74,62,48,.18)"    },
-    carregando:   { label: "…",            cor: "#7a6e5e", bg: "rgba(122,110,94,.12)"  },
+    conectado:     { label: "Conectado",    cor: "#4caf82", bg: "rgba(76,175,130,.12)"  },
+    configurado:   { label: "Configurado",  cor: "#4a90d9", bg: "rgba(74,144,217,.12)"  },
+    aguardando_qr: { label: "Aguard. QR",   cor: "#c2904d", bg: "rgba(194,144,77,.12)"  },
+    erro:          { label: "Erro",         cor: "#e05c5c", bg: "rgba(224,92,92,.12)"   },
+    offline:       { label: "Offline",      cor: "#4a3e30", bg: "rgba(74,62,48,.18)"    },
+    carregando:    { label: "…",            cor: "#7a6e5e", bg: "rgba(122,110,94,.12)"  },
   };
   const { label, cor, bg } = map[status] ?? map.offline;
   return (
@@ -419,6 +454,8 @@ const css = `
   .wn-badge-baileys  { background:rgba(194,144,77,.12); color:#c2904d; border:1px solid rgba(194,144,77,.2); }
   .wn-badge-principal{ font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px;
                        background:rgba(194,144,77,.15); color:#c2904d; border:1px solid rgba(194,144,77,.25); }
+  .wn-badge-auto     { font-size:10px; font-weight:500; padding:2px 7px; border-radius:5px;
+                       background:rgba(122,110,94,.1); color:#4a3e30; border:1px solid rgba(122,110,94,.15); }
 
   /* QR */
   .wn-qr-wrapper  { display:flex; flex-direction:column; align-items:center; gap:8px;
