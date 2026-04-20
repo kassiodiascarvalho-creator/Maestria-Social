@@ -7,6 +7,7 @@ import { getConfig } from '@/lib/config'
 import { dispararWebhookSaida } from '@/lib/webhooks'
 import { buscarSlotsComEscassez, formatarSlotsParaAgente, agendarParaLead } from '@/lib/agenda'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
+import { createHash } from 'crypto'
 
 interface AudioAgente { nome: string; url: string }
 
@@ -220,19 +221,23 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
-  // Salva mensagem do lead SEMPRE — independente de o agente responder ou não.
-  // ext_message_id tem índice UNIQUE: se o mesmo webhook chegar duas vezes (Meta re-entrega),
-  // o insert falha silenciosamente e o agente não responde duplicado.
+  // Gera ID sintético baseado no conteúdo: garante dedup mesmo quando Baileys e Meta
+  // usam formatos de ID diferentes para a mesma mensagem física do lead.
+  // Janela de 30s: duas mensagens idênticas do mesmo lead num intervalo menor são tratadas como uma.
+  const janela30s = Math.floor(Date.now() / 30000)
+  const dedupId = extMessageId
+    || createHash('sha256').update(`${leadId}:${mensagem}:${janela30s}`).digest('hex').slice(0, 40)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: insertMsgError } = await (supabase as any).from('conversas').insert({
     lead_id: leadId,
     role: 'user',
     mensagem,
     agente_id: agenteDB?.id ?? null,
-    ext_message_id: extMessageId ?? null,
+    ext_message_id: dedupId,
   })
   if (insertMsgError?.code === '23505') {
-    // Evento já processado (webhook duplicado) — ignora silenciosamente
+    // Evento já processado (webhook duplicado ou Baileys+Meta mesmo número) — ignora
     return { ok: true, resposta: '' }
   }
 

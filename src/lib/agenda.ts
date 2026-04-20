@@ -203,10 +203,12 @@ export async function agendarParaLead(p: AgendarParams): Promise<{ meetLink: str
     : null
 
   // Salvar agendamento (sequencial para detectar erros individualmente)
+  const camposBase = { nome: p.nomeCliente, email: p.emailCliente, whatsapp: p.whatsCliente }
   const { error: errAg } = await admin.from('agenda_agendamentos').insert({
     pessoa_id: p.pessoaId, data: p.data, horario: p.horario, horario_fim: horaFim,
     nome_lead: p.nomeCliente, email_lead: p.emailCliente, whatsapp_lead: p.whatsCliente,
-    campos_preenchidos: { nome: p.nomeCliente, email: p.emailCliente },
+    campos_preenchidos: camposBase,
+    campos_extras: camposBase,
     meet_link: meetLink, status: 'confirmado',
   })
   if (errAg) {
