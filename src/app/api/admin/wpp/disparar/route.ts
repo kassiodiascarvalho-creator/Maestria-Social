@@ -408,6 +408,7 @@ export async function POST(req: NextRequest) {
       ? payload.api_provider
       : 'meta'
     const baileysInstanceId: string = payload.baileys_instance_id || '1'
+    const metaInstanciaId: string | null = payload.meta_instancia_id || null
 
     // Compatibilidade com formato antigo (tipo + conteudo)
     let mensagens: MensagemItem[]
@@ -448,8 +449,23 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'BAILEYS_API_URL não configurada nas Integrações. Inicie o servidor local e configure a URL.' }, { status: 500 })
       }
     } else {
-      phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
-      accessToken = await getConfig('META_ACCESS_TOKEN')
+      // Se foi passada uma instância específica, usa as credenciais dela
+      if (metaInstanciaId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: inst } = await (createAdminClient() as any)
+          .from('whatsapp_instancias')
+          .select('meta_phone_number_id, meta_access_token, label')
+          .eq('id', metaInstanciaId)
+          .eq('tipo', 'meta')
+          .single()
+        if (inst?.meta_phone_number_id && inst?.meta_access_token) {
+          phoneNumberId = inst.meta_phone_number_id
+          accessToken = inst.meta_access_token
+        }
+      }
+      // Fallback para env vars se não encontrou instância
+      if (!phoneNumberId) phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
+      if (!accessToken) accessToken = await getConfig('META_ACCESS_TOKEN')
       if (!phoneNumberId || !accessToken) {
         return NextResponse.json({ error: 'META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
       }

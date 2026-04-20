@@ -131,6 +131,33 @@ export default function WhatsAppPage() {
   const [disparoErro, setDisparoErro] = useState("")
   const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
 
+  // Instâncias Meta (múltiplos números)
+  type MetaInstancia = { id: string; label: string; phone: string | null; meta_phone_number_id: string; meta_access_token: string; principal: boolean }
+  const [metaInstancias, setMetaInstancias] = useState<MetaInstancia[]>([])
+  const [metaInstSelecionada, setMetaInstSelecionada] = useState<string>("")
+
+  useEffect(() => {
+    if (apiProvider !== "meta") return
+    fetch("/api/admin/whatsapp/instancias")
+      .then(r => r.json())
+      .then((data: unknown[]) => {
+        const metas = (data ?? []).filter((i: unknown) => {
+          const item = i as Record<string, unknown>
+          return item.id && item['tipo'] === 'meta' && item['meta_phone_number_id']
+        }) as MetaInstancia[]
+        setMetaInstancias(metas)
+        if (metas.length > 0) {
+          setMetaInstSelecionada(prev => {
+            if (prev) return prev
+            const principal = metas.find(i => i.principal) ?? metas[0]
+            return principal.id
+          })
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiProvider])
+
   // Baileys job — progresso em tempo real
   type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "concluido" | "erro"; erroGeral?: string }
   const [baileysJob, setBaileysJob] = useState<BaileysJob | null>(null)
@@ -567,7 +594,13 @@ export default function WhatsAppPage() {
     const res = await fetch("/api/admin/wpp/disparar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lista_id: listaAtiva.id, mensagens, filtros: listaAtiva.is_leads ? filtros : undefined, api_provider: apiProvider, baileys_instance_id: baileysInstSelecionada }),
+      body: JSON.stringify({
+        lista_id: listaAtiva.id, mensagens,
+        filtros: listaAtiva.is_leads ? filtros : undefined,
+        api_provider: apiProvider,
+        baileys_instance_id: baileysInstSelecionada,
+        meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
+      }),
     })
     const data = await res.json()
     setDisparando(false)
@@ -1083,6 +1116,25 @@ export default function WhatsAppPage() {
                         <span style={{ fontSize: 11, color: "#c2904d", marginLeft: 4 }}>Sem restrição 24h</span>
                       )}
                     </div>
+
+                    {/* Seletor de número Meta */}
+                    {apiProvider === "meta" && metaInstancias.length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span className="wpp-label" style={{ marginBottom: 0 }}>Número:</span>
+                        <select
+                          className="wpp-input"
+                          style={{ flex: 1, minWidth: 200 }}
+                          value={metaInstSelecionada}
+                          onChange={e => setMetaInstSelecionada(e.target.value)}
+                        >
+                          {metaInstancias.map(i => (
+                            <option key={i.id} value={i.id}>
+                              {i.label}{i.phone ? ` — ${i.phone}` : ""}{i.principal ? " ★" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     {/* Aviso Meta API — contatos frios */}
                     {apiProvider === "meta" && (
