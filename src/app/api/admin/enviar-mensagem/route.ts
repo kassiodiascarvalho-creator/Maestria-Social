@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
-import { enviarViaBaileys } from '@/lib/baileys'
+import { enviarViaBaileys, enviarMidiaBase64ViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
@@ -70,16 +70,25 @@ export async function POST(req: NextRequest) {
     let mensagemSalva = ''
 
     if (file) {
-      // Mídia sempre vai direto para Meta API
-      const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
-      const accessToken = await getConfig('META_ACCESS_TOKEN')
-      if (!phoneNumberId || !accessToken) {
-        return NextResponse.json({ error: 'META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
-      }
       const tipo = tipoMidia(file.type)
-      const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
-      await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
-      mensagemSalva = caption ? `[${tipo}: ${file.name}] ${caption}` : `[${tipo}: ${file.name}]`
+
+      // audio/webm não é suportado pela Meta API — rotear pelo Baileys com base64
+      if (tipo === 'audio' && file.type.includes('webm')) {
+        const buffer = await file.arrayBuffer()
+        const base64 = Buffer.from(buffer).toString('base64')
+        await enviarMidiaBase64ViaBaileys(para, base64, file.type, 'audio', file.name)
+        mensagemSalva = `[áudio: ${file.name}]`
+      } else {
+        // Demais mídias vão direto para Meta API
+        const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
+        const accessToken = await getConfig('META_ACCESS_TOKEN')
+        if (!phoneNumberId || !accessToken) {
+          return NextResponse.json({ error: 'META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
+        }
+        const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
+        await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
+        mensagemSalva = caption ? `[${tipo}: ${file.name}] ${caption}` : `[${tipo}: ${file.name}]`
+      }
     } else if (texto) {
       // Tenta Baileys primeiro (sem restrição de janela 24h); fallback para Meta
       let enviado = false

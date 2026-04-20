@@ -62,22 +62,30 @@ async function resolverChatId(client, phone) {
   return numberId._serialized
 }
 
-async function enviarMensagem(inst, type, phone, content, caption, filename) {
+async function enviarMensagem(inst, type, phone, content, caption, filename, mimeType) {
   const chatId = await resolverChatId(inst.client, phone)
+
+  // content pode ser URL pública ou base64 raw (quando mimeType está presente)
+  async function resolverMidia() {
+    if (mimeType && content && !content.startsWith('http')) {
+      return new MessageMedia(mimeType, content, filename || 'arquivo')
+    }
+    return baixarMidia(content)
+  }
 
   if (type === 'text') {
     await inst.client.sendMessage(chatId, content || '')
   } else if (type === 'image') {
-    const media = await baixarMidia(content)
+    const media = await resolverMidia()
     await inst.client.sendMessage(chatId, media, { caption: caption || '' })
   } else if (type === 'audio') {
-    const media = await baixarMidia(content)
+    const media = await resolverMidia()
     await inst.client.sendMessage(chatId, media, { sendAudioAsVoice: false })
   } else if (type === 'video') {
-    const media = await baixarMidia(content)
+    const media = await resolverMidia()
     await inst.client.sendMessage(chatId, media, { caption: caption || '' })
   } else if (type === 'document') {
-    const media = await baixarMidia(content)
+    const media = await resolverMidia()
     if (filename) media.filename = filename
     await inst.client.sendMessage(chatId, media)
   } else {
@@ -347,12 +355,12 @@ app.post('/instancia/:id/disparar', async (req, res) => {
     return res.status(503).json({ error: `Instância ${req.params.id} não conectada (${inst.status})` })
   }
 
-  const { phone, type, content, caption, filename } = req.body
+  const { phone, type, content, caption, filename, mimeType } = req.body
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
 
   try {
-    await enviarMensagem(inst, type, phone, content, caption, filename)
+    await enviarMensagem(inst, type, phone, content, caption, filename, mimeType)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)
@@ -495,11 +503,11 @@ app.post('/disparar', async (req, res) => {
   if (!inst || inst.status !== 'conectado') {
     return res.status(503).json({ error: 'WhatsApp não conectado. Escaneie o QR code.' })
   }
-  const { phone, type, content, caption, filename } = req.body
+  const { phone, type, content, caption, filename, mimeType } = req.body
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
   try {
-    await enviarMensagem(inst, type, phone, content, caption, filename)
+    await enviarMensagem(inst, type, phone, content, caption, filename, mimeType)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)
