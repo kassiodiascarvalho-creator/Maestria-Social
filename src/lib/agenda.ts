@@ -202,19 +202,28 @@ export async function agendarParaLead(p: AgendarParams): Promise<{ meetLink: str
       )
     : null
 
-  // Salvar agendamento e bloquear slot
-  await Promise.all([
-    admin.from('agenda_agendamentos').insert({
-      pessoa_id: p.pessoaId, data: p.data, horario: p.horario, horario_fim: horaFim,
-      nome_lead: p.nomeCliente, email_lead: p.emailCliente, whatsapp_lead: p.whatsCliente,
-      campos_preenchidos: { nome: p.nomeCliente, email: p.emailCliente },
-      meet_link: meetLink, status: 'confirmado',
-    }),
-    admin.from('agenda_excecoes').insert({
-      pessoa_id: p.pessoaId, data: p.data, tipo: 'bloqueado', inicio: p.horario, fim: horaFim,
-    }),
-    admin.from('leads').update({ etiqueta: 'agendado', pipeline_etapa: 'agendado' }).eq('id', p.leadId),
-  ])
+  // Salvar agendamento (sequencial para detectar erros individualmente)
+  const { error: errAg } = await admin.from('agenda_agendamentos').insert({
+    pessoa_id: p.pessoaId, data: p.data, horario: p.horario, horario_fim: horaFim,
+    nome_lead: p.nomeCliente, email_lead: p.emailCliente, whatsapp_lead: p.whatsCliente,
+    campos_preenchidos: { nome: p.nomeCliente, email: p.emailCliente },
+    meet_link: meetLink, status: 'confirmado',
+  })
+  if (errAg) {
+    console.error('[agendarParaLead] agenda_agendamentos insert:', errAg)
+    throw new Error(`Falha ao salvar agendamento: ${errAg.message}`)
+  }
+
+  // Bloquear slot nas exceções
+  const { error: errExc } = await admin.from('agenda_excecoes').insert({
+    pessoa_id: p.pessoaId, data: p.data, tipo: 'bloqueado', inicio: p.horario, fim: horaFim,
+  })
+  if (errExc) {
+    // Excecao duplicada não é crítica (slot já pode estar bloqueado por outro caminho)
+    console.warn('[agendarParaLead] agenda_excecoes insert (não crítico):', errExc.message)
+  }
+
+  await admin.from('leads').update({ etiqueta: 'agendado', pipeline_etapa: 'agendado' }).eq('id', p.leadId)
 
   const dataFormatada = new Date(`${p.data}T12:00:00`).toLocaleDateString('pt-BR', {
     weekday: 'long', day: 'numeric', month: 'long',
