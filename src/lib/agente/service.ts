@@ -221,12 +221,27 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
-  // Gera ID sintético baseado no conteúdo: garante dedup mesmo quando Baileys e Meta
-  // usam formatos de ID diferentes para a mesma mensagem física do lead.
-  // Janela de 30s: duas mensagens idênticas do mesmo lead num intervalo menor são tratadas como uma.
-  const janela30s = Math.floor(Date.now() / 30000)
+  // ── Verifica agente ANTES de inserir mensagem ──────────────────────────────
+  // Ordem correta: checar canal/agente primeiro, só depois registrar a mensagem.
+  // Isso evita que o webhook do Baileys (sem agente) "queime" o dedup e silencie
+  // o webhook da Meta, que é quem de fato vai responder.
+  if (agenteDB) {
+    if (!agenteDB.ativo) return { ok: true, resposta: '' }
+  } else {
+    // Canal explícito (Baileys ou Meta) sem agente configurado: sai sem registrar nada.
+    // A Meta vai registrar e responder; Baileys apenas sai limpo.
+    if (canal) return { ok: true, resposta: '' }
+
+    // Fallback legado sem canal (invocação direta via API interna)
+    const agenteAtivo = await getConfig('AGENT_ATIVO')
+    if (agenteAtivo === 'false') return { ok: true, resposta: '' }
+  }
+
+  // ── Registra mensagem do lead com dedup ────────────────────────────────────
+  // extMessageId (Meta) ou hash de conteúdo (Baileys sem ID padronizado).
+  // UNIQUE em ext_message_id: segundo webhook da mesma mensagem retorna sem responder.
   const dedupId = extMessageId
-    || createHash('sha256').update(`${leadId}:${mensagem}:${janela30s}`).digest('hex').slice(0, 40)
+    || createHash('sha256').update(`${leadId}:${mensagem}:${Math.floor(Date.now() / 30000)}`).digest('hex').slice(0, 40)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: insertMsgError } = await (supabase as any).from('conversas').insert({
@@ -237,38 +252,25 @@ export async function responderAgenteParaLead(
     ext_message_id: dedupId,
   })
   if (insertMsgError?.code === '23505') {
-    // Evento já processado (webhook duplicado ou Baileys+Meta mesmo número) — ignora
+    // Já processado (Meta re-entrega ou dois providers para o mesmo número)
     return { ok: true, resposta: '' }
   }
 
-  // Regra de pausa: se um humano enviou mensagem nos últimos 5 minutos, o agente não responde
+  // ── Pausa humana: registrou a mensagem mas o agente não responde ───────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const leadAny = lead as any
   if (leadAny.ultima_atividade_humana) {
     const diffMs = Date.now() - new Date(leadAny.ultima_atividade_humana as string).getTime()
     const CINCO_MIN = 5 * 60 * 1000
     if (diffMs < CINCO_MIN) {
-      return { ok: true, resposta: '' } // agente em pausa — humano está atendendo
+      return { ok: true, resposta: '' } // humano está atendendo
     }
-    // Pausa expirou: retorna etiqueta para 'ia_atendendo'
+    // Pausa expirou: devolve controle à IA
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any)
       .from('leads')
       .update({ ultima_atividade_humana: null, etiqueta: 'ia_atendendo' })
       .eq('id', leadId)
-  }
-
-  // Se veio de agente DB: usa config dele; senão usa config global (compat)
-  if (agenteDB) {
-    if (!agenteDB.ativo) return { ok: true, resposta: '' }
-  } else {
-    // Canal explícito sem agente configurado: não responde via fallback global.
-    // Evita resposta duplicada quando o mesmo número está em Baileys e Meta.
-    if (canal) return { ok: true, resposta: '' }
-
-    // Fallback legado sem canal (invocação direta via API interna)
-    const agenteAtivo = await getConfig('AGENT_ATIVO')
-    if (agenteAtivo === 'false') return { ok: true, resposta: '' }
   }
 
   // Filtra histórico por agente_id quando há agente configurado — contextos separados por agente
