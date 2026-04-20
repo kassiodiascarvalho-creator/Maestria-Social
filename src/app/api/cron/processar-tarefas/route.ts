@@ -126,6 +126,19 @@ async function executar(t: Tarefa): Promise<void> {
     if (!texto) throw new Error('payload.texto ausente')
     const textoResolvido = resolverVariaveis(texto, lead)
 
+    // Dedup: evita enviar a mesma mensagem duas vezes ao mesmo lead em menos de 10 min.
+    // Cobre o caso de tasks duplicadas inseridas por invocações simultâneas do webhook.
+    const dezMin = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: jaEnviado } = await (supabase as any)
+      .from('conversas')
+      .select('id', { count: 'exact', head: true })
+      .eq('lead_id', lead.id)
+      .eq('role', 'assistant')
+      .eq('mensagem', textoResolvido)
+      .gte('criado_em', dezMin)
+    if (jaEnviado) return // já enviado — marca como enviada no handler externo
+
     // Canal explícito (mensagens sequenciadas do agente)
     const canalProvider = t.payload.canal_provider ? String(t.payload.canal_provider) : null
     const canalInstanceId = t.payload.canal_instance_id ? String(t.payload.canal_instance_id) : undefined

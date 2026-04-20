@@ -441,32 +441,20 @@ export async function responderAgenteParaLead(
     const pausaSeg = agenteDB?.config?.pausa_sequencia_seg ?? 30
     const agora = Date.now()
 
-    // Dedup: evita agendar M3-M7 duas vezes caso o lead responda antes do cron processar.
-    // Verifica se já há tarefas whatsapp_msg pendentes/em processamento para este lead.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { count: tarefasPendentes } = await (supabase as any)
-      .from('tarefas_agendadas')
-      .select('id', { count: 'exact', head: true })
-      .eq('lead_id', leadId)
-      .eq('tipo', 'whatsapp_msg')
-      .in('status', ['pendente', 'processando'])
-
-    if (!tarefasPendentes) {
-      for (let i = 1; i < partesSequencia.length; i++) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from('tarefas_agendadas').insert({
-          lead_id: leadId,
-          tipo: 'whatsapp_msg',
-          payload: {
-            texto: partesSequencia[i],
-            agente_id: agenteDB?.id ?? null,
-            canal_provider: canal?.provider ?? 'meta',
-            canal_instance_id: canal?.instanceId ?? null,
-          },
-          agendado_para: new Date(agora + i * pausaSeg * 1000).toISOString(),
-          status: 'pendente',
-        })
-      }
+    for (let i = 1; i < partesSequencia.length; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('tarefas_agendadas').insert({
+        lead_id: leadId,
+        tipo: 'whatsapp_msg',
+        payload: {
+          texto: partesSequencia[i],
+          agente_id: agenteDB?.id ?? null,
+          canal_provider: canal?.provider ?? 'meta',
+          canal_instance_id: canal?.instanceId ?? null,
+        },
+        agendado_para: new Date(agora + i * pausaSeg * 1000).toISOString(),
+        status: 'pendente',
+      })
     }
     resposta = respostaImediata
   }
