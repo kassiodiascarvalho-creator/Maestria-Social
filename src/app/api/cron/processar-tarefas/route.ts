@@ -126,45 +126,58 @@ async function executar(t: Tarefa): Promise<void> {
     if (!texto) throw new Error('payload.texto ausente')
     const textoResolvido = resolverVariaveis(texto, lead)
 
-    // Tenta enviar via template se configurado (para contato business-initiated)
-    const diaKey = String(t.payload.dia || '')
-    const templateMap: Record<string, string> = {
-      '1': 'maestria_followup_d1',
-      '3': 'maestria_followup_d3',
-      '7': 'maestria_followup_d7',
-    }
-    const templatePadrao = templateMap[diaKey]
-    const templateCustom = templatePadrao ? await getConfig(`META_TEMPLATE_${diaKey.toUpperCase()}`) : null
-    const nomeTemplate = templateCustom || templatePadrao
+    // Canal explícito (mensagens sequenciadas do agente)
+    const canalProvider = t.payload.canal_provider ? String(t.payload.canal_provider) : null
+    const canalInstanceId = t.payload.canal_instance_id ? String(t.payload.canal_instance_id) : undefined
 
     let enviado = false
 
-    // Tenta Baileys primeiro (sem restrição de janela 24h)
-    try {
-      await enviarViaBaileys(lead.whatsapp, textoResolvido)
-      enviado = true
-    } catch {
-      // fallback para Meta abaixo
-    }
-
-    if (!enviado && nomeTemplate) {
+    if (canalProvider === 'baileys') {
       try {
-        const params = [lead.nome, String(lead.qs_total ?? 0), lead.pilar_fraco ?? 'Comunicação']
-        await enviarTemplateWhatsApp(lead.whatsapp, nomeTemplate, params)
+        await enviarViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
         enviado = true
-      } catch {
-        // fallback para texto livre abaixo
+      } catch { /* fallback para Meta */ }
+    } else if (canalProvider === 'meta') {
+      try {
+        await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
+        enviado = true
+      } catch { /* silencioso */ }
+    } else {
+      // Legado: sem canal explícito — tenta Baileys primeiro, depois template, depois texto livre
+      const diaKey = String(t.payload.dia || '')
+      const templateMap: Record<string, string> = {
+        '1': 'maestria_followup_d1',
+        '3': 'maestria_followup_d3',
+        '7': 'maestria_followup_d7',
+      }
+      const templatePadrao = templateMap[diaKey]
+      const templateCustom = templatePadrao ? await getConfig(`META_TEMPLATE_${diaKey.toUpperCase()}`) : null
+      const nomeTemplate = templateCustom || templatePadrao
+
+      try {
+        await enviarViaBaileys(lead.whatsapp, textoResolvido)
+        enviado = true
+      } catch { /* fallback abaixo */ }
+
+      if (!enviado && nomeTemplate) {
+        try {
+          const params = [lead.nome, String(lead.qs_total ?? 0), lead.pilar_fraco ?? 'Comunicação']
+          await enviarTemplateWhatsApp(lead.whatsapp, nomeTemplate, params)
+          enviado = true
+        } catch { /* fallback texto livre */ }
+      }
+
+      if (!enviado) {
+        await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
       }
     }
 
-    if (!enviado) {
-      await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
-    }
-
+    const agentId = t.payload.agente_id ? String(t.payload.agente_id) : null
     await supabase.from('conversas').insert({
       lead_id: lead.id,
       role: 'assistant',
       mensagem: textoResolvido,
+      ...(agentId ? { agente_id: agentId } : {}),
     })
     return
   }

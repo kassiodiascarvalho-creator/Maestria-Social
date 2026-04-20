@@ -151,6 +151,12 @@ export async function iniciarAgenteParaLead(leadId: string, force = false, agent
 
 type CanalAgente = { provider: 'meta' | 'baileys'; instanceId?: string }
 
+type AgenteConfig = {
+  escassez_max_dias?: number
+  escassez_max_slots?: number
+  pausa_sequencia_seg?: number
+}
+
 type AgenteDB = {
   id: string
   nome: string
@@ -160,6 +166,7 @@ type AgenteDB = {
   ativo: boolean
   canais: Array<{ provider: string; id: string }>
   link_agendamento: string | null
+  config?: AgenteConfig
 }
 
 async function buscarPessoaAgenda(agenteId: string): Promise<{ id: string; nome: string } | null> {
@@ -367,7 +374,11 @@ export async function responderAgenteParaLead(
   if (dados.acao === 'buscar_disponibilidade') {
     const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
     if (pessoaAgenda) {
-      const dias = await buscarSlotsComEscassez(pessoaAgenda.id)
+      const agConfig = agenteDB?.config ?? {}
+      const dias = await buscarSlotsComEscassez(pessoaAgenda.id, {
+        maxDias:  agConfig.escassez_max_dias,
+        maxSlots: agConfig.escassez_max_slots,
+      })
       const slotsTexto = formatarSlotsParaAgente(dias)
       const mensagensComSlots: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         ...mensagensOpenAI,
@@ -410,11 +421,37 @@ export async function responderAgenteParaLead(
     }
   }
 
+  // ── Sequência picada: divide resposta em partes separadas por ---PAUSA--- ─────
+  const PAUSA_MARKER = '---PAUSA---'
+  const partesSequencia = resposta.split(PAUSA_MARKER).map(p => p.trim()).filter(Boolean)
+  let respostaImediata = resposta
+  if (partesSequencia.length > 1) {
+    respostaImediata = partesSequencia[0]
+    const pausaSeg = agenteDB?.config?.pausa_sequencia_seg ?? 30
+    const agora = Date.now()
+    for (let i = 1; i < partesSequencia.length; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('tarefas_agendadas').insert({
+        lead_id: leadId,
+        tipo: 'whatsapp_msg',
+        payload: {
+          texto: partesSequencia[i],
+          agente_id: agenteDB?.id ?? null,
+          canal_provider: canal?.provider ?? 'meta',
+          canal_instance_id: canal?.instanceId ?? null,
+        },
+        agendado_para: new Date(agora + i * pausaSeg * 1000).toISOString(),
+        status: 'pendente',
+      })
+    }
+    resposta = respostaImediata
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from('conversas').insert({
     lead_id: leadId,
     role: 'assistant',
-    mensagem: resposta,
+    mensagem: respostaImediata,
     agente_id: agenteDB?.id ?? null,
   })
 

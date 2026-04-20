@@ -70,7 +70,12 @@ export interface DiaDisponivel {
   slots: string[]      // horários escolhidos (máx 3)
 }
 
-export async function buscarSlotsComEscassez(pessoaId: string): Promise<DiaDisponivel[]> {
+export async function buscarSlotsComEscassez(
+  pessoaId: string,
+  opts?: { maxDias?: number; maxSlots?: number },
+): Promise<DiaDisponivel[]> {
+  const maxDias  = Math.max(1, Math.min(opts?.maxDias  ?? 2, 14))
+  const maxSlots = Math.max(1, Math.min(opts?.maxSlots ?? 3,  8))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
 
@@ -95,7 +100,7 @@ export async function buscarSlotsComEscassez(pessoaId: string): Promise<DiaDispo
   agora.setHours(agora.getHours(), agora.getMinutes(), 0, 0)
   const diasComSlots: DiaDisponivel[] = []
 
-  for (let i = 1; i <= 21 && diasComSlots.length < 4; i++) {
+  for (let i = 1; i <= 21 && diasComSlots.length < maxDias; i++) {
     const dia = new Date()
     dia.setDate(new Date().getDate() + i)
     dia.setHours(0, 0, 0, 0)
@@ -112,12 +117,11 @@ export async function buscarSlotsComEscassez(pessoaId: string): Promise<DiaDispo
     diasComSlots.push({
       data: toDateStr(dia),
       dataFormatada: dia.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' }),
-      slots: filtrarEscassez(slots, 3),
+      slots: filtrarEscassez(slots, maxSlots),
     })
   }
 
-  // Retorna no máximo 2 dias (escassez)
-  return diasComSlots.slice(0, 2)
+  return diasComSlots.slice(0, maxDias)
 }
 
 // Formata os slots disponíveis como texto para o agente

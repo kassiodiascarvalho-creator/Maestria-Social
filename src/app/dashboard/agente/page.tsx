@@ -38,6 +38,12 @@ AO FINAL DE CADA RESPOSTA, inclua um bloco JSON separado por "---JSON---":
 type Canal = { provider: "meta" | "baileys"; id: string };
 type CanalDisponivel = { provider: "meta" | "baileys"; id: string; label: string; phone?: string | null; conectado: boolean };
 
+type AgenteConfig = {
+  escassez_max_dias?: number;
+  escassez_max_slots?: number;
+  pausa_sequencia_seg?: number;
+};
+
 type Agente = {
   id: string;
   nome: string;
@@ -48,6 +54,7 @@ type Agente = {
   ativo: boolean;
   canais: Canal[];
   link_agendamento: string | null;
+  config?: AgenteConfig;
 };
 
 type AudioAgente = {
@@ -213,6 +220,10 @@ export default function AgentePage() {
 
   function update(campo: Partial<Agente>) {
     setSelecionado(prev => prev ? { ...prev, ...campo } : prev);
+  }
+
+  function updateConfig(campo: Partial<AgenteConfig>) {
+    setSelecionado(prev => prev ? { ...prev, config: { ...(prev.config ?? {}), ...campo } } : prev);
   }
 
   function toggleCanal(canal: CanalDisponivel) {
@@ -464,6 +475,46 @@ export default function AgentePage() {
                   )}
                 </div>
 
+                {/* Agendamento automático */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Agendamento automático</div>
+                  <p className="ag-card-desc">
+                    Controla como o agente apresenta os horários disponíveis ao lead.
+                  </p>
+                  <div className="ag-config-grid">
+                    <div className="ag-config-field">
+                      <label className="ag-config-label">Dias exibidos</label>
+                      <p className="ag-config-hint">Quantos dias diferentes mostrar ao lead (1–14)</p>
+                      <input
+                        type="number" min={1} max={14}
+                        className="ag-config-input"
+                        value={selecionado.config?.escassez_max_dias ?? 2}
+                        onChange={e => updateConfig({ escassez_max_dias: Math.max(1, Math.min(14, parseInt(e.target.value) || 2)) })}
+                      />
+                    </div>
+                    <div className="ag-config-field">
+                      <label className="ag-config-label">Horários por dia</label>
+                      <p className="ag-config-hint">Quantas opções de horário exibir por dia (1–8)</p>
+                      <input
+                        type="number" min={1} max={8}
+                        className="ag-config-input"
+                        value={selecionado.config?.escassez_max_slots ?? 3}
+                        onChange={e => updateConfig({ escassez_max_slots: Math.max(1, Math.min(8, parseInt(e.target.value) || 3)) })}
+                      />
+                    </div>
+                    <div className="ag-config-field">
+                      <label className="ag-config-label">Pausa entre mensagens (seg)</label>
+                      <p className="ag-config-hint">Intervalo entre partes de uma sequência ---PAUSA---</p>
+                      <input
+                        type="number" min={5} max={300}
+                        className="ag-config-input"
+                        value={selecionado.config?.pausa_sequencia_seg ?? 30}
+                        onChange={e => updateConfig({ pausa_sequencia_seg: Math.max(5, Math.min(300, parseInt(e.target.value) || 30)) })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* Prompt */}
                 <div className="ag-card">
                   <div className="ag-prompt-header">
@@ -631,6 +682,15 @@ const css = `
   .ag-audio-size{font-size:11px;color:#4a3e30;}
   .ag-audio-play{width:28px;height:28px;border-radius:50%;background:rgba(106,204,160,.1);border:1px solid rgba(106,204,160,.25);color:#6acca0;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;text-decoration:none;flex-shrink:0;transition:all .15s;}
   .ag-audio-play:hover{background:rgba(106,204,160,.2);}
+
+  /* Config */
+  .ag-config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;}
+  .ag-config-field{display:flex;flex-direction:column;gap:6px;}
+  .ag-config-label{font-size:12px;font-weight:600;color:#c2904d;}
+  .ag-config-hint{font-size:11px;color:#4a3e30;line-height:1.5;margin:0;}
+  .ag-config-input{background:#111009;border:1px solid #2a1f18;border-radius:8px;padding:9px 12px;font-size:14px;font-weight:600;color:#fff9e6;font-family:monospace;outline:none;width:100%;transition:border-color .2s;}
+  .ag-config-input:focus{border-color:rgba(194,144,77,.4);}
+
   .ag-audio-del{width:28px;height:28px;border-radius:50%;background:none;border:1px solid rgba(224,88,64,.2);color:#e07070;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s;}
   .ag-audio-del:hover{background:rgba(224,88,64,.1);border-color:rgba(224,88,64,.4);}
 
