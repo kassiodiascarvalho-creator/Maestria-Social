@@ -12,8 +12,9 @@ const NAV = [
   { href: "/dashboard/agenda",      label: "Agenda",           icon: "◷" },
   { href: "/dashboard/emails",      label: "Emails",           icon: "◈" },
   { href: "/dashboard/dominios",    label: "Domínios",         icon: "◇" },
-  { href: "/dashboard/whatsapp",    label: "WhatsApp Disparo", icon: "◎" },
-  { href: "/dashboard/crm",         label: "WhatsApp CRM",     icon: "◉" },
+  { href: "/dashboard/whatsapp",         label: "WhatsApp Disparo", icon: "◎" },
+  { href: "/dashboard/crm",              label: "WhatsApp CRM",     icon: "◉" },
+  { href: "/dashboard/whatsapp-numeros", label: "Números WhatsApp",  icon: "◈" },
   { href: "/dashboard/integracoes", label: "Integrações",      icon: "⬡" },
 ];
 
