@@ -257,23 +257,13 @@ export async function responderAgenteParaLead(
   if (agenteDB) {
     if (!agenteDB.ativo) return { ok: true, resposta: '' }
   } else {
+    // Canal explícito sem agente configurado: não responde via fallback global.
+    // Evita resposta duplicada quando o mesmo número está em Baileys e Meta.
+    if (canal) return { ok: true, resposta: '' }
+
+    // Fallback legado sem canal (invocação direta via API interna)
     const agenteAtivo = await getConfig('AGENT_ATIVO')
     if (agenteAtivo === 'false') return { ok: true, resposta: '' }
-
-    // Fallback: verifica AGENT_CANAIS global se não há agente DB
-    if (canal) {
-      const canaisRaw = await getConfig('AGENT_CANAIS')
-      if (canaisRaw) {
-        try {
-          const canais: Array<{ provider: string; id: string }> = JSON.parse(canaisRaw)
-          const canalAtivo = canais.some(c =>
-            c.provider === canal.provider &&
-            (canal.provider === 'meta' || c.id === canal.instanceId)
-          )
-          if (!canalAtivo) return { ok: true, resposta: '' }
-        } catch { /* ignora */ }
-      }
-    }
   }
 
   // Filtra histórico por agente_id quando há agente configurado — contextos separados por agente
@@ -397,7 +387,10 @@ export async function responderAgenteParaLead(
   // ── Ação: confirmar agendamento diretamente ──────────────────────────────────
   if (dados.acao === 'confirmar_agendamento' && dados.slot_data && dados.slot_horario) {
     const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
-    if (pessoaAgenda && lead.whatsapp) {
+    if (!pessoaAgenda) {
+      console.error('[agente] confirmar_agendamento: nenhuma agenda_pessoas vinculada ao agente', agenteDB?.id)
+      // Sem agenda configurada: cai no fluxo normal, resposta do AI é enviada sem gravar
+    } else if (lead.whatsapp) {
       try {
         const emailLead = dados.email_lead || (lead as Record<string, unknown>).email as string || ''
         await agendarParaLead({
@@ -416,7 +409,7 @@ export async function responderAgenteParaLead(
         return { ok: true, resposta: resposta || 'Agendamento confirmado!' }
       } catch (err) {
         console.error('[agente] Falha ao agendar:', err)
-        // Continua com o fluxo normal em caso de erro
+        // Resposta do AI é enviada normalmente; agendamento não foi gravado
       }
     }
   }

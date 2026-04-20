@@ -97,6 +97,9 @@ export async function POST(req: NextRequest) {
     if (!lead) return NextResponse.json({ status: 'ok' })
 
     const agente = await encontrarAgentePorCanal('baileys', instanceId)
+    // Sem agente para esta instância Baileys — não processa (evita resposta dupla
+    // quando o mesmo número está conectado a Baileys e Meta simultaneamente)
+    if (!agente) return NextResponse.json({ status: 'ok' })
     await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente, messageId)
   } catch (err) {
     console.error('[webhook/baileys]', err)
