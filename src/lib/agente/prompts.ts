@@ -17,7 +17,8 @@ function resolverEtapas(etapas?: EtapaPipeline[]): EtapaPipeline[] {
 }
 
 function etapaSlugs(etapas?: EtapaPipeline[]): string {
-  return resolverEtapas(etapas).filter(e => e.slug !== 'novo').map(e => `"${e.slug}"`).join('|')
+  const slugs = resolverEtapas(etapas).filter(e => e.slug !== 'novo').map(e => e.slug).join('|')
+  return `"${slugs}"` // formato: "em_contato|qualificado|..." — string única igual ao original
 }
 
 function etapaDescricoes(etapas?: EtapaPipeline[]): string {
