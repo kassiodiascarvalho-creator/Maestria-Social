@@ -482,6 +482,14 @@ export async function responderAgenteParaLead(
         .gte('criado_em', trintaSeg)
 
       if (!jaDisparou) {
+        // Canal: usa o da conversa atual; fallback para o primeiro canal configurado no agente
+        const seqProvider = canal?.provider
+          ?? (agenteDB?.canais?.[0]?.provider as 'meta' | 'baileys' | undefined)
+          ?? 'meta'
+        const seqInstanceId = canal?.instanceId
+          ?? agenteDB?.canais?.[0]?.id
+          ?? null
+
         // Cancela sequências anteriores pendentes antes de criar novas
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
@@ -499,8 +507,8 @@ export async function responderAgenteParaLead(
             payload: {
               texto: msgs[i].texto,
               agente_id: agenteDB?.id ?? null,
-              canal_provider: canal?.provider ?? 'meta',
-              canal_instance_id: canal?.instanceId ?? null,
+              canal_provider: seqProvider,
+              canal_instance_id: seqInstanceId,
             },
             agendado_para: new Date(agora + (i + 1) * delaySeg * 1000).toISOString(),
             status: 'pendente',
