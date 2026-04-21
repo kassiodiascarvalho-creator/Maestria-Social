@@ -318,7 +318,7 @@ export default function CRMPage() {
     setLeads(prev => prev.map(l => l.id === leadSelecionado.id ? { ...l, etiqueta } : l));
     setMostrarEtiquetas(false); setTrocandoEtiqueta(false);
   }
-  async function moverParaEtapa(leadId: string, etapa: Etapa) {
+  async function moverParaEtapa(leadId: string, etapa: string) {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, pipeline_etapa: etapa } : l));
     setLeadDetalhe(prev => prev?.id === leadId ? { ...prev, pipeline_etapa: etapa } : prev);
     await fetch(`/api/admin/crm/leads/${leadId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipeline_etapa: etapa }) });
