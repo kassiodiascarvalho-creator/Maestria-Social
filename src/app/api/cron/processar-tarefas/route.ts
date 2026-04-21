@@ -149,7 +149,13 @@ async function executar(t: Tarefa): Promise<void> {
       try {
         await enviarViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
         enviado = true
-      } catch { /* fallback para Meta */ }
+      } catch { /* fallback Meta abaixo */ }
+      if (!enviado) {
+        try {
+          await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
+          enviado = true
+        } catch { /* silencioso */ }
+      }
     } else if (canalProvider === 'meta') {
       try {
         await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
@@ -184,6 +190,8 @@ async function executar(t: Tarefa): Promise<void> {
         await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
       }
     }
+
+    if (!enviado) throw new Error('Nenhum canal disponível para envio (Baileys e Meta falharam)')
 
     const agentId = t.payload.agente_id ? String(t.payload.agente_id) : null
     await supabase.from('conversas').insert({
