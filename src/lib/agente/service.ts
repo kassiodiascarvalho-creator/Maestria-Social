@@ -561,6 +561,9 @@ export async function responderAgenteParaLead(
     }
   }
 
+  // Flag: dispara o cron APÓS o envio WhatsApp, garantindo que a resposta do agente chega primeiro
+  let triggerCronSequencia = false
+
   // ── Ação: disparar sequência configurada no agente ───────────────────────────
   if (dados.acao === 'disparar_sequencia') {
     const msgs = agenteDB?.config?.sequencia_msgs ?? []
@@ -618,13 +621,8 @@ export async function responderAgenteParaLead(
             status: 'pendente',
           })
         }
-
-        // Dispara o cron imediatamente para reduzir o delay da primeira mensagem
-        // Sem isso, as tarefas ficam esperando até o próximo ciclo natural do Vercel (até 60s)
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL
-          || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-        const cronSecret = process.env.CRON_SECRET ? `?secret=${process.env.CRON_SECRET}` : ''
-        fetch(`${appUrl}/api/cron/processar-tarefas${cronSecret}`, { method: 'POST' }).catch(() => {})
+        // Cron disparado APÓS o envio WhatsApp — garante que "Maravilha" chega antes do disparo
+        triggerCronSequencia = true
       }
     }
   }
@@ -745,6 +743,14 @@ export async function responderAgenteParaLead(
     } catch (err) {
       console.error('[agente] Falha ao enviar resposta via WhatsApp:', err)
     }
+  }
+
+  // Dispara o cron DEPOIS do envio WhatsApp — garante que "Maravilha [nome]" chega antes do disparo
+  if (triggerCronSequencia) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+    const cronSecret = process.env.CRON_SECRET ? `?secret=${process.env.CRON_SECRET}` : ''
+    fetch(`${appUrl}/api/cron/processar-tarefas${cronSecret}`, { method: 'POST' }).catch(() => {})
   }
 
   return { ok: true, resposta }
