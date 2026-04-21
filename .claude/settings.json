@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:4040/api/tunnels)",
+      "Bash(python -m json.tool)",
+      "Bash(ngrok http *)",
+      "Bash(ls c:/Users/kassi/Maestria-Social/src/app/api/admin/leads/[id]/)",
+      "Bash(cat c:/Users/kassi/Maestria-Social/src/app/api/admin/leads/[id]/etiqueta/route.ts)",
+      "Bash(cat supabase/migrations/*.sql)",
+      "Bash(node -e ' *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/followup/configs\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/followup/configs/[id]\")",
+      "Bash(git reset *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\crm\\conversas",
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\crm\\templates",
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\pipeline\\etapas"
+    ]
+  }
+}

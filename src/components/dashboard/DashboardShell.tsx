@@ -15,6 +15,7 @@ const NAV = [
   { href: "/dashboard/dominios",    label: "Domínios",         icon: "◇" },
   { href: "/dashboard/whatsapp",         label: "WhatsApp Disparo", icon: "◎" },
   { href: "/dashboard/crm",              label: "WhatsApp CRM",     icon: "◉" },
+  { href: "/dashboard/pipeline",         label: "Pipeline",         icon: "◧" },
   { href: "/dashboard/whatsapp-numeros", label: "Números WhatsApp",  icon: "◈" },
   { href: "/dashboard/integracoes", label: "Integrações",      icon: "⬡" },
 ];

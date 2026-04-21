@@ -4,17 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
-type Etapa = "novo" | "em_contato" | "qualificado" | "proposta" | "agendado" | "convertido" | "perdido";
-
-const ETAPAS: { valor: Etapa; label: string; cor: string; emoji: string }[] = [
-  { valor: "novo",        label: "Novo",        cor: "#7ab0e0", emoji: "🌱" },
-  { valor: "em_contato",  label: "Em Contato",  cor: "#6acca0", emoji: "💬" },
-  { valor: "qualificado", label: "Qualificado", cor: "#c2904d", emoji: "⚡" },
-  { valor: "proposta",    label: "Proposta",    cor: "#a07ae0", emoji: "🎯" },
-  { valor: "agendado",    label: "Agendado",    cor: "#7ae0d4", emoji: "📅" },
-  { valor: "convertido",  label: "Convertido",  cor: "#f0c040", emoji: "✅" },
-  { valor: "perdido",     label: "Perdido",     cor: "#e07070", emoji: "❌" },
-];
+type EtapaDB = { id: string; slug: string; label: string; cor: string; emoji: string | null; icone_url: string | null; is_final: boolean; ordem: number };
 
 const PILARES: Record<string, string> = {
   A: "Sociabilidade", B: "Comunicação", C: "Relacionamento", D: "Persuasão", E: "Influência",
@@ -30,7 +20,7 @@ type KanbanLead = {
   qs_total: number | null; nivel_qs: string | null; pilar_fraco: string | null;
   scores: Record<string, number> | null;
   status_lead: "frio" | "morno" | "quente";
-  etiqueta: string; pipeline_etapa: Etapa; origem: string | null;
+  etiqueta: string; pipeline_etapa: string; origem: string | null;
   criado_em: string; notas_crm: string | null;
   ultima_mensagem: string; ultima_role: string; ultima_atividade: string;
   num_qualificacoes: number;
@@ -103,13 +93,14 @@ export default function CRMPage() {
   // ── vista e dados globais ──────────────────────────────────────────────────
   const [view, setView] = useState<"kanban" | "chat">("kanban");
   const [leads, setLeads] = useState<KanbanLead[]>([]);
+  const [etapas, setEtapas] = useState<EtapaDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroEtiqueta, setFiltroEtiqueta] = useState("");
 
   // ── kanban ────────────────────────────────────────────────────────────────
   const [dragLeadId, setDragLeadId] = useState<string | null>(null);
-  const [dragOverEtapa, setDragOverEtapa] = useState<Etapa | null>(null);
+  const [dragOverEtapa, setDragOverEtapa] = useState<string | null>(null);
 
   // ── chat ──────────────────────────────────────────────────────────────────
   const [leadSelecionado, setLeadSelecionado] = useState<KanbanLead | null>(null);
@@ -163,6 +154,11 @@ export default function CRMPage() {
   }, []);
 
   useEffect(() => { carregarLeads(); }, [carregarLeads]);
+
+  useEffect(() => {
+    fetch("/api/admin/pipeline/etapas").then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setEtapas(d); }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch("/api/admin/crm/templates").then(r => r.json())
@@ -433,29 +429,33 @@ export default function CRMPage() {
 
           {/* Board */}
           <div className="kb-board">
-            {ETAPAS.map(etapa => {
+            {etapas.map(etapa => {
               const cards = leads
                 .filter(l => {
-                  if (l.pipeline_etapa !== etapa.valor) return false;
+                  if (l.pipeline_etapa !== etapa.slug) return false;
                   if (busca) { const b = busca.toLowerCase(); return l.nome.toLowerCase().includes(b) || l.whatsapp.includes(b); }
                   return true;
                 })
                 .sort((a, b) => (b.ultima_atividade || b.criado_em).localeCompare(a.ultima_atividade || a.criado_em));
 
+              const icone = etapa.icone_url
+                ? <img src={etapa.icone_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                : (etapa.emoji ? <span>{etapa.emoji} </span> : null);
+
               return (
                 <div
-                  key={etapa.valor}
-                  className={`kb-col ${dragOverEtapa === etapa.valor ? "kb-col-dragover" : ""}`}
-                  onDragOver={e => { e.preventDefault(); setDragOverEtapa(etapa.valor); }}
+                  key={etapa.slug}
+                  className={`kb-col ${dragOverEtapa === etapa.slug ? "kb-col-dragover" : ""}`}
+                  onDragOver={e => { e.preventDefault(); setDragOverEtapa(etapa.slug); }}
                   onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverEtapa(null); }}
                   onDrop={e => {
                     e.preventDefault(); setDragOverEtapa(null);
                     const id = e.dataTransfer.getData("lead_id");
-                    if (id) moverParaEtapa(id, etapa.valor);
+                    if (id) moverParaEtapa(id, etapa.slug);
                   }}
                 >
                   <div className="kb-col-header" style={{ borderTopColor: etapa.cor }}>
-                    <span className="kb-col-title">{etapa.emoji} {etapa.label}</span>
+                    <span className="kb-col-title">{icone}{etapa.label}</span>
                     <span className="kb-col-count" style={{ background: etapa.cor + "22", color: etapa.cor }}>
                       {cards.length}
                     </span>
@@ -841,13 +841,16 @@ export default function CRMPage() {
                   <div className="ls-section">
                     <div className="ls-section-label">Etapa no Pipeline</div>
                     <div className="ls-pipeline-grid">
-                      {ETAPAS.map(e => (
-                        <button key={e.valor}
-                          className={`ls-pipeline-btn ${leadDetalhe.pipeline_etapa === e.valor ? "ls-pipeline-ativo" : ""}`}
-                          style={leadDetalhe.pipeline_etapa === e.valor ? { background: e.cor + "22", color: e.cor, borderColor: e.cor + "55" } : {}}
-                          onClick={() => moverParaEtapa(leadDetalhe.id, e.valor)}
+                      {etapas.map(e => (
+                        <button key={e.slug}
+                          className={`ls-pipeline-btn ${leadDetalhe.pipeline_etapa === e.slug ? "ls-pipeline-ativo" : ""}`}
+                          style={leadDetalhe.pipeline_etapa === e.slug ? { background: e.cor + "22", color: e.cor, borderColor: e.cor + "55" } : {}}
+                          onClick={() => moverParaEtapa(leadDetalhe.id, e.slug)}
                         >
-                          {e.emoji} {e.label}
+                          {e.icone_url
+                            ? <img src={e.icone_url} alt="" style={{ width: 14, height: 14, objectFit: "contain", display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                            : (e.emoji ? `${e.emoji} ` : "")}
+                          {e.label}
                         </button>
                       ))}
                     </div>

@@ -1,5 +1,24 @@
 import type { Lead } from '@/types/database'
 
+export type EtapaPipeline = { slug: string; label: string; is_final?: boolean }
+
+const ETAPAS_DEFAULT: EtapaPipeline[] = [
+  { slug: 'em_contato',  label: 'Em Contato'  },
+  { slug: 'qualificado', label: 'Qualificado' },
+  { slug: 'proposta',    label: 'Proposta'    },
+  { slug: 'agendado',    label: 'Agendado'    },
+  { slug: 'convertido',  label: 'Convertido', is_final: true },
+  { slug: 'perdido',     label: 'Perdido',    is_final: true },
+]
+
+function etapaSlugs(etapas: EtapaPipeline[]): string {
+  return etapas.filter(e => e.slug !== 'novo').map(e => `"${e.slug}"`).join('|')
+}
+
+function etapaDescricoes(etapas: EtapaPipeline[]): string {
+  return etapas.filter(e => e.slug !== 'novo').map(e => `- "${e.slug}": ${e.label}`).join('\n')
+}
+
 // Roteiros adaptativos por pilar fraco
 const ROTEIROS: Record<string, string> = {
   Sociabilidade: `
@@ -66,7 +85,7 @@ Foco: legado, posicionamento como referência, círculo de influência restrito.
 Tom: extremamente premium. Posicione como acesso a um círculo seleto.`,
 }
 
-export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNome?: string, pessoaRole?: string): string {
+export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[]): string {
   const pilar = lead.pilar_fraco || 'Comunicação'
   const roteiro = ROTEIROS[pilar] || ROTEIROS['Comunicação']
   const renda = lead.renda_mensal || ''
@@ -175,7 +194,7 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 {
   "status_lead": "frio|morno|quente",
   "fase": "acolhimento|sondagem|proposta_call|agendando|link_enviado",
-  "pipeline_etapa": "em_contato|qualificado|proposta|agendado|convertido|perdido",
+  "pipeline_etapa": ${etapaSlugs(etapas ?? ETAPAS_DEFAULT)},
   "enviar_link": false,
   "acao": null,
   "email_lead": null,
@@ -188,12 +207,7 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 ---JSON---
 
 Regras para pipeline_etapa:
-- "em_contato": lead respondeu, conversa iniciada
-- "qualificado": dor clara identificada, lead engajado na sondagem
-- "proposta": você apresentou a call de descoberta
-- "agendado": agendamento confirmado
-- "convertido": lead fechou / virou cliente
-- "perdido": lead descartou, bloqueou ou é claramente desinteressado
+${etapaDescricoes(etapas ?? ETAPAS_DEFAULT)}
 
 Regras para acao:
 - "buscar_disponibilidade": use quando tiver o e-mail e quiser ver os horários disponíveis
@@ -217,7 +231,7 @@ Você pode combinar texto e múltiplos áudios na mesma resposta.`
  * (customizado ou gerado). Garante que o agente sempre saiba como agendar
  * independente do que estiver escrito no prompt do usuário.
  */
-export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string): string {
+export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[]): string {
   const mentorRef = pessoaNome
     ? pessoaRole ? `${pessoaNome}, ${pessoaRole}` : pessoaNome
     : 'o especialista'
@@ -262,7 +276,7 @@ OUTPUT JSON — obrigatório ao final de cada resposta
 {
   "status_lead": "frio|morno|quente",
   "fase": "acolhimento|sondagem|proposta_call|agendando|link_enviado",
-  "pipeline_etapa": "em_contato|qualificado|proposta|agendado|convertido|perdido",
+  "pipeline_etapa": ${etapaSlugs(etapas ?? ETAPAS_DEFAULT)},
   "enviar_link": false,
   "acao": null,
   "email_lead": null,

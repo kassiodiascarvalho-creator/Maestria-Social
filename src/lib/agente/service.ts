@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildPrimeiraMsg, buildSystemPrompt } from '@/lib/agente/prompts'
+import { buildPrimeiraMsg, buildSystemPrompt, type EtapaPipeline } from '@/lib/agente/prompts'
 import { createOpenAIClient, MODEL } from '@/lib/openai'
 import { enviarMensagemInicialWhatsApp, enviarMensagemWhatsApp, enviarAudioViaMeta } from '@/lib/meta'
 import { enviarViaBaileys, enviarAudioViaBaileys } from '@/lib/baileys'
@@ -28,14 +28,22 @@ const CAMPOS_VALIDOS: CampoQualificacao[] = [
 ]
 
 const STATUS_VALIDOS: StatusLead[] = ['frio', 'morno', 'quente']
-const ETAPAS_VALIDAS = ['novo', 'em_contato', 'qualificado', 'proposta', 'agendado', 'convertido', 'perdido']
 
-// Mapeamento automático de fase → pipeline_etapa
+// Mapeamento automático de fase → pipeline_etapa (slugs fixos do sistema)
 const FASE_PARA_ETAPA: Record<string, string> = {
   acolhimento:   'em_contato',
   sondagem:      'em_contato',
   proposta_call: 'proposta',
   link_enviado:  'proposta',
+}
+
+async function buscarEtapasPipeline(): Promise<EtapaPipeline[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (createAdminClient() as any)
+    .from('pipeline_etapas')
+    .select('slug, label, is_final')
+    .order('ordem')
+  return (data ?? []) as EtapaPipeline[]
 }
 
 interface QualificacaoItem {
@@ -231,6 +239,10 @@ export async function responderAgenteParaLead(
 ): Promise<{ ok: boolean; resposta: string }> {
   const supabase = createAdminClient()
 
+  // Etapas do pipeline vindas do banco — permite customização sem deploy
+  const etapasPipeline = await buscarEtapasPipeline()
+  const etapaSlugsValidos = etapasPipeline.map(e => e.slug)
+
   const { data: lead, error: leadError } = await supabase
     .from('leads')
     .select('*')
@@ -352,12 +364,12 @@ export async function responderAgenteParaLead(
         .replace(/\{\{link_agendamento\}\}/g, linkAgendamento)
         .replace(/\{\{pessoa_nome\}\}/g, pessoaNome ?? '')
         .replace(/\{\{pessoa_role\}\}/g, pessoaRole ?? '')
-    : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole)
+    : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole, etapasPipeline)
 
   // Sempre injeta o protocolo de agendamento ao final — garante regras críticas
   // mesmo quando o prompt customizado já tem instruções de agendamento.
   // Não duplica o bloco JSON: remove qualquer ---JSON--- existente do promptBase antes de injetar.
-  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole)
+  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
   const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
   const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}`
@@ -653,17 +665,16 @@ export async function responderAgenteParaLead(
   }
 
   // Avança etapa do pipeline automaticamente
-  const etapaExplicita = dados.pipeline_etapa && ETAPAS_VALIDAS.includes(dados.pipeline_etapa)
+  const etapaExplicita = dados.pipeline_etapa && etapaSlugsValidos.includes(dados.pipeline_etapa)
     ? dados.pipeline_etapa
     : dados.fase ? FASE_PARA_ETAPA[dados.fase] : undefined
 
   if (etapaExplicita) {
     const etapaAtual = (lead as Record<string, unknown>).pipeline_etapa as string | undefined
-    // Só avança, nunca regride (exceto para perdido/convertido que são finais)
-    const ordemEtapas = ETAPAS_VALIDAS
-    const idxAtual = ordemEtapas.indexOf(etapaAtual ?? 'novo')
-    const idxNova = ordemEtapas.indexOf(etapaExplicita)
-    const finaliza = etapaExplicita === 'perdido' || etapaExplicita === 'convertido'
+    // Só avança, nunca regride (exceto etapas is_final que sempre podem ser definidas)
+    const idxAtual = etapaSlugsValidos.indexOf(etapaAtual ?? 'novo')
+    const idxNova = etapaSlugsValidos.indexOf(etapaExplicita)
+    const finaliza = etapasPipeline.find(e => e.slug === etapaExplicita)?.is_final ?? false
     if (finaliza || idxNova > idxAtual) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
