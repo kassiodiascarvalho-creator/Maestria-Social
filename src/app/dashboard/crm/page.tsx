@@ -145,6 +145,7 @@ export default function CRMPage() {
   const notasTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const leadSelecionadoRef = useRef<KanbanLead | null>(null);
 
   // ── carrega leads (kanban API — todos os dados de uma vez) ─────────────
   const carregarLeads = useCallback(async () => {
@@ -165,6 +166,9 @@ export default function CRMPage() {
       .then(d => { if (Array.isArray(d)) setTemplates(d); }).catch(() => {});
   }, []);
 
+  // Mantém ref sincronizado para uso nos callbacks de realtime (evita closure stale)
+  useEffect(() => { leadSelecionadoRef.current = leadSelecionado; }, [leadSelecionado]);
+
   // ── Supabase Realtime ─────────────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient();
@@ -179,12 +183,9 @@ export default function CRMPage() {
           const [item] = updated.splice(idx, 1);
           return [item, ...updated];
         });
-        setLeadSelecionado(prev => {
-          if (prev?.id === nova.lead_id) {
-            setMensagens(m => [...m, { id: nova.id, role: nova.role as "user" | "assistant", mensagem: nova.mensagem, criado_em: nova.criado_em }]);
-          }
-          return prev;
-        });
+        if (leadSelecionadoRef.current?.id === nova.lead_id) {
+          setMensagens(m => [...m, { id: nova.id, role: nova.role as "user" | "assistant", mensagem: nova.mensagem, criado_em: nova.criado_em }]);
+        }
       }).subscribe();
 
     const chLeads = supabase.channel("crm-leads")
