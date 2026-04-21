@@ -117,7 +117,7 @@ export async function buscarSlotsComEscassez(
 
     diasComSlots.push({
       data: toDateStr(dia),
-      dataFormatada: dia.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' }),
+      dataFormatada: dia.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' }),
       slots: filtrarEscassez(slots, maxSlots),
     })
   }

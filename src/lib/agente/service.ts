@@ -354,7 +354,8 @@ export async function responderAgenteParaLead(
   // Não duplica o bloco JSON: remove qualquer ---JSON--- existente do promptBase antes de injetar.
   const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
-  const systemPrompt = `${promptSemJson}\n${agendamentoBlock}`
+  const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
+  const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}`
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },
@@ -414,62 +415,66 @@ export async function responderAgenteParaLead(
   }
 
   // ── Ação: confirmar agendamento diretamente ──────────────────────────────────
-  if (dados.acao === 'confirmar_agendamento') {
+  if (dados.acao === 'confirmar_agendamento' && dados.slot_data && dados.slot_horario) {
     console.log('[agente] confirmar_agendamento detectado:', {
       slot_data: dados.slot_data,
       slot_horario: dados.slot_horario,
       email_lead: dados.email_lead,
       agenteId: agenteDB?.id ?? 'sem agente',
     })
-  }
-  if (dados.acao === 'confirmar_agendamento' && dados.slot_data && dados.slot_horario) {
+
     const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
     if (!pessoaAgenda) {
       console.error('[agente] confirmar_agendamento: nenhuma agenda_pessoas vinculada ao agente', agenteDB?.id)
-    } else if (lead.whatsapp) {
-      // Valida se o slot realmente existe na disponibilidade real (evita datas inventadas pela IA)
-      const agConfig = agenteDB?.config ?? {}
-      const diasReais = await buscarSlotsComEscassez(pessoaAgenda.id, {
-        maxDias: 14,
-        maxSlots: agConfig.escassez_max_slots ?? 8,
-      })
-      const diaReal = diasReais.find(d => d.data === dados.slot_data)
-      if (!diaReal) {
-        // Slot inventado — busca disponibilidade real e deixa a IA responder de novo
-        const slotsTexto = diasReais.length > 0
-          ? formatarSlotsParaAgente(diasReais)
-          : 'Não há horários disponíveis nos próximos dias.'
-        console.warn('[agente] confirmar_agendamento: data inválida (não está na disponibilidade):', dados.slot_data, '— re-chamando IA com slots reais')
-        const msgCorrecao: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-          ...mensagensOpenAI,
-          { role: 'assistant', content: respostaCompleta },
-          { role: 'system', content: `O horário indicado não pôde ser confirmado. Apresente estes horários reais disponíveis e peça ao lead para escolher um — sem mencionar que houve qualquer problema:\n${slotsTexto}` },
-        ]
-        const comp3 = await openai.chat.completions.create({ model: modelo, messages: msgCorrecao, temperature: temperatura, max_tokens: 300 })
-        const raw3 = comp3.choices[0]?.message?.content ?? ''
-        const { texto: sem3 } = extrairAudios(raw3, audiosAgente)
-        resposta = parseAgenteJSON(sem3, linkAgendamento).resposta || raw3
-        dados.acao = undefined
-      } else {
-        try {
-          const emailLead = dados.email_lead || (lead as Record<string, unknown>).email as string || ''
-          console.log('[agente] chamando agendarParaLead:', { pessoaId: pessoaAgenda.id, data: dados.slot_data, horario: dados.slot_horario, emailLead })
-          await agendarParaLead({
-            pessoaId: pessoaAgenda.id,
-            data: dados.slot_data,
-            horario: dados.slot_horario,
-            nomeCliente: lead.nome,
-            emailCliente: emailLead,
-            whatsCliente: lead.whatsapp,
-            leadId,
-            agenteId: agenteDB?.id ?? null,
-            canalProvider: canal?.provider,
-            canalInstanciaId: canal?.instanceId,
-          })
-          return { ok: true, resposta: resposta || 'Agendamento confirmado!' }
-        } catch (err) {
-          console.error('[agente] Falha ao agendar:', err)
-        }
+      // Booking impossível — não enviar resposta falsa de "agendado"
+      return { ok: false, resposta: 'Tive um problema técnico ao confirmar o horário. Pode me informar novamente qual dia e horário você prefere?' }
+    }
+
+    // Valida se o slot realmente existe na disponibilidade real (evita datas inventadas pela IA)
+    const agConfig = agenteDB?.config ?? {}
+    const diasReais = await buscarSlotsComEscassez(pessoaAgenda.id, {
+      maxDias: 14,
+      maxSlots: agConfig.escassez_max_slots ?? 8,
+    })
+    const diaReal = diasReais.find(d => d.data === dados.slot_data)
+    if (!diaReal) {
+      // Slot não existe mais — reapresenta horários reais sem mencionar o problema
+      const slotsTexto = diasReais.length > 0
+        ? formatarSlotsParaAgente(diasReais)
+        : 'Não há horários disponíveis nos próximos dias.'
+      console.warn('[agente] confirmar_agendamento: data inválida:', dados.slot_data, '— re-chamando IA com slots reais')
+      const msgCorrecao: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        ...mensagensOpenAI,
+        { role: 'assistant', content: respostaCompleta },
+        { role: 'system', content: `O horário indicado não pôde ser confirmado. Apresente estes horários reais disponíveis e peça ao lead para escolher um — sem mencionar que houve qualquer problema:\n${slotsTexto}` },
+      ]
+      const comp3 = await openai.chat.completions.create({ model: modelo, messages: msgCorrecao, temperature: temperatura, max_tokens: 300 })
+      const raw3 = comp3.choices[0]?.message?.content ?? ''
+      const { texto: sem3 } = extrairAudios(raw3, audiosAgente)
+      resposta = parseAgenteJSON(sem3, linkAgendamento).resposta || raw3
+      dados.acao = undefined
+    } else {
+      const emailLead = dados.email_lead || (lead as Record<string, unknown>).email as string || ''
+      console.log('[agente] chamando agendarParaLead:', { pessoaId: pessoaAgenda.id, data: dados.slot_data, horario: dados.slot_horario, emailLead })
+      try {
+        await agendarParaLead({
+          pessoaId: pessoaAgenda.id,
+          data: dados.slot_data,
+          horario: dados.slot_horario,
+          nomeCliente: lead.nome,
+          emailCliente: emailLead,
+          whatsCliente: lead.whatsapp ?? '',
+          leadId,
+          agenteId: agenteDB?.id ?? null,
+          canalProvider: canal?.provider,
+          canalInstanciaId: canal?.instanceId,
+        })
+        // Agendamento gravado com sucesso — retorna resposta da IA (agendarParaLead já envia confirmação WhatsApp)
+        return { ok: true, resposta: resposta || 'Agendamento confirmado!' }
+      } catch (err) {
+        console.error('[agente] Falha ao agendar:', err)
+        // Não enviar a resposta falsa "agendei" — o agendamento NÃO foi salvo
+        return { ok: false, resposta: 'Tive um problema técnico ao confirmar o horário. Pode me informar novamente qual dia e horário você prefere?' }
       }
     }
   }

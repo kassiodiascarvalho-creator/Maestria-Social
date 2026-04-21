@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { enviarMensagemWhatsApp, enviarTemplateWhatsApp } from '@/lib/meta'
+import { enviarMensagemWhatsApp } from '@/lib/meta'
 import { enviarViaBaileys } from '@/lib/baileys'
 import { enviarEmail } from '@/lib/email/enviar'
 import { getConfig } from '@/lib/config'
@@ -162,32 +162,15 @@ async function executar(t: Tarefa): Promise<void> {
         enviado = true
       } catch { /* silencioso */ }
     } else {
-      // Legado: sem canal explícito — tenta Baileys primeiro, depois template, depois texto livre
-      const diaKey = String(t.payload.dia || '')
-      const templateMap: Record<string, string> = {
-        '1': 'maestria_followup_d1',
-        '3': 'maestria_followup_d3',
-        '7': 'maestria_followup_d7',
-      }
-      const templatePadrao = templateMap[diaKey]
-      const templateCustom = templatePadrao ? await getConfig(`META_TEMPLATE_${diaKey.toUpperCase()}`) : null
-      const nomeTemplate = templateCustom || templatePadrao
-
+      // Legado: sem canal explícito — tenta Baileys, depois texto livre via Meta
       try {
         await enviarViaBaileys(lead.whatsapp, textoResolvido)
         enviado = true
-      } catch { /* fallback abaixo */ }
-
-      if (!enviado && nomeTemplate) {
-        try {
-          const params = [lead.nome, String(lead.qs_total ?? 0), lead.pilar_fraco ?? 'Comunicação']
-          await enviarTemplateWhatsApp(lead.whatsapp, nomeTemplate, params)
-          enviado = true
-        } catch { /* fallback texto livre */ }
-      }
+      } catch { /* fallback Meta abaixo */ }
 
       if (!enviado) {
         await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
+        enviado = true
       }
     }
 
