@@ -96,21 +96,22 @@ export async function buscarSlotsComEscassez(
     excComAgend.push({ data: ag.data, tipo: 'bloqueado', inicio: ag.horario, fim: null })
   }
 
-  const agora = new Date()
-  agora.setHours(agora.getHours(), agora.getMinutes(), 0, 0)
+  // Hora atual em São Paulo (Vercel roda em UTC — nunca usar getHours() direto)
+  const horaAtualSP = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).slice(11, 16)
   const diasComSlots: DiaDisponivel[] = []
 
   for (let i = 1; i <= 21 && diasComSlots.length < maxDias; i++) {
+    // Meio-dia UTC = 09h São Paulo: garante que toDateStr retorne o dia correto
+    // independentemente do fuso (meia-noite UTC = 21h SP do dia anterior — bug)
     const dia = new Date()
-    dia.setDate(new Date().getDate() + i)
-    dia.setHours(0, 0, 0, 0)
+    dia.setUTCDate(dia.getUTCDate() + i)
+    dia.setUTCHours(12, 0, 0, 0)
 
     let slots = gerarSlotsDia(dia, horarios, excComAgend, duracao)
-    // Remove slots que já passaram hoje
+    // Remove slots passados caso o primeiro dia disponível seja hoje em SP
     const isHoje = toDateStr(dia) === toDateStr(new Date())
     if (isHoje) {
-      const horaAtual = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`
-      slots = slots.filter(s => s > horaAtual)
+      slots = slots.filter(s => s > horaAtualSP)
     }
     if (slots.length === 0) continue
 
