@@ -268,6 +268,7 @@ OUTPUT JSON — obrigatório ao final de cada resposta
 Regras para acao:
 - "buscar_disponibilidade": use após ter o e-mail, para buscar horários reais
 - "confirmar_agendamento": use quando o lead confirmar um horário da lista recebida
+- "disparar_sequencia": use quando quiser disparar a sequência de mensagens pré-configurada para este lead (definida no painel do agente)
 
 Só avance pipeline_etapa, nunca retroceda. Omita se a etapa não mudou.`
 }

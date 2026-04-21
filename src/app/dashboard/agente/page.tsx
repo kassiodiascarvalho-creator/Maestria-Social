@@ -38,10 +38,13 @@ AO FINAL DE CADA RESPOSTA, inclua um bloco JSON separado por "---JSON---":
 type Canal = { provider: "meta" | "baileys"; id: string };
 type CanalDisponivel = { provider: "meta" | "baileys"; id: string; label: string; phone?: string | null; conectado: boolean };
 
+type SeqMsg = { texto: string };
+
 type AgenteConfig = {
   escassez_max_dias?: number;
   escassez_max_slots?: number;
-  pausa_sequencia_seg?: number;
+  sequencia_msgs?: SeqMsg[];
+  sequencia_delay_seg?: number;
 };
 
 type Agente = {
@@ -86,6 +89,9 @@ export default function AgentePage() {
   const [audioNome, setAudioNome] = useState("");
   const [audioError, setAudioError] = useState("");
   const audioInputRef = useRef<HTMLInputElement>(null);
+
+  // Sequência automática
+  const seqRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
   const carregarCanaisDisponiveis = useCallback(async () => {
     const canais: CanalDisponivel[] = [];
@@ -224,6 +230,34 @@ export default function AgentePage() {
 
   function updateConfig(campo: Partial<AgenteConfig>) {
     setSelecionado(prev => prev ? { ...prev, config: { ...(prev.config ?? {}), ...campo } } : prev);
+  }
+
+  function addSeqMsg() {
+    const msgs = selecionado?.config?.sequencia_msgs ?? [];
+    updateConfig({ sequencia_msgs: [...msgs, { texto: "" }] });
+  }
+
+  function removeSeqMsg(idx: number) {
+    const msgs = selecionado?.config?.sequencia_msgs ?? [];
+    updateConfig({ sequencia_msgs: msgs.filter((_, i) => i !== idx) });
+  }
+
+  function updateSeqMsg(idx: number, texto: string) {
+    const msgs = selecionado?.config?.sequencia_msgs ?? [];
+    const novo = [...msgs];
+    novo[idx] = { texto };
+    updateConfig({ sequencia_msgs: novo });
+  }
+
+  function inserirVariavelSeq(variavel: string, idx: number) {
+    const el = seqRefs.current[idx];
+    const texto = selecionado?.config?.sequencia_msgs?.[idx]?.texto ?? "";
+    if (!el) { updateSeqMsg(idx, texto + variavel); return; }
+    const start = el.selectionStart ?? texto.length;
+    const end = el.selectionEnd ?? texto.length;
+    const novo = texto.slice(0, start) + variavel + texto.slice(end);
+    updateSeqMsg(idx, novo);
+    setTimeout(() => { el.selectionStart = el.selectionEnd = start + variavel.length; el.focus(); }, 0);
   }
 
   function toggleCanal(canal: CanalDisponivel) {
@@ -502,17 +536,58 @@ export default function AgentePage() {
                         onChange={e => updateConfig({ escassez_max_slots: Math.max(1, Math.min(8, parseInt(e.target.value) || 3)) })}
                       />
                     </div>
-                    <div className="ag-config-field">
-                      <label className="ag-config-label">Pausa entre mensagens (seg)</label>
-                      <p className="ag-config-hint">Intervalo entre partes de uma sequência ---PAUSA---</p>
-                      <input
-                        type="number" min={5} max={300}
-                        className="ag-config-input"
-                        value={selecionado.config?.pausa_sequencia_seg ?? 30}
-                        onChange={e => updateConfig({ pausa_sequencia_seg: Math.max(5, Math.min(300, parseInt(e.target.value) || 30)) })}
-                      />
-                    </div>
                   </div>
+                </div>
+
+                {/* Sequência Automática */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Sequência Automática</div>
+                  <p className="ag-card-desc">
+                    Configure mensagens que serão disparadas em sequência quando o agente usar <code>{'"acao": "disparar_sequencia"'}</code> no JSON. Use variáveis para personalizar cada mensagem.
+                  </p>
+
+                  {/* Delay */}
+                  <div className="ag-seq-delay-row">
+                    <label className="ag-config-label">Delay entre mensagens (seg)</label>
+                    <input
+                      type="number" min={1} max={300}
+                      className="ag-config-input ag-seq-delay-input"
+                      value={selecionado.config?.sequencia_delay_seg ?? 2}
+                      onChange={e => updateConfig({ sequencia_delay_seg: Math.max(1, Math.min(300, parseInt(e.target.value) || 2)) })}
+                    />
+                  </div>
+
+                  {/* Lista de mensagens */}
+                  {(selecionado.config?.sequencia_msgs ?? []).length === 0 ? (
+                    <p className="ag-audio-vazio" style={{ marginBottom: "12px" }}>Nenhuma mensagem configurada ainda.</p>
+                  ) : (
+                    <div className="ag-seq-list">
+                      {(selecionado.config?.sequencia_msgs ?? []).map((msg, idx) => (
+                        <div key={idx} className="ag-seq-item">
+                          <div className="ag-seq-num">{idx + 1}</div>
+                          <div className="ag-seq-body">
+                            {/* Chips de variáveis */}
+                            <div className="ag-seq-chips">
+                              {["{nome}", "{pilar_fraco}", "{nivel_qs}", "{qs_percentual}", "{qs_total}"].map(v => (
+                                <button key={v} className="ag-seq-chip" onClick={() => inserirVariavelSeq(v, idx)}>{v}</button>
+                              ))}
+                            </div>
+                            <textarea
+                              ref={el => { seqRefs.current[idx] = el; }}
+                              className="ag-seq-textarea"
+                              value={msg.texto}
+                              onChange={e => updateSeqMsg(idx, e.target.value)}
+                              rows={3}
+                              placeholder={`Mensagem ${idx + 1}…`}
+                            />
+                          </div>
+                          <button className="ag-audio-del" onClick={() => removeSeqMsg(idx)} title="Remover">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button className="ag-seq-add" onClick={addSeqMsg}>+ Adicionar mensagem</button>
                 </div>
 
                 {/* Prompt */}
@@ -693,6 +768,22 @@ const css = `
 
   .ag-audio-del{width:28px;height:28px;border-radius:50%;background:none;border:1px solid rgba(224,88,64,.2);color:#e07070;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s;}
   .ag-audio-del:hover{background:rgba(224,88,64,.1);border-color:rgba(224,88,64,.4);}
+
+  /* Sequência Automática */
+  .ag-seq-delay-row{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+  .ag-seq-delay-input{width:90px!important;}
+  .ag-seq-list{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
+  .ag-seq-item{display:flex;align-items:flex-start;gap:10px;}
+  .ag-seq-num{width:24px;height:24px;border-radius:50%;background:rgba(194,144,77,.15);border:1px solid rgba(194,144,77,.3);color:#c2904d;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:6px;}
+  .ag-seq-body{flex:1;display:flex;flex-direction:column;gap:6px;}
+  .ag-seq-chips{display:flex;flex-wrap:wrap;gap:5px;}
+  .ag-seq-chip{background:rgba(194,144,77,.08);border:1px solid rgba(194,144,77,.2);border-radius:5px;padding:3px 9px;font-size:11px;color:#c2904d;cursor:pointer;font-family:monospace;transition:all .15s;}
+  .ag-seq-chip:hover{background:rgba(194,144,77,.18);border-color:rgba(194,144,77,.4);}
+  .ag-seq-textarea{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 12px;font-size:13px;color:#fff9e6;font-family:inherit;line-height:1.6;resize:vertical;outline:none;transition:border-color .2s;}
+  .ag-seq-textarea:focus{border-color:rgba(194,144,77,.3);}
+  .ag-seq-textarea::placeholder{color:#4a3e30;}
+  .ag-seq-add{background:rgba(194,144,77,.08);border:1px dashed rgba(194,144,77,.3);border-radius:10px;padding:10px 18px;color:#c2904d;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;width:100%;}
+  .ag-seq-add:hover{background:rgba(194,144,77,.15);}
 
   @media(max-width:768px){
     .ag-root{flex-direction:column;height:auto;min-height:calc(100vh - 60px);}
