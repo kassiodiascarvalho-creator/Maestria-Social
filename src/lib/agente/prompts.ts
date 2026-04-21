@@ -212,6 +212,66 @@ Use apenas nomes de áudios que foram configurados para este agente.
 Você pode combinar texto e múltiplos áudios na mesma resposta.`
 }
 
+/**
+ * Bloco de instruções de agendamento e JSON injetado no final de QUALQUER prompt
+ * (customizado ou gerado). Garante que o agente sempre saiba como agendar
+ * independente do que estiver escrito no prompt do usuário.
+ */
+export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string): string {
+  const mentorRef = pessoaNome
+    ? pessoaRole ? `${pessoaNome}, ${pessoaRole}` : pessoaNome
+    : 'o especialista'
+
+  return `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AGENDAMENTO — INSTRUÇÕES OBRIGATÓRIAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Quando o lead demonstrar interesse em agendar uma conversa com ${mentorRef}:
+
+PASSO 1 — Peça o e-mail:
+"Qual o seu melhor e-mail? Vou mandar o link da reunião direto pra você."
+
+PASSO 2 — Após receber o e-mail, use acao "buscar_disponibilidade" no JSON.
+O sistema vai te enviar os horários reais disponíveis. NUNCA invente datas.
+
+PASSO 3 — Apresente os horários recebidos com escassez e urgência (máx 3 opções).
+Exemplo: "Tenho *amanhã* às *10h* ou *quinta* às *14h*. Qual encaixa melhor?"
+
+PASSO 4 — Quando o lead confirmar um horário, use acao "confirmar_agendamento"
+com slot_data (YYYY-MM-DD), slot_horario (HH:MM) e email_lead.
+O sistema cria o Google Meet e confirma pelo WhatsApp automaticamente.
+
+FALLBACK: Se não houver agenda configurada, envie o link: ${linkAgendamento || '{{link_agendamento}}'}
+
+REGRA ABSOLUTA: NUNCA use "confirmar_agendamento" com datas que você inventou.
+Só confirme um horário que o lead escolheu DA LISTA que o sistema te enviou.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT JSON — obrigatório ao final de cada resposta
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---JSON---
+{
+  "status_lead": "frio|morno|quente",
+  "fase": "acolhimento|sondagem|proposta_call|agendando|link_enviado",
+  "pipeline_etapa": "em_contato|qualificado|proposta|agendado|convertido|perdido",
+  "enviar_link": false,
+  "acao": null,
+  "email_lead": null,
+  "slot_data": null,
+  "slot_horario": null,
+  "qualificacoes": [
+    { "campo": "maior_dor|contexto|interesse|objecao|objetivo|urgencia|orcamento|outro", "valor": "texto extraído" }
+  ]
+}
+---JSON---
+
+Regras para acao:
+- "buscar_disponibilidade": use após ter o e-mail, para buscar horários reais
+- "confirmar_agendamento": use quando o lead confirmar um horário da lista recebida
+
+Só avance pipeline_etapa, nunca retroceda. Omita se a etapa não mudou.`
+}
+
 export function buildPrimeiraMsg(lead: Lead): string {
   const pilar = lead.pilar_fraco || 'Comunicação'
   const nivel = lead.nivel_qs || 'Iniciante'

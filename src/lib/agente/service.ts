@@ -6,6 +6,7 @@ import { enviarViaBaileys, enviarAudioViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 import { dispararWebhookSaida } from '@/lib/webhooks'
 import { buscarSlotsComEscassez, formatarSlotsParaAgente, agendarParaLead } from '@/lib/agenda'
+import { buildAgendamentoInstructions } from '@/lib/agente/prompts'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
 import { createHash } from 'crypto'
 
@@ -327,7 +328,7 @@ export async function responderAgenteParaLead(
       .eq('agente_id', agenteDB.id)
     audiosAgente = (audiosDB ?? []) as AudioAgente[]
   }
-  const systemPrompt = promptRaw
+  const promptBase = promptRaw
     ? promptRaw
         .replace(/\{\{nome\}\}/g, lead.nome)
         .replace(/\{\{pilar\}\}/g, lead.pilar_fraco ?? 'Comunicação')
@@ -335,6 +336,13 @@ export async function responderAgenteParaLead(
         .replace(/\{\{pessoa_nome\}\}/g, pessoaNome ?? '')
         .replace(/\{\{pessoa_role\}\}/g, pessoaRole ?? '')
     : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole)
+
+  // Injeta instruções de agendamento/JSON no final de QUALQUER prompt.
+  // Garante que agentes com prompt customizado também saibam agendar corretamente.
+  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole)
+  const systemPrompt = promptBase.includes('buscar_disponibilidade')
+    ? promptBase  // prompt já tem as instruções — não duplica
+    : `${promptBase}\n${agendamentoBlock}`
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },
@@ -460,7 +468,7 @@ export async function responderAgenteParaLead(
   let respostaImediata = resposta
   if (partesSequencia.length > 1) {
     respostaImediata = partesSequencia[0]
-    const pausaSeg = agenteDB?.config?.pausa_sequencia_seg ?? 30
+    const pausaSeg = agenteDB?.config?.pausa_sequencia_seg ?? 2
     const agora = Date.now()
 
     // Cancela qualquer sequência anterior pendente para este lead — evita duplicatas
@@ -491,13 +499,25 @@ export async function responderAgenteParaLead(
     resposta = respostaImediata
   }
 
+  // Dedup: evita inserir a mesma mensagem imediata duas vezes (webhook duplo)
+  const doisMin = new Date(Date.now() - 2 * 60 * 1000).toISOString()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('conversas').insert({
-    lead_id: leadId,
-    role: 'assistant',
-    mensagem: respostaImediata,
-    agente_id: agenteDB?.id ?? null,
-  })
+  const { count: jaRegistrado } = await (supabase as any)
+    .from('conversas')
+    .select('id', { count: 'exact', head: true })
+    .eq('lead_id', leadId)
+    .eq('role', 'assistant')
+    .eq('mensagem', respostaImediata)
+    .gte('criado_em', doisMin)
+  if (!jaRegistrado) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('conversas').insert({
+      lead_id: leadId,
+      role: 'assistant',
+      mensagem: respostaImediata,
+      agente_id: agenteDB?.id ?? null,
+    })
+  }
 
   if (dados.qualificacoes && dados.qualificacoes.length > 0) {
     const qualificacoesParaSalvar = dados.qualificacoes
