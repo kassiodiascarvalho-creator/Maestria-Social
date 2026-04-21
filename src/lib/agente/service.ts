@@ -566,7 +566,7 @@ export async function responderAgenteParaLead(
     const msgs = agenteDB?.config?.sequencia_msgs ?? []
     if (msgs.length > 0) {
       const delaySeg = agenteDB?.config?.sequencia_delay_seg ?? 30
-      const delayInicialSeg = agenteDB?.config?.sequencia_delay_inicial_seg ?? 15
+      const delayInicialSeg = agenteDB?.config?.sequencia_delay_inicial_seg ?? 0
       const agora = Date.now()
 
       // Dedup: evita race condition e re-disparo da IA na mesma conversa.
@@ -618,6 +618,13 @@ export async function responderAgenteParaLead(
             status: 'pendente',
           })
         }
+
+        // Dispara o cron imediatamente para reduzir o delay da primeira mensagem
+        // Sem isso, as tarefas ficam esperando até o próximo ciclo natural do Vercel (até 60s)
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL
+          || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const cronSecret = process.env.CRON_SECRET ? `?secret=${process.env.CRON_SECRET}` : ''
+        fetch(`${appUrl}/api/cron/processar-tarefas${cronSecret}`, { method: 'POST' }).catch(() => {})
       }
     }
   }
