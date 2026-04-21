@@ -130,7 +130,8 @@ export function formatarSlotsParaAgente(dias: DiaDisponivel[]): string {
   if (dias.length === 0) return 'Não há horários disponíveis nos próximos dias.'
   return dias.map(d => {
     const horas = d.slots.map(s => `*${s}*`).join(' ou ')
-    return `• *${d.dataFormatada}* — ${horas}`
+    // Data ISO entre colchetes — IA usa esse valor exato no confirmar_agendamento
+    return `• *${d.dataFormatada}* [${d.data}] — ${horas}`
   }).join('\n')
 }
 

@@ -432,7 +432,7 @@ export async function responderAgenteParaLead(
         const msgCorrecao: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
           ...mensagensOpenAI,
           { role: 'assistant', content: respostaCompleta },
-          { role: 'system', content: `O horário solicitado não está disponível. Use APENAS estes horários reais:\n${slotsTexto}\nPeça ao lead para escolher um destes.` },
+          { role: 'system', content: `O horário indicado não pôde ser confirmado. Apresente estes horários reais disponíveis e peça ao lead para escolher um — sem mencionar que houve qualquer problema:\n${slotsTexto}` },
         ]
         const comp3 = await openai.chat.completions.create({ model: modelo, messages: msgCorrecao, temperature: temperatura, max_tokens: 300 })
         const raw3 = comp3.choices[0]?.message?.content ?? ''
@@ -470,29 +470,42 @@ export async function responderAgenteParaLead(
       const delaySeg = agenteDB?.config?.sequencia_delay_seg ?? 2
       const agora = Date.now()
 
-      // Cancela sequências pendentes anteriores para evitar duplicatas
+      // Dedup: evita race condition com dois webhooks simultâneos
+      const trintaSeg = new Date(agora - 30 * 1000).toISOString()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      const { count: jaDisparou } = await (supabase as any)
         .from('tarefas_agendadas')
-        .update({ status: 'cancelada' })
+        .select('id', { count: 'exact', head: true })
         .eq('lead_id', leadId)
         .eq('tipo', 'whatsapp_msg')
-        .eq('status', 'pendente')
+        .neq('status', 'cancelada')
+        .gte('criado_em', trintaSeg)
 
-      for (let i = 0; i < msgs.length; i++) {
+      if (!jaDisparou) {
+        // Cancela sequências anteriores pendentes antes de criar novas
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from('tarefas_agendadas').insert({
-          lead_id: leadId,
-          tipo: 'whatsapp_msg',
-          payload: {
-            texto: msgs[i].texto,
-            agente_id: agenteDB?.id ?? null,
-            canal_provider: canal?.provider ?? 'meta',
-            canal_instance_id: canal?.instanceId ?? null,
-          },
-          agendado_para: new Date(agora + (i + 1) * delaySeg * 1000).toISOString(),
-          status: 'pendente',
-        })
+        await (supabase as any)
+          .from('tarefas_agendadas')
+          .update({ status: 'cancelada' })
+          .eq('lead_id', leadId)
+          .eq('tipo', 'whatsapp_msg')
+          .eq('status', 'pendente')
+
+        for (let i = 0; i < msgs.length; i++) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from('tarefas_agendadas').insert({
+            lead_id: leadId,
+            tipo: 'whatsapp_msg',
+            payload: {
+              texto: msgs[i].texto,
+              agente_id: agenteDB?.id ?? null,
+              canal_provider: canal?.provider ?? 'meta',
+              canal_instance_id: canal?.instanceId ?? null,
+            },
+            agendado_para: new Date(agora + (i + 1) * delaySeg * 1000).toISOString(),
+            status: 'pendente',
+          })
+        }
       }
     }
   }

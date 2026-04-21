@@ -238,7 +238,7 @@ PASSO 3 — Apresente os horários recebidos com escassez e urgência (máx 3 op
 Exemplo: "Tenho *amanhã* às *10h* ou *quinta* às *14h*. Qual encaixa melhor?"
 
 PASSO 4 — Quando o lead confirmar um horário, use acao "confirmar_agendamento"
-com slot_data (YYYY-MM-DD), slot_horario (HH:MM) e email_lead.
+com slot_data (YYYY-MM-DD — use EXATAMENTE a data entre colchetes que te foi enviada, ex: [2026-04-25]), slot_horario (HH:MM) e email_lead.
 O sistema cria o Google Meet e confirma pelo WhatsApp automaticamente.
 
 FALLBACK: Se não houver agenda configurada, envie o link: ${linkAgendamento || '{{link_agendamento}}'}
