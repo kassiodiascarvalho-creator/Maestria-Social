@@ -300,12 +300,18 @@ export async function POST(req: NextRequest) {
   let fail = 0
 
   for (const t of lista) {
+    // Claim atômico: UPDATE WHERE status='pendente' — se outro cron já processou, count=0 → pula
+    const { data: claimData } = await supabase
+      .from('tarefas_agendadas')
+      .update({ status: 'enviada', processado_em: new Date().toISOString() })
+      .eq('id', t.id)
+      .eq('status', 'pendente')
+      .select('id')
+
+    if (!claimData?.length) continue // já processado por outra execução paralela do cron
+
     try {
       await executar(t)
-      await supabase
-        .from('tarefas_agendadas')
-        .update({ status: 'enviada', processado_em: new Date().toISOString() })
-        .eq('id', t.id)
       ok++
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'erro'

@@ -58,11 +58,11 @@ interface AgenteJSON {
 
 function parseAgenteJSON(texto: string, linkAgendamento?: string): { resposta: string; dados: AgenteJSON } {
   const separador = '---JSON---'
-  const partes = texto.split(separador)
-
   let resposta = texto.trim()
   let dados: AgenteJSON = {}
 
+  // Primário: separadores ---JSON---
+  const partes = texto.split(separador)
   if (partes.length >= 3) {
     resposta = partes[0].trim()
     try {
@@ -70,10 +70,21 @@ function parseAgenteJSON(texto: string, linkAgendamento?: string): { resposta: s
     } catch {
       dados = {}
     }
+  } else {
+    // Fallback: JSON cru no final da resposta (IA esqueceu os separadores)
+    // Detecta o último bloco { ... } na mensagem e tenta parsear
+    const jsonMatch = texto.match(/(\{[\s\S]*\})\s*$/)
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]) as AgenteJSON
+        if (parsed.acao || parsed.status_lead || parsed.qualificacoes || parsed.email_lead) {
+          dados = parsed
+          resposta = texto.slice(0, texto.lastIndexOf(jsonMatch[1])).trim()
+        }
+      } catch { /* JSON inválido — mantém texto completo */ }
+    }
   }
 
-  // Detecta automaticamente se o link de agendamento está na resposta
-  // independente do que o modelo retornou no JSON
   if (!dados.enviar_link && linkAgendamento && resposta.includes(linkAgendamento)) {
     dados.enviar_link = true
     dados.fase = 'link_enviado'
