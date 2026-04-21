@@ -322,7 +322,7 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
               </div>
               <div className="ed-field">
                 <label className="ed-field-label">Agente SDR vinculado</label>
-                <p className="ed-desc" style={{margin:0}}>O agente selecionado enviará o link <code>/agendar/{slug || 'seu-slug'}</code> automaticamente quando o lead quiser agendar.</p>
+                <p className="ed-desc" style={{margin:0}}>O agente vinculado consulta sua disponibilidade em tempo real e agenda diretamente pelo WhatsApp — sem precisar que o lead acesse um link externo.</p>
                 <select
                   className="ed-input ed-select"
                   value={agenteId}
