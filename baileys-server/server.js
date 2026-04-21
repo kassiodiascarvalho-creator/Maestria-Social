@@ -427,30 +427,73 @@ app.get('/job/:jobId', (req, res) => {
   res.json(job)
 })
 
+// Aguarda a instância ficar conectada (até timeoutMs ms)
+async function aguardarConectado(instId, timeoutMs = 30000) {
+  const inicio = Date.now()
+  while (Date.now() - inicio < timeoutMs) {
+    const inst = instances[instId]
+    if (!inst) return false
+    if (inst.status === 'conectado') return true
+    await new Promise(r => setTimeout(r, 1000))
+  }
+  return false
+}
+
+function isFrameDetachedError(err) {
+  const msg = err?.message || String(err)
+  return msg.includes('detached Frame') || msg.includes('Target closed') || msg.includes('Session closed')
+}
+
 // Processa a lista em background
 async function processarLista(jobId, instId, contatos) {
   const job = jobs[jobId]
 
   for (const contato of contatos) {
-    const inst = instances[instId]
-    // Se instância desconectou no meio do caminho, aborta
+    let inst = instances[instId]
+    // Se instância desconectou no meio do caminho, aguarda até 30s reconectar
     if (!inst || inst.status !== 'conectado') {
-      job.status = 'erro'
-      job.erroGeral = 'Instância desconectou durante o disparo'
-      return
+      console.log(`[Job ${jobId}] Instância ${instId} não conectada — aguardando reconexão...`)
+      const reconectou = await aguardarConectado(instId, 30000)
+      if (!reconectou) {
+        job.status = 'erro'
+        job.erroGeral = 'Instância desconectou e não reconectou durante o disparo'
+        return
+      }
+      inst = instances[instId]
     }
 
     let contatoOk = true
 
     for (const msg of contato.mensagens) {
-      try {
-        await enviarMensagem(inst, msg.type, contato.phone, msg.content, msg.caption, msg.filename)
-      } catch (err) {
-        contatoOk = false
-        job.erros.push({ phone: contato.phone, msg: err?.message || String(err) })
-        console.error(`❌ [Job ${jobId}] Erro ao enviar para ${contato.phone}:`, err?.message)
-        break
+      let tentativas = 0
+      const MAX = 2
+      while (tentativas < MAX) {
+        try {
+          await enviarMensagem(inst, msg.type, contato.phone, msg.content, msg.caption, msg.filename)
+          break // sucesso
+        } catch (err) {
+          tentativas++
+          const errMsg = err?.message || String(err)
+
+          // Frame detached / sessão caiu: aguarda reconexão e tenta de novo
+          if (isFrameDetachedError(err) && tentativas < MAX) {
+            console.warn(`[Job ${jobId}] Frame detached ao enviar para ${contato.phone} — aguardando reconexão (tentativa ${tentativas}/${MAX})...`)
+            const reconectou = await aguardarConectado(instId, 30000)
+            if (reconectou) {
+              inst = instances[instId]
+              continue
+            }
+          }
+
+          // Falha definitiva
+          contatoOk = false
+          job.erros.push({ phone: contato.phone, msg: errMsg })
+          console.error(`❌ [Job ${jobId}] Erro ao enviar para ${contato.phone}:`, errMsg)
+          break
+        }
       }
+      if (!contatoOk) break
+
       // Delay entre mensagens do mesmo contato: 200-400ms
       if (contato.mensagens.length > 1) {
         await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
