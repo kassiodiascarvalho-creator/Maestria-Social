@@ -5,7 +5,7 @@ import { enviarMensagemInicialWhatsApp, enviarMensagemWhatsApp, enviarAudioViaMe
 import { enviarViaBaileys, enviarAudioViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 import { dispararWebhookSaida } from '@/lib/webhooks'
-import { buscarSlotsComEscassez, formatarSlotsParaAgente, agendarParaLead } from '@/lib/agenda'
+import { buscarSlotsComEscassez, formatarSlotsParaAgente, agendarParaLead, cancelarAgendamento } from '@/lib/agenda'
 import { buildAgendamentoInstructions } from '@/lib/agente/prompts'
 import type { CampoQualificacao, StatusLead } from '@/types/database'
 import { createHash } from 'crypto'
@@ -50,7 +50,7 @@ interface AgenteJSON {
   enviar_link?: boolean
   qualificacoes?: QualificacaoItem[]
   // Agendamento automático / sequência
-  acao?: 'buscar_disponibilidade' | 'confirmar_agendamento' | 'disparar_sequencia'
+  acao?: 'buscar_disponibilidade' | 'confirmar_agendamento' | 'reagendar_agendamento' | 'cancelar_agendamento' | 'disparar_sequencia'
   email_lead?: string
   slot_data?: string    // YYYY-MM-DD
   slot_horario?: string // HH:MM
@@ -475,6 +475,61 @@ export async function responderAgenteParaLead(
         console.error('[agente] Falha ao agendar:', err)
         // Não enviar a resposta falsa "agendei" — o agendamento NÃO foi salvo
         return { ok: false, resposta: 'Tive um problema técnico ao confirmar o horário. Pode me informar novamente qual dia e horário você prefere?' }
+      }
+    }
+  }
+
+  // ── Ação: reagendar agendamento ──────────────────────────────────────────────
+  if (dados.acao === 'reagendar_agendamento') {
+    const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
+    if (pessoaAgenda) {
+      // Cancela agendamento atual e busca novos slots
+      await cancelarAgendamento(leadId, pessoaAgenda.id)
+      const agConfig = agenteDB?.config ?? {}
+      const dias = await buscarSlotsComEscassez(pessoaAgenda.id, {
+        maxDias: agConfig.escassez_max_dias,
+        maxSlots: agConfig.escassez_max_slots,
+      })
+      const slotsTexto = formatarSlotsParaAgente(dias)
+      const msgReagendar: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        ...mensagensOpenAI,
+        { role: 'assistant', content: respostaCompleta },
+        { role: 'system', content: `O agendamento anterior foi cancelado. Apresente estes novos horários disponíveis ao lead:\n${slotsTexto}` },
+      ]
+      const compR = await openai.chat.completions.create({ model: modelo, messages: msgReagendar, temperature: temperatura, max_tokens: 300 })
+      const rawR = compR.choices[0]?.message?.content ?? ''
+      const { texto: semR } = extrairAudios(rawR, audiosAgente)
+      resposta = parseAgenteJSON(semR, linkAgendamento).resposta || rawR
+      dados.acao = undefined
+    }
+  }
+
+  // ── Ação: cancelar agendamento ────────────────────────────────────────────────
+  if (dados.acao === 'cancelar_agendamento') {
+    const pessoaAgenda = agenteDB?.id ? await buscarPessoaAgenda(agenteDB.id) : null
+    if (pessoaAgenda) {
+      const cancelou = await cancelarAgendamento(leadId, pessoaAgenda.id)
+      if (cancelou) {
+        // Tenta convencer a remarcar em vez de só cancelar
+        const agConfig = agenteDB?.config ?? {}
+        const dias = await buscarSlotsComEscassez(pessoaAgenda.id, {
+          maxDias: agConfig.escassez_max_dias,
+          maxSlots: agConfig.escassez_max_slots,
+        })
+        const slotsTexto = dias.length > 0 ? formatarSlotsParaAgente(dias) : ''
+        const instrucao = slotsTexto
+          ? `O agendamento foi cancelado. Valide a decisão do lead com empatia e ofereça remarcar para um desses horários:\n${slotsTexto}`
+          : 'O agendamento foi cancelado. Confirme com empatia e deixe a porta aberta para remarcar futuramente.'
+        const msgCancel: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          ...mensagensOpenAI,
+          { role: 'assistant', content: respostaCompleta },
+          { role: 'system', content: instrucao },
+        ]
+        const compC = await openai.chat.completions.create({ model: modelo, messages: msgCancel, temperature: temperatura, max_tokens: 300 })
+        const rawC = compC.choices[0]?.message?.content ?? ''
+        const { texto: semC } = extrairAudios(rawC, audiosAgente)
+        resposta = parseAgenteJSON(semC, linkAgendamento).resposta || rawC
+        dados.acao = undefined
       }
     }
   }

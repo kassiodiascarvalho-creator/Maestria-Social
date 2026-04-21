@@ -137,6 +137,41 @@ export function formatarSlotsParaAgente(dias: DiaDisponivel[]): string {
 
 // ── Criar agendamento ─────────────────────────────────────────────────────────
 
+// ── Cancelar agendamento ──────────────────────────────────────────────────────
+
+export async function cancelarAgendamento(leadId: string, pessoaId: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+
+  const { data: ag } = await admin
+    .from('agenda_agendamentos')
+    .select('id, data, horario')
+    .eq('lead_id', leadId)
+    .eq('pessoa_id', pessoaId)
+    .eq('status', 'confirmado')
+    .order('data', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (!ag) return false
+
+  await admin.from('agenda_agendamentos').update({ status: 'cancelado' }).eq('id', ag.id)
+
+  // Remove a exceção de bloqueio correspondente
+  await admin.from('agenda_excecoes')
+    .delete()
+    .eq('pessoa_id', pessoaId)
+    .eq('data', ag.data)
+    .eq('inicio', ag.horario)
+    .eq('tipo', 'bloqueado')
+
+  await admin.from('leads')
+    .update({ pipeline_etapa: 'qualificado', etiqueta: null })
+    .eq('id', leadId)
+
+  return true
+}
+
 function buildOAuth2(refreshToken: string) {
   const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID!, process.env.GOOGLE_CLIENT_SECRET!)
   oauth2.setCredentials({ refresh_token: refreshToken })

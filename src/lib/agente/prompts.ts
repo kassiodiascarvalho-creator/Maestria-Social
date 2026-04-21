@@ -227,7 +227,7 @@ export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome
 PROTOCOLO DE AGENDAMENTO — PRIORIDADE MÁXIMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-PASSO 1 — Lead quer agendar → peça SOMENTE o e-mail:
+PASSO 1 — Lead quer agendar com ${mentorRef} → peça SOMENTE o e-mail:
 "Qual o seu melhor e-mail? Vou mandar o link da reunião direto pra você."
 Não ofereça horários ainda. Espere o e-mail.
 
@@ -277,7 +277,14 @@ OUTPUT JSON — obrigatório ao final de cada resposta
 Regras para acao:
 - "buscar_disponibilidade": use após ter o e-mail, para buscar horários reais
 - "confirmar_agendamento": use na PRIMEIRA resposta após o lead indicar qualquer horário/preferência
+- "reagendar_agendamento": use quando o lead pedir para mudar o horário já agendado — cancela o atual e busca novos slots
+- "cancelar_agendamento": use quando o lead confirmar que quer cancelar — o sistema vai oferecer remarcar automaticamente
 - "disparar_sequencia": use para disparar a sequência de mensagens configurada no painel
+
+REGRAS REAGENDAMENTO/CANCELAMENTO:
+❌ NUNCA cancele ou reagende sem confirmação explícita do lead ("quero cancelar", "quero mudar", "não posso mais")
+✅ Se o lead disser que quer mudar o horário → use "reagendar_agendamento"
+✅ Se o lead confirmar cancelamento → use "cancelar_agendamento" (o sistema tentará remarcar automaticamente)
 
 Só avance pipeline_etapa, nunca retroceda. Omita se a etapa não mudou.`
 }
