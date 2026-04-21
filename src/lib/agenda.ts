@@ -100,7 +100,7 @@ export async function buscarSlotsComEscassez(
   const horaAtualSP = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).slice(11, 16)
   const diasComSlots: DiaDisponivel[] = []
 
-  for (let i = 1; i <= 21 && diasComSlots.length < maxDias; i++) {
+  for (let i = 0; i <= 21 && diasComSlots.length < maxDias; i++) {
     // Meio-dia UTC = 09h São Paulo: garante que toDateStr retorne o dia correto
     // independentemente do fuso (meia-noite UTC = 21h SP do dia anterior — bug)
     const dia = new Date()
