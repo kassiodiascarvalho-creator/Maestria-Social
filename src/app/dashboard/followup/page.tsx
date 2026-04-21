@@ -36,10 +36,11 @@ export default function FollowupPage() {
   const [tab, setTab] = useState<"lembrete_reuniao" | "reengajamento">("lembrete_reuniao");
 
   useEffect(() => {
-    fetch("/api/admin/agentes").then(r => r.json()).then((data: Agente[]) => {
-      setAgentes(data ?? []);
-      if (data?.length) setAgenteId(data[0].id);
-    });
+    fetch("/api/admin/agentes").then(r => r.json()).then((data) => {
+      const list = Array.isArray(data) ? data : [];
+      setAgentes(list);
+      if (list.length) setAgenteId(list[0].id);
+    }).catch(() => {});
   }, []);
 
   const carregar = useCallback(() => {
@@ -47,7 +48,8 @@ export default function FollowupPage() {
     setLoading(true);
     fetch(`/api/admin/followup/configs?agente_id=${agenteId}`)
       .then(r => r.json())
-      .then((d: FollowupConfig[]) => setConfigs(d ?? []))
+      .then((d) => setConfigs(Array.isArray(d) ? d : []))
+      .catch(() => setConfigs([]))
       .finally(() => setLoading(false));
   }, [agenteId]);
 
