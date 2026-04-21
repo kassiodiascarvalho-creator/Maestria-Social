@@ -182,6 +182,7 @@ type AgenteConfig = {
     filename?: string
   }>
   sequencia_delay_seg?: number
+  sequencia_delay_inicial_seg?: number
 }
 
 type AgenteDB = {
@@ -555,7 +556,8 @@ export async function responderAgenteParaLead(
   if (dados.acao === 'disparar_sequencia') {
     const msgs = agenteDB?.config?.sequencia_msgs ?? []
     if (msgs.length > 0) {
-      const delaySeg = agenteDB?.config?.sequencia_delay_seg ?? 2
+      const delaySeg = agenteDB?.config?.sequencia_delay_seg ?? 30
+      const delayInicialSeg = agenteDB?.config?.sequencia_delay_inicial_seg ?? 15
       const agora = Date.now()
 
       // Dedup: evita race condition e re-disparo da IA na mesma conversa.
@@ -603,7 +605,7 @@ export async function responderAgenteParaLead(
               canal_provider: seqProvider,
               canal_instance_id: seqInstanceId,
             },
-            agendado_para: new Date(agora + (i + 1) * delaySeg * 1000).toISOString(),
+            agendado_para: new Date(agora + delayInicialSeg * 1000 + i * delaySeg * 1000).toISOString(),
             status: 'pendente',
           })
         }

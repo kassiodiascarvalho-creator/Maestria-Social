@@ -11,12 +11,17 @@ const ETAPAS_DEFAULT: EtapaPipeline[] = [
   { slug: 'perdido',     label: 'Perdido',    is_final: true },
 ]
 
-function etapaSlugs(etapas: EtapaPipeline[]): string {
-  return etapas.filter(e => e.slug !== 'novo').map(e => `"${e.slug}"`).join('|')
+function resolverEtapas(etapas?: EtapaPipeline[]): EtapaPipeline[] {
+  // Usa fallback quando vazio (tabela não existe ainda no banco ou sem registros)
+  return etapas && etapas.length > 0 ? etapas : ETAPAS_DEFAULT
 }
 
-function etapaDescricoes(etapas: EtapaPipeline[]): string {
-  return etapas.filter(e => e.slug !== 'novo').map(e => `- "${e.slug}": ${e.label}`).join('\n')
+function etapaSlugs(etapas?: EtapaPipeline[]): string {
+  return resolverEtapas(etapas).filter(e => e.slug !== 'novo').map(e => `"${e.slug}"`).join('|')
+}
+
+function etapaDescricoes(etapas?: EtapaPipeline[]): string {
+  return resolverEtapas(etapas).filter(e => e.slug !== 'novo').map(e => `- "${e.slug}": ${e.label}`).join('\n')
 }
 
 // Roteiros adaptativos por pilar fraco
@@ -194,7 +199,7 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 {
   "status_lead": "frio|morno|quente",
   "fase": "acolhimento|sondagem|proposta_call|agendando|link_enviado",
-  "pipeline_etapa": ${etapaSlugs(etapas ?? ETAPAS_DEFAULT)},
+  "pipeline_etapa": ${etapaSlugs(etapas)},
   "enviar_link": false,
   "acao": null,
   "email_lead": null,
@@ -207,7 +212,7 @@ OUTPUT — bloco JSON obrigatório ao final de cada resposta
 ---JSON---
 
 Regras para pipeline_etapa:
-${etapaDescricoes(etapas ?? ETAPAS_DEFAULT)}
+${etapaDescricoes(etapas)}
 
 Regras para acao:
 - "buscar_disponibilidade": use quando tiver o e-mail e quiser ver os horários disponíveis
@@ -276,7 +281,7 @@ OUTPUT JSON — obrigatório ao final de cada resposta
 {
   "status_lead": "frio|morno|quente",
   "fase": "acolhimento|sondagem|proposta_call|agendando|link_enviado",
-  "pipeline_etapa": ${etapaSlugs(etapas ?? ETAPAS_DEFAULT)},
+  "pipeline_etapa": ${etapaSlugs(etapas)},
   "enviar_link": false,
   "acao": null,
   "email_lead": null,
