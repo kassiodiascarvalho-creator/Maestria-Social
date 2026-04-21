@@ -237,10 +237,25 @@ Você pode combinar texto e múltiplos áudios na mesma resposta.`
  * (customizado ou gerado). Garante que o agente sempre saiba como agendar
  * independente do que estiver escrito no prompt do usuário.
  */
-export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[]): string {
+export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[], condicoesTransferencia?: string[]): string {
   const mentorRef = pessoaNome
     ? pessoaRole ? `${pessoaNome}, ${pessoaRole}` : pessoaNome
     : 'o especialista'
+
+  const blocoTransferencia = condicoesTransferencia && condicoesTransferencia.length > 0
+    ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRANSFERÊNCIA PARA HUMANO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use "acao": "transferir_para_humano" quando detectar UMA DAS SITUAÇÕES ABAIXO.
+Após isso, o agente para de responder — o atendente humano assume a conversa.
+
+Situações que exigem transferência:
+${condicoesTransferencia.map(c => `- ${c}`).join('\n')}
+
+❌ Não explique ao lead que está transferindo — apenas termine sua resposta normalmente e coloque a ação no JSON.
+`
+    : ''
 
   return `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -274,7 +289,7 @@ REGRAS CRÍTICAS — NUNCA VIOLE
 ✅ O sistema cria o Google Meet e envia confirmação automática — você não precisa fazer mais nada
 
 FALLBACK (sem agenda configurada): ${linkAgendamento || '{{link_agendamento}}'}
-
+${blocoTransferencia}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT JSON — obrigatório ao final de cada resposta
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -300,6 +315,7 @@ Regras para acao:
 - "reagendar_agendamento": use quando o lead pedir para mudar o horário já agendado — cancela o atual e busca novos slots
 - "cancelar_agendamento": use quando o lead confirmar que quer cancelar — o sistema vai oferecer remarcar automaticamente
 - "disparar_sequencia": use para disparar a sequência de mensagens configurada no painel
+- "transferir_para_humano": use nas situações de transferência descritas acima (quando configuradas)
 
 REGRAS REAGENDAMENTO/CANCELAMENTO:
 ❌ NUNCA cancele ou reagende sem confirmação explícita do lead ("quero cancelar", "quero mudar", "não posso mais")

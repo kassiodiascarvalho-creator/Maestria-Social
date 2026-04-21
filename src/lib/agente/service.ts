@@ -58,7 +58,7 @@ interface AgenteJSON {
   enviar_link?: boolean
   qualificacoes?: QualificacaoItem[]
   // Agendamento automático / sequência
-  acao?: 'buscar_disponibilidade' | 'confirmar_agendamento' | 'reagendar_agendamento' | 'cancelar_agendamento' | 'disparar_sequencia'
+  acao?: 'buscar_disponibilidade' | 'confirmar_agendamento' | 'reagendar_agendamento' | 'cancelar_agendamento' | 'disparar_sequencia' | 'transferir_para_humano'
   email_lead?: string
   slot_data?: string    // YYYY-MM-DD
   slot_horario?: string // HH:MM
@@ -183,6 +183,7 @@ type AgenteConfig = {
   }>
   sequencia_delay_seg?: number
   sequencia_delay_inicial_seg?: number
+  condicoes_transferencia?: string[]
 }
 
 type AgenteDB = {
@@ -306,6 +307,12 @@ export async function responderAgenteParaLead(
       .eq('id', leadId)
   }
 
+  // Transferência persistente para humano (sem expiração — acionada por agendamento ou config)
+  // Diferente da pausa de 5 min (ultima_atividade_humana), esta só reverte quando o operador muda manualmente
+  if ((lead as Record<string, unknown>).etiqueta === 'humano_atendendo') {
+    return { ok: true, resposta: '' }
+  }
+
   // Filtra histórico por agente_id quando há agente configurado — contextos separados por agente
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let historicoQuery = (supabase as any)
@@ -370,7 +377,7 @@ export async function responderAgenteParaLead(
   // Sempre injeta o protocolo de agendamento ao final — garante regras críticas
   // mesmo quando o prompt customizado já tem instruções de agendamento.
   // Não duplica o bloco JSON: remove qualquer ---JSON--- existente do promptBase antes de injetar.
-  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline)
+  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, agenteDB?.config?.condicoes_transferencia)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
   const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
   const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}`
@@ -487,7 +494,9 @@ export async function responderAgenteParaLead(
           canalProvider: canal?.provider,
           canalInstanciaId: canal?.instanceId,
         })
-        // Agendamento gravado com sucesso — retorna resposta da IA (agendarParaLead já envia confirmação WhatsApp)
+        // Agendamento gravado com sucesso — transfere para humano e retorna
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('leads').update({ etiqueta: 'humano_atendendo' }).eq('id', leadId)
         return { ok: true, resposta: resposta || 'Agendamento confirmado!' }
       } catch (err) {
         console.error('[agente] Falha ao agendar:', err)
@@ -611,6 +620,12 @@ export async function responderAgenteParaLead(
         }
       }
     }
+  }
+
+  // ── Ação: transferir para atendimento humano ────────────────────────────────
+  if (dados.acao === 'transferir_para_humano') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('leads').update({ etiqueta: 'humano_atendendo' }).eq('id', leadId)
   }
 
   const respostaImediata = resposta

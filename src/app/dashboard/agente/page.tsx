@@ -59,6 +59,7 @@ type AgenteConfig = {
   escassez_max_slots?: number;
   sequencia_msgs?: SeqMsg[];
   sequencia_delay_seg?: number;
+  condicoes_transferencia?: string[];
 };
 
 type Agente = {
@@ -664,6 +665,54 @@ export default function AgentePage() {
                   <button className="ag-seq-add" onClick={addSeqMsg}>+ Adicionar mensagem</button>
                 </div>
 
+                {/* Transferência para humano */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Transferência para humano</div>
+                  <p className="ag-card-desc">
+                    Configure situações em que o agente deve parar de responder e transferir o atendimento para você.
+                    Quando acionado, o lead recebe a etiqueta <code>humano atendendo</code> e o agente silencia — até você reativar a IA no CRM.
+                  </p>
+                  <p className="ag-card-desc" style={{ marginTop: "-6px", color: "#c2904d", fontSize: "12px" }}>
+                    ✅ Após confirmar um agendamento, a transferência é automática — sem precisar configurar nada aqui.
+                  </p>
+
+                  <div className="ag-trans-list">
+                    {(selecionado.config?.condicoes_transferencia ?? []).map((cond, idx) => (
+                      <div key={idx} className="ag-trans-item">
+                        <input
+                          className="ag-trans-input"
+                          value={cond}
+                          onChange={e => {
+                            const arr = [...(selecionado.config?.condicoes_transferencia ?? [])];
+                            arr[idx] = e.target.value;
+                            updateConfig({ condicoes_transferencia: arr });
+                          }}
+                          placeholder={`Condição ${idx + 1}…`}
+                        />
+                        <button
+                          className="ag-audio-del"
+                          onClick={() => {
+                            const arr = (selecionado.config?.condicoes_transferencia ?? []).filter((_, i) => i !== idx);
+                            updateConfig({ condicoes_transferencia: arr });
+                          }}
+                          title="Remover"
+                        >✕</button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(selecionado.config?.condicoes_transferencia ?? []).length === 0 && (
+                    <p className="ag-audio-vazio" style={{ marginBottom: "12px" }}>Nenhuma condição configurada.</p>
+                  )}
+
+                  <button
+                    className="ag-seq-add"
+                    onClick={() => updateConfig({ condicoes_transferencia: [...(selecionado.config?.condicoes_transferencia ?? []), ""] })}
+                  >
+                    + Adicionar condição
+                  </button>
+                </div>
+
                 {/* Prompt */}
                 <div className="ag-card">
                   <div className="ag-prompt-header">
@@ -872,6 +921,13 @@ const css = `
   .ag-seq-caption{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:8px;padding:8px 12px;font-size:12px;color:#c8b99a;font-family:inherit;outline:none;margin-top:6px;}
   .ag-seq-caption:focus{border-color:rgba(194,144,77,.3);}
   .ag-seq-caption::placeholder{color:#4a3e30;}
+
+  /* Transferência para humano */
+  .ag-trans-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+  .ag-trans-item{display:flex;align-items:center;gap:8px;}
+  .ag-trans-input{flex:1;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;font-size:13px;color:#fff9e6;font-family:inherit;outline:none;transition:border-color .2s;}
+  .ag-trans-input:focus{border-color:rgba(194,144,77,.4);}
+  .ag-trans-input::placeholder{color:#4a3e30;}
 
   @media(max-width:768px){
     .ag-root{flex-direction:column;height:auto;min-height:calc(100vh - 60px);}
