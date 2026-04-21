@@ -108,6 +108,10 @@ export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNo
       : pessoaNome
     : 'o mentor'
 
+  const jaAgendado = (lead as Record<string, unknown>).pipeline_etapa === 'agendado'
+    || (lead as Record<string, unknown>).etiqueta === 'agendado'
+  const emailLead = (lead as Record<string, unknown>).email as string | undefined
+
   return `Você é um consultor de alta performance da equipe de Gustavo Munhoz (Gambit), responsável pelo Método Maestria Social.
 
 CONTEXTO DO CONTATO:
@@ -122,6 +126,17 @@ PERFIL DO LEAD:
 ${profissao ? `- Profissão: ${profissao}` : ''}
 ${renda ? `- Faixa de renda: ${renda}` : ''}
 ${instagram ? `- Instagram: ${instagram}` : ''}
+${emailLead ? `- E-mail registrado: ${emailLead} (já temos o e-mail — NÃO peça de novo)` : ''}
+- Etapa atual: ${(lead as Record<string, unknown>).pipeline_etapa || 'novo'}
+${jaAgendado ? `
+⚠️ SITUAÇÃO ESPECIAL — LEAD JÁ AGENDOU A CALL:
+Este lead já confirmou o agendamento da call. A conversa agora é de relacionamento e preparação.
+❌ NÃO fale de agendamento, não ofereça link, não peça e-mail, não pressione para marcar nada.
+❌ NÃO aja como se estivesse tentando convencer ou qualificar — essa fase já passou.
+✅ Converse naturalmente: tire dúvidas, gere antecipação para a call, mantenha o vínculo.
+✅ Se o lead fizer alguma pergunta sobre o método, responda com leveza e entusiasmo.
+✅ Se o lead mencionar que quer remarcar ou cancelar, aí sim aborde o agendamento.
+` : ''}
 
 OBJETIVO PRINCIPAL:
 Qualificar o lead em 3 a 4 trocas e conduzi-lo ao agendamento da call de descoberta com ${mentorNome}. Quando o lead demonstrar qualquer interesse em agendar, envie o link imediatamente — sem perguntas adicionais, sem enrolação.
@@ -237,7 +252,7 @@ Você pode combinar texto e múltiplos áudios na mesma resposta.`
  * (customizado ou gerado). Garante que o agente sempre saiba como agendar
  * independente do que estiver escrito no prompt do usuário.
  */
-export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[], condicoesTransferencia?: string[]): string {
+export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[], condicoesTransferencia?: string[], jaAgendado?: boolean): string {
   const mentorRef = pessoaNome
     ? pessoaRole ? `${pessoaNome}, ${pessoaRole}` : pessoaNome
     : 'o especialista'
@@ -257,7 +272,18 @@ ${condicoesTransferencia.map(c => `- ${c}`).join('\n')}
 `
     : ''
 
-  return `
+  const blocoAgendamento = jaAgendado
+    ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROTOCOLO PÓS-AGENDAMENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Este lead JÁ TEM uma call agendada. NÃO execute o fluxo de agendamento.
+✅ Converse naturalmente sobre o método, gere antecipação, tire dúvidas.
+✅ Se o lead pedir para REMARCAR → use "reagendar_agendamento"
+✅ Se o lead pedir para CANCELAR → use "cancelar_agendamento"
+❌ NÃO peça e-mail, NÃO ofereça horários, NÃO pressione para agendar.
+`
+    : `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PROTOCOLO DE AGENDAMENTO — PRIORIDADE MÁXIMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -289,7 +315,9 @@ REGRAS CRÍTICAS — NUNCA VIOLE
 ✅ O sistema cria o Google Meet e envia confirmação automática — você não precisa fazer mais nada
 
 FALLBACK (sem agenda configurada): ${linkAgendamento || '{{link_agendamento}}'}
-${blocoTransferencia}
+`
+
+  return `${blocoAgendamento}${blocoTransferencia}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT JSON — obrigatório ao final de cada resposta
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

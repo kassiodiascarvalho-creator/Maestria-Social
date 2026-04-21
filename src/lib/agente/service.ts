@@ -389,7 +389,9 @@ export async function responderAgenteParaLead(
   // Sempre injeta o protocolo de agendamento ao final — garante regras críticas
   // mesmo quando o prompt customizado já tem instruções de agendamento.
   // Não duplica o bloco JSON: remove qualquer ---JSON--- existente do promptBase antes de injetar.
-  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, agenteDB?.config?.condicoes_transferencia)
+  const jaAgendado = (lead as Record<string, unknown>).pipeline_etapa === 'agendado'
+    || (lead as Record<string, unknown>).etiqueta === 'agendado'
+  const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, agenteDB?.config?.condicoes_transferencia, jaAgendado)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
   const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
   const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}`
