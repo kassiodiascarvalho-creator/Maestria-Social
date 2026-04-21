@@ -470,8 +470,10 @@ export async function responderAgenteParaLead(
       const delaySeg = agenteDB?.config?.sequencia_delay_seg ?? 2
       const agora = Date.now()
 
-      // Dedup: evita race condition com dois webhooks simultâneos
-      const trintaSeg = new Date(agora - 30 * 1000).toISOString()
+      // Dedup: evita race condition e re-disparo da IA na mesma conversa.
+      // Usa agendado_para como proxy de quando a tarefa foi criada
+      // (agendado_para = now + poucos segundos → janela de 5 min é segura)
+      const cincoMin = new Date(agora - 5 * 60 * 1000).toISOString()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { count: jaDisparou } = await (supabase as any)
         .from('tarefas_agendadas')
@@ -479,7 +481,7 @@ export async function responderAgenteParaLead(
         .eq('lead_id', leadId)
         .eq('tipo', 'whatsapp_msg')
         .neq('status', 'cancelada')
-        .gte('criado_em', trintaSeg)
+        .gte('agendado_para', cincoMin)
 
       if (!jaDisparou) {
         // Canal: usa o da conversa atual; fallback para o primeiro canal configurado no agente
