@@ -377,6 +377,15 @@ export async function responderAgenteParaLead(
       .eq('agente_id', agenteDB.id)
     audiosAgente = (audiosDB ?? []) as AudioAgente[]
   }
+  // Verifica agendamento confirmado diretamente na tabela — independente do Kanban
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count: agendamentosConfirmados } = await (supabase as any)
+    .from('agenda_agendamentos')
+    .select('id', { count: 'exact', head: true })
+    .eq('lead_id', leadId)
+    .eq('status', 'confirmado')
+  const jaAgendado = (agendamentosConfirmados ?? 0) > 0
+
   const promptBase = promptRaw
     ? promptRaw
         .replace(/\{\{nome\}\}/g, lead.nome)
@@ -384,13 +393,11 @@ export async function responderAgenteParaLead(
         .replace(/\{\{link_agendamento\}\}/g, linkAgendamento)
         .replace(/\{\{pessoa_nome\}\}/g, pessoaNome ?? '')
         .replace(/\{\{pessoa_role\}\}/g, pessoaRole ?? '')
-    : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole, etapasPipeline)
+    : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, jaAgendado)
 
   // Sempre injeta o protocolo de agendamento ao final — garante regras críticas
   // mesmo quando o prompt customizado já tem instruções de agendamento.
   // Não duplica o bloco JSON: remove qualquer ---JSON--- existente do promptBase antes de injetar.
-  const jaAgendado = (lead as Record<string, unknown>).pipeline_etapa === 'agendado'
-    || (lead as Record<string, unknown>).etiqueta === 'agendado'
   const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, agenteDB?.config?.condicoes_transferencia, jaAgendado)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
   const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })

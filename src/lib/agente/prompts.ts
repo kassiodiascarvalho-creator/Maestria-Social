@@ -91,7 +91,7 @@ Foco: legado, posicionamento como referência, círculo de influência restrito.
 Tom: extremamente premium. Posicione como acesso a um círculo seleto.`,
 }
 
-export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[]): string {
+export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNome?: string, pessoaRole?: string, etapas?: EtapaPipeline[], jaAgendado?: boolean): string {
   const pilar = lead.pilar_fraco || 'Comunicação'
   const roteiro = ROTEIROS[pilar] || ROTEIROS['Comunicação']
   const renda = lead.renda_mensal || ''
@@ -108,8 +108,6 @@ export function buildSystemPrompt(lead: Lead, linkAgendamento?: string, pessoaNo
       : pessoaNome
     : 'o mentor'
 
-  const jaAgendado = (lead as Record<string, unknown>).pipeline_etapa === 'agendado'
-    || (lead as Record<string, unknown>).etiqueta === 'agendado'
   const emailLead = (lead as Record<string, unknown>).email as string | undefined
 
   return `Você é um consultor de alta performance da equipe de Gustavo Munhoz (Gambit), responsável pelo Método Maestria Social.
