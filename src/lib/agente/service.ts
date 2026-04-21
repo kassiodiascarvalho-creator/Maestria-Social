@@ -338,12 +338,12 @@ export async function responderAgenteParaLead(
         .replace(/\{\{pessoa_role\}\}/g, pessoaRole ?? '')
     : buildSystemPrompt(lead, linkAgendamento, pessoaNome, pessoaRole)
 
-  // Injeta instruções de agendamento/JSON no final de QUALQUER prompt.
-  // Garante que agentes com prompt customizado também saibam agendar corretamente.
+  // Sempre injeta o protocolo de agendamento ao final — garante regras críticas
+  // mesmo quando o prompt customizado já tem instruções de agendamento.
+  // Não duplica o bloco JSON: remove qualquer ---JSON--- existente do promptBase antes de injetar.
   const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole)
-  const systemPrompt = promptBase.includes('buscar_disponibilidade')
-    ? promptBase  // prompt já tem as instruções — não duplica
-    : `${promptBase}\n${agendamentoBlock}`
+  const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
+  const systemPrompt = `${promptSemJson}\n${agendamentoBlock}`
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },

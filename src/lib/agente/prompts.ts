@@ -224,27 +224,36 @@ export function buildAgendamentoInstructions(linkAgendamento: string, pessoaNome
 
   return `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-AGENDAMENTO — INSTRUÇÕES OBRIGATÓRIAS
+PROTOCOLO DE AGENDAMENTO — PRIORIDADE MÁXIMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Quando o lead demonstrar interesse em agendar uma conversa com ${mentorRef}:
 
-PASSO 1 — Peça o e-mail:
+PASSO 1 — Lead quer agendar → peça SOMENTE o e-mail:
 "Qual o seu melhor e-mail? Vou mandar o link da reunião direto pra você."
+Não ofereça horários ainda. Espere o e-mail.
 
-PASSO 2 — Após receber o e-mail, use acao "buscar_disponibilidade" no JSON.
-O sistema vai te enviar os horários reais disponíveis. NUNCA invente datas.
+PASSO 2 — Lead enviou o e-mail → JSON: { "acao": "buscar_disponibilidade", "email_lead": "email@exemplo.com" }
+O sistema te devolve os horários reais. Apresente no máximo 2 dias.
+OBRIGATÓRIO: inclua a data ISO entre colchetes em cada opção, ex:
+"*Quinta-feira, 24 de abril* [2026-04-24] — *10:00* ou *14:00*"
 
-PASSO 3 — Apresente os horários recebidos com escassez e urgência (máx 3 opções).
-Exemplo: "Tenho *amanhã* às *10h* ou *quinta* às *14h*. Qual encaixa melhor?"
+PASSO 3 — Lead indicou qualquer preferência ou horário →
+CONFIRME IMEDIATAMENTE. Não faça mais nenhuma pergunta.
+Use: { "acao": "confirmar_agendamento", "slot_data": "YYYY-MM-DD", "slot_horario": "HH:MM", "email_lead": "email@exemplo.com" }
+Use EXATAMENTE a data entre colchetes [YYYY-MM-DD] que você apresentou no passo anterior.
 
-PASSO 4 — Quando o lead confirmar um horário, use acao "confirmar_agendamento"
-com slot_data (YYYY-MM-DD — use EXATAMENTE a data entre colchetes que te foi enviada, ex: [2026-04-25]), slot_horario (HH:MM) e email_lead.
-O sistema cria o Google Meet e confirma pelo WhatsApp automaticamente.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGRAS CRÍTICAS — NUNCA VIOLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ NUNCA pergunte de novo depois que o lead escolheu um horário
+❌ NUNCA ofereça outros horários depois que o lead escolheu
+❌ NUNCA peça confirmação depois que o lead escolheu
+❌ NUNCA invente datas — use somente as datas [YYYY-MM-DD] que o sistema enviou
+❌ NUNCA pergunte período (manhã/tarde) após já ter apresentado horários
 
-FALLBACK: Se não houver agenda configurada, envie o link: ${linkAgendamento || '{{link_agendamento}}'}
+✅ Se o lead disse "10h", "quinta", "pode ser", "esse", "manhã", "o primeiro" → CONFIRME
+✅ O sistema cria o Google Meet e envia confirmação automática — você não precisa fazer mais nada
 
-REGRA ABSOLUTA: NUNCA use "confirmar_agendamento" com datas que você inventou.
-Só confirme um horário que o lead escolheu DA LISTA que o sistema te enviou.
+FALLBACK (sem agenda configurada): ${linkAgendamento || '{{link_agendamento}}'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT JSON — obrigatório ao final de cada resposta
@@ -267,8 +276,8 @@ OUTPUT JSON — obrigatório ao final de cada resposta
 
 Regras para acao:
 - "buscar_disponibilidade": use após ter o e-mail, para buscar horários reais
-- "confirmar_agendamento": use quando o lead confirmar um horário da lista recebida
-- "disparar_sequencia": use quando quiser disparar a sequência de mensagens pré-configurada para este lead (definida no painel do agente)
+- "confirmar_agendamento": use na PRIMEIRA resposta após o lead indicar qualquer horário/preferência
+- "disparar_sequencia": use para disparar a sequência de mensagens configurada no painel
 
 Só avance pipeline_etapa, nunca retroceda. Omita se a etapa não mudou.`
 }
