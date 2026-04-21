@@ -204,6 +204,25 @@ export default function CRMPage() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mensagens]);
 
+  // ── Polling de mensagens (fallback garantido para RLS do realtime) ────────
+  useEffect(() => {
+    if (!leadSelecionado) return;
+    const leadId = leadSelecionado.id;
+    const interval = setInterval(async () => {
+      const msgs = await fetch(`/api/admin/crm/conversas/${leadId}`).then(r => r.json()).catch(() => null);
+      if (!Array.isArray(msgs)) return;
+      setMensagens(prev => {
+        if (msgs.length <= prev.length) return prev;
+        // Só adiciona mensagens realmente novas (não presentes no estado atual)
+        const idsExistentes = new Set(prev.map((m: Mensagem) => m.id));
+        const novas = msgs.filter((m: Mensagem) => !idsExistentes.has(m.id));
+        if (novas.length === 0) return prev;
+        return [...prev, ...novas];
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [leadSelecionado?.id]);
+
   // ── seleciona lead ────────────────────────────────────────────────────────
   async function selecionarLead(lead: KanbanLead) {
     setLeadSelecionado(lead);
