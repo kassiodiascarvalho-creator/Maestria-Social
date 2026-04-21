@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { enviarMensagemWhatsApp } from '@/lib/meta'
-import { enviarViaBaileys } from '@/lib/baileys'
+import { enviarMensagemWhatsApp, enviarMidiaViaMeta } from '@/lib/meta'
+import { enviarViaBaileys, enviarMidiaViaBaileys } from '@/lib/baileys'
 import { enviarEmail } from '@/lib/email/enviar'
 import { getConfig } from '@/lib/config'
 import type { Lead } from '@/types/database'
@@ -122,12 +122,17 @@ async function executar(t: Tarefa): Promise<void> {
   if (!lead) throw new Error(`lead ${t.lead_id} não encontrado`)
 
   if (t.tipo === 'whatsapp_msg') {
-    const texto = String(t.payload.texto || '')
-    if (!texto) throw new Error('payload.texto ausente')
-    const textoResolvido = resolverVariaveis(texto, lead)
+    const tipoMidia = t.payload.tipo ? String(t.payload.tipo) : 'text'
+    const isMidia = tipoMidia !== 'text'
+    const conteudo = String(t.payload.conteudo || t.payload.texto || '')
+    if (!conteudo) throw new Error('payload.conteudo/texto ausente')
+    const caption = t.payload.caption ? String(t.payload.caption) : ''
+    const filename = t.payload.filename ? String(t.payload.filename) : ''
 
-    // Dedup: evita enviar a mesma mensagem duas vezes ao mesmo lead em menos de 10 min.
-    // Cobre o caso de tasks duplicadas inseridas por invocações simultâneas do webhook.
+    // Texto resolve variáveis; mídia mantém URL intacta
+    const textoResolvido = isMidia ? conteudo : resolverVariaveis(conteudo, lead)
+
+    // Dedup por texto/URL nos últimos 10 min
     const dezMin = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { count: jaEnviado } = await (supabase as any)
@@ -137,14 +142,44 @@ async function executar(t: Tarefa): Promise<void> {
       .eq('role', 'assistant')
       .eq('mensagem', textoResolvido)
       .gte('criado_em', dezMin)
-    if (jaEnviado) return // já enviado — marca como enviada no handler externo
+    if (jaEnviado) return
 
-    // Canal explícito (mensagens sequenciadas do agente)
     const canalProvider = t.payload.canal_provider ? String(t.payload.canal_provider) : null
     const canalInstanceId = t.payload.canal_instance_id ? String(t.payload.canal_instance_id) : undefined
 
     let enviado = false
 
+    // ── Envio de mídia (image/audio/video/document) ──────────────────────────
+    if (isMidia) {
+      const tipo = tipoMidia as 'image' | 'audio' | 'video' | 'document'
+      if (canalProvider === 'baileys' || !canalProvider) {
+        try {
+          if (tipo === 'audio') {
+            const { enviarAudioViaBaileys } = await import('@/lib/baileys')
+            await enviarAudioViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
+          } else {
+            await enviarMidiaViaBaileys(lead.whatsapp, tipo, textoResolvido, caption || undefined, filename || undefined, canalInstanceId)
+          }
+          enviado = true
+        } catch { /* fallback Meta */ }
+      }
+      if (!enviado) {
+        try {
+          await enviarMidiaViaMeta(lead.whatsapp, tipo, textoResolvido, caption || undefined, filename || undefined)
+          enviado = true
+        } catch { /* silencioso */ }
+      }
+      if (!enviado) throw new Error(`Falha ao enviar mídia ${tipo}`)
+      const agentId = t.payload.agente_id ? String(t.payload.agente_id) : null
+      await supabase.from('conversas').insert({
+        lead_id: lead.id, role: 'assistant',
+        mensagem: `[${tipo.toUpperCase()}] ${textoResolvido}`,
+        ...(agentId ? { agente_id: agentId } : {}),
+      })
+      return
+    }
+
+    // ── Envio de texto ───────────────────────────────────────────────────────
     if (canalProvider === 'baileys') {
       try {
         await enviarViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
@@ -167,20 +202,17 @@ async function executar(t: Tarefa): Promise<void> {
         await enviarViaBaileys(lead.whatsapp, textoResolvido)
         enviado = true
       } catch { /* fallback Meta abaixo */ }
-
       if (!enviado) {
         await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
         enviado = true
       }
     }
 
-    if (!enviado) throw new Error('Nenhum canal disponível para envio (Baileys e Meta falharam)')
+    if (!enviado) throw new Error('Nenhum canal disponível para envio')
 
     const agentId = t.payload.agente_id ? String(t.payload.agente_id) : null
     await supabase.from('conversas').insert({
-      lead_id: lead.id,
-      role: 'assistant',
-      mensagem: textoResolvido,
+      lead_id: lead.id, role: 'assistant', mensagem: textoResolvido,
       ...(agentId ? { agente_id: agentId } : {}),
     })
     return

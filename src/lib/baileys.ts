@@ -46,6 +46,21 @@ export async function enviarAudioViaBaileys(telefone: string, audioUrl: string, 
  * Envia arquivo de mídia via Baileys usando base64 (para formatos não suportados pela Meta API).
  * Útil para audio/webm gravado no navegador Chrome.
  */
+export async function enviarMidiaViaBaileys(
+  telefone: string,
+  tipo: 'image' | 'video' | 'document',
+  url: string,
+  caption?: string,
+  filename?: string,
+  instanceId?: string,
+): Promise<void> {
+  const phone = telefone.replace(/\D/g, '')
+  const payload: Record<string, unknown> = { type: tipo, content: url }
+  if (caption) payload.caption = caption
+  if (filename) payload.filename = filename
+  await baileysDisparar(phone, payload, instanceId)
+}
+
 export async function enviarMidiaBase64ViaBaileys(
   telefone: string,
   base64: string,

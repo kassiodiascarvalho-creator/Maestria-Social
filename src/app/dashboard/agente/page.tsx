@@ -38,7 +38,21 @@ AO FINAL DE CADA RESPOSTA, inclua um bloco JSON separado por "---JSON---":
 type Canal = { provider: "meta" | "baileys"; id: string };
 type CanalDisponivel = { provider: "meta" | "baileys"; id: string; label: string; phone?: string | null; conectado: boolean };
 
-type SeqMsg = { texto: string };
+type TipoSeq = "text" | "image" | "audio" | "video" | "document";
+type SeqMsg = {
+  tipo: TipoSeq;
+  conteudo: string;  // texto ou URL de mídia
+  caption?: string;
+  filename?: string;
+};
+
+const TIPOS_SEQ: { value: TipoSeq; label: string; icon: string; accept: string }[] = [
+  { value: "text",     label: "Texto",     icon: "✉",  accept: "" },
+  { value: "image",    label: "Foto",      icon: "🖼",  accept: "image/*" },
+  { value: "audio",    label: "Áudio",     icon: "🎵",  accept: "audio/*" },
+  { value: "video",    label: "Vídeo",     icon: "🎬",  accept: "video/*" },
+  { value: "document", label: "Documento", icon: "📄",  accept: ".pdf,.doc,.docx,.xls,.xlsx,.zip" },
+];
 
 type AgenteConfig = {
   escassez_max_dias?: number;
@@ -232,9 +246,11 @@ export default function AgentePage() {
     setSelecionado(prev => prev ? { ...prev, config: { ...(prev.config ?? {}), ...campo } } : prev);
   }
 
+  const [seqUploading, setSeqUploading] = useState<Record<number, boolean>>({});
+
   function addSeqMsg() {
     const msgs = selecionado?.config?.sequencia_msgs ?? [];
-    updateConfig({ sequencia_msgs: [...msgs, { texto: "" }] });
+    updateConfig({ sequencia_msgs: [...msgs, { tipo: "text", conteudo: "" }] });
   }
 
   function removeSeqMsg(idx: number) {
@@ -242,22 +258,35 @@ export default function AgentePage() {
     updateConfig({ sequencia_msgs: msgs.filter((_, i) => i !== idx) });
   }
 
-  function updateSeqMsg(idx: number, texto: string) {
+  function updateSeqMsg(idx: number, patch: Partial<SeqMsg>) {
     const msgs = selecionado?.config?.sequencia_msgs ?? [];
     const novo = [...msgs];
-    novo[idx] = { texto };
+    novo[idx] = { ...novo[idx], ...patch };
     updateConfig({ sequencia_msgs: novo });
   }
 
   function inserirVariavelSeq(variavel: string, idx: number) {
     const el = seqRefs.current[idx];
-    const texto = selecionado?.config?.sequencia_msgs?.[idx]?.texto ?? "";
-    if (!el) { updateSeqMsg(idx, texto + variavel); return; }
-    const start = el.selectionStart ?? texto.length;
-    const end = el.selectionEnd ?? texto.length;
-    const novo = texto.slice(0, start) + variavel + texto.slice(end);
-    updateSeqMsg(idx, novo);
+    const conteudo = selecionado?.config?.sequencia_msgs?.[idx]?.conteudo ?? "";
+    if (!el) { updateSeqMsg(idx, { conteudo: conteudo + variavel }); return; }
+    const start = el.selectionStart ?? conteudo.length;
+    const end = el.selectionEnd ?? conteudo.length;
+    const novo = conteudo.slice(0, start) + variavel + conteudo.slice(end);
+    updateSeqMsg(idx, { conteudo: novo });
     setTimeout(() => { el.selectionStart = el.selectionEnd = start + variavel.length; el.focus(); }, 0);
+  }
+
+  async function uploadSeqFile(idx: number, file: File) {
+    setSeqUploading(p => ({ ...p, [idx]: true }));
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/wpp/upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (data.url) updateSeqMsg(idx, { conteudo: data.url, filename: data.filename ?? file.name });
+    } finally {
+      setSeqUploading(p => ({ ...p, [idx]: false }));
+    }
   }
 
   function toggleCanal(canal: CanalDisponivel) {
@@ -566,20 +595,65 @@ export default function AgentePage() {
                         <div key={idx} className="ag-seq-item">
                           <div className="ag-seq-num">{idx + 1}</div>
                           <div className="ag-seq-body">
-                            {/* Chips de variáveis */}
-                            <div className="ag-seq-chips">
-                              {["{nome}", "{pilar_fraco}", "{nivel_qs}", "{qs_percentual}", "{qs_total}"].map(v => (
-                                <button key={v} className="ag-seq-chip" onClick={() => inserirVariavelSeq(v, idx)}>{v}</button>
+                            {/* Seletor de tipo */}
+                            <div className="ag-seq-tipo-row">
+                              {TIPOS_SEQ.map(t => (
+                                <button
+                                  key={t.value}
+                                  className={`ag-seq-tipo-btn${(msg.tipo ?? "text") === t.value ? " ag-seq-tipo-ativo" : ""}`}
+                                  onClick={() => updateSeqMsg(idx, { tipo: t.value, conteudo: "", caption: "", filename: "" })}
+                                  title={t.label}
+                                >
+                                  <span>{t.icon}</span> {t.label}
+                                </button>
                               ))}
                             </div>
-                            <textarea
-                              ref={el => { seqRefs.current[idx] = el; }}
-                              className="ag-seq-textarea"
-                              value={msg.texto}
-                              onChange={e => updateSeqMsg(idx, e.target.value)}
-                              rows={3}
-                              placeholder={`Mensagem ${idx + 1}…`}
-                            />
+
+                            {/* Texto */}
+                            {(msg.tipo ?? "text") === "text" && (<>
+                              <div className="ag-seq-chips">
+                                {["{nome}", "{pilar_fraco}", "{nivel_qs}", "{qs_percentual}", "{qs_total}"].map(v => (
+                                  <button key={v} className="ag-seq-chip" onClick={() => inserirVariavelSeq(v, idx)}>{v}</button>
+                                ))}
+                              </div>
+                              <textarea
+                                ref={el => { seqRefs.current[idx] = el; }}
+                                className="ag-seq-textarea"
+                                value={msg.conteudo}
+                                onChange={e => updateSeqMsg(idx, { conteudo: e.target.value })}
+                                rows={3}
+                                placeholder={`Mensagem ${idx + 1}…`}
+                              />
+                            </>)}
+
+                            {/* Mídia */}
+                            {(msg.tipo ?? "text") !== "text" && (<>
+                              {msg.conteudo ? (
+                                <div className="ag-seq-midia-preview">
+                                  <span className="ag-seq-midia-nome">{msg.filename || msg.conteudo.split("/").pop()}</span>
+                                  <button className="ag-seq-midia-rm" onClick={() => updateSeqMsg(idx, { conteudo: "", filename: "" })}>✕ Remover</button>
+                                </div>
+                              ) : (
+                                <label className={`ag-seq-upload${seqUploading[idx] ? " ag-seq-upload-loading" : ""}`}>
+                                  {seqUploading[idx] ? "Enviando…" : `+ Selecionar ${TIPOS_SEQ.find(t => t.value === msg.tipo)?.label}`}
+                                  <input
+                                    type="file"
+                                    style={{ display: "none" }}
+                                    accept={TIPOS_SEQ.find(t => t.value === msg.tipo)?.accept}
+                                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadSeqFile(idx, f); e.target.value = ""; }}
+                                  />
+                                </label>
+                              )}
+                              {/* Caption para foto e vídeo */}
+                              {(msg.tipo === "image" || msg.tipo === "video") && (
+                                <input
+                                  className="ag-seq-caption"
+                                  value={msg.caption ?? ""}
+                                  onChange={e => updateSeqMsg(idx, { caption: e.target.value })}
+                                  placeholder="Legenda (opcional)…"
+                                />
+                              )}
+                            </>)}
                           </div>
                           <button className="ag-audio-del" onClick={() => removeSeqMsg(idx)} title="Remover">✕</button>
                         </div>
@@ -784,6 +858,20 @@ const css = `
   .ag-seq-textarea::placeholder{color:#4a3e30;}
   .ag-seq-add{background:rgba(194,144,77,.08);border:1px dashed rgba(194,144,77,.3);border-radius:10px;padding:10px 18px;color:#c2904d;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;width:100%;}
   .ag-seq-add:hover{background:rgba(194,144,77,.15);}
+  .ag-seq-tipo-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;}
+  .ag-seq-tipo-btn{background:rgba(255,255,255,.03);border:1px solid #2a1f18;border-radius:7px;padding:4px 10px;font-size:12px;color:#7a6e5e;cursor:pointer;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:5px;}
+  .ag-seq-tipo-btn:hover{background:rgba(255,255,255,.06);color:#c8b99a;}
+  .ag-seq-tipo-ativo{background:rgba(194,144,77,.12)!important;border-color:rgba(194,144,77,.35)!important;color:#c2904d!important;}
+  .ag-seq-upload{display:flex;align-items:center;justify-content:center;background:#111009;border:1px dashed #2a1f18;border-radius:10px;padding:14px;font-size:13px;color:#7a6e5e;cursor:pointer;transition:all .15s;text-align:center;}
+  .ag-seq-upload:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
+  .ag-seq-upload-loading{opacity:.6;cursor:default;pointer-events:none;}
+  .ag-seq-midia-preview{display:flex;align-items:center;gap:10px;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;}
+  .ag-seq-midia-nome{flex:1;font-size:12px;color:#c8b99a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ag-seq-midia-rm{background:none;border:none;color:#4a3e30;font-size:12px;cursor:pointer;white-space:nowrap;}
+  .ag-seq-midia-rm:hover{color:#ef4444;}
+  .ag-seq-caption{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:8px;padding:8px 12px;font-size:12px;color:#c8b99a;font-family:inherit;outline:none;margin-top:6px;}
+  .ag-seq-caption:focus{border-color:rgba(194,144,77,.3);}
+  .ag-seq-caption::placeholder{color:#4a3e30;}
 
   @media(max-width:768px){
     .ag-root{flex-direction:column;height:auto;min-height:calc(100vh - 60px);}

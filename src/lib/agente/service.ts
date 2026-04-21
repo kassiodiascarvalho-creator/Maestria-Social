@@ -167,7 +167,12 @@ type CanalAgente = { provider: 'meta' | 'baileys'; instanceId?: string }
 type AgenteConfig = {
   escassez_max_dias?: number
   escassez_max_slots?: number
-  sequencia_msgs?: Array<{ texto: string }>
+  sequencia_msgs?: Array<{
+    tipo?: 'text' | 'image' | 'audio' | 'video' | 'document'
+    conteudo: string  // texto ou URL da mídia
+    caption?: string
+    filename?: string
+  }>
   sequencia_delay_seg?: number
 }
 
@@ -578,7 +583,10 @@ export async function responderAgenteParaLead(
             lead_id: leadId,
             tipo: 'whatsapp_msg',
             payload: {
-              texto: msgs[i].texto,
+              tipo: msgs[i].tipo ?? 'text',
+              conteudo: msgs[i].conteudo,
+              ...(msgs[i].caption ? { caption: msgs[i].caption } : {}),
+              ...(msgs[i].filename ? { filename: msgs[i].filename } : {}),
               agente_id: agenteDB?.id ?? null,
               canal_provider: seqProvider,
               canal_instance_id: seqInstanceId,

@@ -167,6 +167,39 @@ export async function marcarMensagemComoLida(
 }
 
 /**
+ * Envia mídia (image/video/document) via Meta WhatsApp API (URL pública).
+ */
+export async function enviarMidiaViaMeta(
+  para: string,
+  tipo: 'image' | 'video' | 'document' | 'audio',
+  url: string,
+  caption?: string,
+  filename?: string,
+): Promise<void> {
+  const to = normalizarTelefone(para)
+  const mode = await getWhatsAppMode()
+
+  const mediaObj: Record<string, unknown> = { link: url }
+  if (caption) mediaObj.caption = caption
+  if (filename) mediaObj.filename = filename
+
+  const msgPayload = { to, type: tipo, [tipo]: mediaObj }
+
+  if (mode === 'coexistencia') {
+    await enviarViaCoexistencia(msgPayload)
+    return
+  }
+
+  try {
+    await postMeta({ messaging_product: 'whatsapp', ...msgPayload })
+  } catch (err) {
+    const coexistenciaUrl = await getCoexistenciaUrl()
+    if (!coexistenciaUrl) throw err
+    await enviarViaCoexistencia(msgPayload)
+  }
+}
+
+/**
  * Envia áudio via Meta WhatsApp API (URL pública).
  */
 export async function enviarAudioViaMeta(para: string, audioUrl: string): Promise<void> {
