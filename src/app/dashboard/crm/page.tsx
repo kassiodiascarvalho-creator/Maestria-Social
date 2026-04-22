@@ -357,7 +357,12 @@ export default function CRMPage() {
       mediaRecorderRef.current = recorder;
       setGravando(true);
       gravTimerRef.current = setInterval(() => setTempoGrav(t => t + 1), 1000);
-    } catch { alert("Não foi possível acessar o microfone."); }
+    } catch (err) {
+      const msg = err instanceof DOMException && err.name === "NotAllowedError"
+        ? "Permissão de microfone negada. Clique no ícone de cadeado na barra de endereço e permita o microfone."
+        : "Não foi possível acessar o microfone. Verifique se o dispositivo tem microfone e se o navegador tem permissão.";
+      alert(msg);
+    }
   }
   function pararGravacao() { mediaRecorderRef.current?.stop(); }
   function cancelarGravacao() {

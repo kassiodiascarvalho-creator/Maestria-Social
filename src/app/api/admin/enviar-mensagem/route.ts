@@ -31,9 +31,18 @@ async function uploadParaStorage(supabase: any, file: File): Promise<string> {
   const ext = file.name.split('.').pop() || 'bin'
   const storagePath = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
 
-  const { error } = await supabase.storage
+  let { error } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath, file, { contentType: file.type, upsert: false })
+
+  // Cria o bucket automaticamente se não existir
+  if (error?.message?.includes('Bucket not found') || error?.message?.includes('not found')) {
+    await supabase.storage.createBucket(BUCKET, { public: true })
+    const retry = await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, file, { contentType: file.type, upsert: false })
+    error = retry.error
+  }
 
   if (error) throw new Error(`Upload Storage falhou: ${error.message}`)
 
