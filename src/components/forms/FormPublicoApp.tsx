@@ -227,7 +227,7 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       font-family: ${fonte}, Inter, sans-serif;
-      position: relative; overflow: hidden;
+      position: relative;
     }
     .form-bg {
       position: fixed; inset: 0; z-index: 0;
