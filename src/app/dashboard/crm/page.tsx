@@ -274,6 +274,15 @@ export default function CRMPage() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mensagens]);
 
+  // ── Monitor permissão microfone ───────────────────────────────────────────
+  useEffect(() => {
+    if (!navigator.permissions) return;
+    navigator.permissions.query({ name: "microphone" as PermissionName }).then(perm => {
+      setMicBloqueado(perm.state === "denied");
+      perm.onchange = () => setMicBloqueado(perm.state === "denied");
+    }).catch(() => {});
+  }, []);
+
   // ── Polling de mensagens (fallback garantido para RLS do realtime) ────────
   useEffect(() => {
     if (!leadSelecionado) return;
@@ -338,23 +347,26 @@ export default function CRMPage() {
   // ── gravação de áudio ─────────────────────────────────────────────────────
   async function iniciarGravacao() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Seu navegador não suporta gravação de áudio. Use Chrome ou Edge.");
+      alert("Seu navegador não suporta gravação. Use Chrome, Edge ou Firefox.");
       return;
     }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      setMicBloqueado(false);
+      setMicBloqueado(false); // permissão concedida — remove banner
     } catch (err) {
-      setMicBloqueado(true);
+      // Só mostra "bloqueado" se for rejeição de permissão
+      const isDenied = err instanceof DOMException &&
+        (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
+      if (isDenied) setMicBloqueado(true);
+      else alert("Erro ao acessar microfone: " + (err instanceof Error ? err.message : String(err)));
       return;
     }
-    // Escolhe o melhor formato suportado
+    // Melhor formato suportado pelo browser
     const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
       .find(m => MediaRecorder.isTypeSupported(m)) ?? "";
-    const recOpts = mimeType ? { mimeType } : {};
-    const recorder = new MediaRecorder(stream, recOpts);
-    const usedMime = recorder.mimeType || "audio/webm";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    const usedMime = recorder.mimeType || mimeType || "audio/webm";
     audioChunksRef.current = [];
     recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
     recorder.onstop = () => {
@@ -815,8 +827,8 @@ export default function CRMPage() {
                   {erroEnvio && <div className="crm-envio-erro">{erroEnvio}</div>}
                   {micBloqueado && (
                     <div className="crm-mic-aviso">
-                      🎤 Microfone bloqueado. Clique no <strong>🔒 cadeado</strong> na barra de endereço do navegador → <strong>Microfone</strong> → <strong>Permitir</strong> → recarregue a página.
-                      <button className="crm-mic-aviso-ok" onClick={() => { setMicBloqueado(false); window.location.reload(); }}>Recarregar</button>
+                      🎤 Microfone bloqueado. Clique no <strong>🔒 cadeado</strong> na barra de endereço → <strong>Microfone</strong> → <strong>Permitir sempre</strong>. Depois clique em:
+                      <button className="crm-mic-aviso-ok" onClick={() => { setMicBloqueado(false); iniciarGravacao(); }}>Tentar novamente</button>
                     </div>
                   )}
 
