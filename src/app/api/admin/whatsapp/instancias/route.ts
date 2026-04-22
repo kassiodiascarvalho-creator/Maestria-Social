@@ -34,7 +34,7 @@ export async function GET() {
       label: 'Meta API (configuração principal)',
       phone: process.env.META_WHATSAPP_NUMBER ?? null,
       meta_phone_number_id: envMetaId,
-      meta_access_token: process.env.META_ACCESS_TOKEN ?? null,
+      meta_access_token: process.env.META_ACCESS_TOKEN ? `${process.env.META_ACCESS_TOKEN.slice(0, 12)}••••` : null,
       meta_waba_id: process.env.META_WABA_ID ?? null,
       meta_template_name: process.env.META_TEMPLATE_NAME ?? null,
       meta_template_language: process.env.META_TEMPLATE_LANGUAGE ?? 'pt_BR',

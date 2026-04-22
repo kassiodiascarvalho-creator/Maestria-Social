@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConfig, setConfig } from '@/lib/config'
 
-const TOKEN = 'fix-maestria-2024'
+const TOKEN = process.env.FIX_ADMIN_TOKEN ?? 'fix-maestria-2024'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)

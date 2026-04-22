@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { responderAgenteParaLead } from '@/lib/agente/service'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const TOKEN = 'fix-maestria-2024'
+const TOKEN = process.env.FIX_ADMIN_TOKEN ?? 'fix-maestria-2024'
 
 // Simula uma mensagem chegando de um lead pelo whatsapp
 export async function GET(req: NextRequest) {

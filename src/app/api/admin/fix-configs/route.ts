@@ -3,7 +3,7 @@ import { setConfig } from '@/lib/config'
 
 // Endpoint de uso único para corrigir configurações inválidas no banco.
 // Protegido por token fixo — remova após usar.
-const FIX_TOKEN = 'fix-maestria-2024'
+const FIX_TOKEN = process.env.FIX_ADMIN_TOKEN ?? 'fix-maestria-2024'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConfig } from '@/lib/config'
 
-const TOKEN = 'fix-maestria-2024'
+const TOKEN = process.env.FIX_ADMIN_TOKEN ?? 'fix-maestria-2024'
 const WABA_ID = '1560648865246207'
 
 export async function GET(req: NextRequest) {
