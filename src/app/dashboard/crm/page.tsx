@@ -97,6 +97,7 @@ export default function CRMPage() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroEtiqueta, setFiltroEtiqueta] = useState("");
+  const [filtroOrigem, setFiltroOrigem] = useState("");
 
   // ── kanban ────────────────────────────────────────────────────────────────
   const [dragLeadId, setDragLeadId] = useState<string | null>(null);
@@ -376,12 +377,17 @@ export default function CRMPage() {
     urgentes: leads.filter(urgente).length,
   };
 
+  const origensUnicas = [...new Set(leads.map(l => l.origem).filter(Boolean) as string[])].sort();
+
+  const aplicarFiltros = (l: KanbanLead) => {
+    if (filtroEtiqueta && l.etiqueta !== filtroEtiqueta) return false;
+    if (filtroOrigem && l.origem !== filtroOrigem) return false;
+    if (busca) { const b = busca.toLowerCase(); return l.nome.toLowerCase().includes(b) || l.whatsapp.includes(b); }
+    return true;
+  };
+
   const leadsChat = leads
-    .filter(l => {
-      if (filtroEtiqueta && l.etiqueta !== filtroEtiqueta) return false;
-      if (busca) { const b = busca.toLowerCase(); return l.nome.toLowerCase().includes(b) || l.whatsapp.includes(b); }
-      return true;
-    })
+    .filter(aplicarFiltros)
     .sort((a, b) => (b.ultima_atividade || b.criado_em).localeCompare(a.ultima_atividade || a.criado_em));
 
   // ─── render ────────────────────────────────────────────────────────────────
@@ -402,7 +408,22 @@ export default function CRMPage() {
             </button>
           </div>
         </div>
-        <input className="crm-topbar-search" placeholder="Buscar lead…" value={busca} onChange={e => setBusca(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {origensUnicas.length > 0 && (
+            <select
+              value={filtroOrigem}
+              onChange={e => setFiltroOrigem(e.target.value)}
+              style={{
+                background: "#1a170f", border: "1px solid #2a1f18", color: filtroOrigem ? "#c2904d" : "#7a6e5e",
+                borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+              }}
+            >
+              <option value="">Todas as origens</option>
+              {origensUnicas.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          )}
+          <input className="crm-topbar-search" placeholder="Buscar lead…" value={busca} onChange={e => setBusca(e.target.value)} />
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -453,8 +474,7 @@ export default function CRMPage() {
               const cards = leads
                 .filter(l => {
                   if (l.pipeline_etapa !== etapa.slug) return false;
-                  if (busca) { const b = busca.toLowerCase(); return l.nome.toLowerCase().includes(b) || l.whatsapp.includes(b); }
-                  return true;
+                  return aplicarFiltros(l);
                 })
                 .sort((a, b) => (b.ultima_atividade || b.criado_em).localeCompare(a.ultima_atividade || a.criado_em));
 
@@ -557,17 +577,34 @@ export default function CRMPage() {
           <aside className="crm-sidebar">
             <div className="crm-sidebar-header">
               <button className="crm-back-btn" onClick={() => setView("kanban")}>← Pipeline</button>
-              <div className="crm-filtros">
-                {[
-                  { valor: "", label: "Todos" },
-                  { valor: "ia_atendendo", label: "IA" },
-                  { valor: "humano_atendendo", label: "Humano" },
-                  { valor: "agendado", label: "Agendado" },
-                ].map(f => (
-                  <button key={f.valor} className={`crm-filtro-btn ${filtroEtiqueta === f.valor ? "crm-filtro-ativo" : ""}`} onClick={() => setFiltroEtiqueta(f.valor)}>
-                    {f.label}
-                  </button>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="crm-filtros">
+                  {[
+                    { valor: "", label: "Todos" },
+                    { valor: "ia_atendendo", label: "IA" },
+                    { valor: "humano_atendendo", label: "Humano" },
+                    { valor: "agendado", label: "Agendado" },
+                  ].map(f => (
+                    <button key={f.valor} className={`crm-filtro-btn ${filtroEtiqueta === f.valor ? "crm-filtro-ativo" : ""}`} onClick={() => setFiltroEtiqueta(f.valor)}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                {origensUnicas.length > 0 && (
+                  <select
+                    value={filtroOrigem}
+                    onChange={e => setFiltroOrigem(e.target.value)}
+                    style={{
+                      background: "#1a170f", border: "1px solid #2a1f18",
+                      color: filtroOrigem ? "#c2904d" : "#7a6e5e",
+                      borderRadius: 6, padding: "4px 8px", fontSize: 11,
+                      fontFamily: "inherit", cursor: "pointer", width: "100%",
+                    }}
+                  >
+                    <option value="">Todas as origens</option>
+                    {origensUnicas.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                )}
               </div>
             </div>
 
