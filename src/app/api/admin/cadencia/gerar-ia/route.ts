@@ -1,114 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
+import { openai } from '@ai-sdk/openai'
+import { streamText } from 'ai'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
-const SYSTEM = `Você é um especialista em marketing digital e automação de WhatsApp.
-Gere um fluxo de cadência em JSON com base na descrição do usuário.
+const SYSTEM = `Você é um especialista sênior em marketing digital, lançamentos e automação de WhatsApp no mercado brasileiro.
+Crie fluxos de cadência profissionais, persuasivos e com alta conversão.
 
-REGRAS:
-- Retorne APENAS JSON válido, sem markdown, sem texto extra
-- nodes: array de nós do fluxo
-- edges: array de conexões entre nós
-- IDs de nós devem ser strings únicas como "n1", "n2", etc.
-- Posições (pos_x, pos_y) devem criar um layout vertical organizado, espaço de 160px entre nós no eixo Y
-- Primeiro nó sempre tipo "inicio", último sempre tipo "fim"
-- Tipos válidos: inicio, mensagem, aguardar, condicao, tag, agente_ia, fim
+RETORNE APENAS JSON VÁLIDO — sem markdown, sem texto extra, sem comentários.
+Estrutura obrigatória: { "nodes": [...], "edges": [...] }
 
-ESTRUTURA DE UM NÓ:
-{
-  "id": "n1",
-  "type": "inicio",
-  "position": { "x": 300, "y": 50 },
-  "data": {
-    "label": "Início",
-    "trigger_tipo": "form_submit",
-    "trigger_config": {}
-  }
-}
+════════ TIPOS DE NÓS DISPONÍVEIS ════════
 
-ESTRUTURA MENSAGEM:
-{
-  "id": "n2",
-  "type": "mensagem",
-  "position": { "x": 300, "y": 210 },
-  "data": {
-    "label": "Boas-vindas",
-    "texto": "Olá {nome}! 👋 Seja bem-vindo(a)...",
-    "tipo": "texto"
-  }
-}
+1. INÍCIO (tipo: "inicio") — sempre o primeiro nó
+{"id":"n1","type":"inicio","position":{"x":340,"y":40},"data":{"label":"Início","trigger_tipo":"form_submit","trigger_config":{}}}
+trigger_tipo: "form_submit" | "manual" | "tag_add" | "lead_criado" | "sdr" | "import"
 
-ESTRUTURA AGUARDAR:
-{
-  "id": "n3",
-  "type": "aguardar",
-  "position": { "x": 300, "y": 370 },
-  "data": { "label": "Aguardar 1 dia", "quantidade": 1, "unidade": "dias" }
-}
+2. MENSAGEM (tipo: "mensagem")
+{"id":"n2","type":"mensagem","position":{"x":340,"y":200},"data":{"label":"Boas-vindas","tipo":"texto","texto":"Olá {nome}! 👋 Mensagem aqui.\\n\\nSegundo parágrafo 🚀"}}
+tipo: "texto" | "imagem" | "audio" | "video" | "documento"
+Se tipo != "texto": adicione "url_midia": "https://..." e "legenda": "..."
 
-ESTRUTURA CONDIÇÃO:
-{
-  "id": "n4",
-  "type": "condicao",
-  "position": { "x": 300, "y": 530 },
-  "data": { "label": "Tem WhatsApp?", "campo": "whatsapp", "operador": "existe", "valor": "" }
-}
+3. AGUARDAR (tipo: "aguardar")
+{"id":"n3","type":"aguardar","position":{"x":340,"y":360},"data":{"label":"Aguardar 1 dia","quantidade":1,"unidade":"dias"}}
+unidade: "minutos" | "horas" | "dias"
 
-ESTRUTURA TAG:
-{
-  "id": "n5",
-  "type": "tag",
-  "position": { "x": 300, "y": 690 },
-  "data": { "label": "Tag: interessado", "tag": "interessado" }
-}
+4. CONDIÇÃO (tipo: "condicao")
+{"id":"n4","type":"condicao","position":{"x":340,"y":520},"data":{"label":"Tem WhatsApp?","campo":"whatsapp","operador":"existe","valor":""}}
+campo: "nome" | "email" | "whatsapp" | "origem" | "utm_source" | "tags"
+operador: "existe" | "nao_existe" | "igual" | "contem" | "nao_contem"
 
-ESTRUTURA AGENTE IA:
-{
-  "id": "n6",
-  "type": "agente_ia",
-  "position": { "x": 300, "y": 850 },
-  "data": { "label": "Agente SDR", "instrucoes": "Qualifique o lead e agende uma demonstração" }
-}
+5. TAG (tipo: "tag")
+{"id":"n5","type":"tag","position":{"x":340,"y":680},"data":{"label":"Tag: lead-quente","tag":"lead-quente"}}
 
-ESTRUTURA EDGE (conexão simples):
-{ "id": "e1-2", "source": "n1", "target": "n2" }
+6. AGENTE IA (tipo: "agente_ia")
+{"id":"n6","type":"agente_ia","position":{"x":340,"y":840},"data":{"label":"SDR — Qualificação","instrucoes":"Qualifique o lead e ofereça sessão gratuita."}}
 
-EDGE DE CONDIÇÃO (use sourceHandle "sim" ou "nao"):
-{ "id": "e4-5", "source": "n4", "target": "n5", "sourceHandle": "sim" }
-{ "id": "e4-6", "source": "n4", "target": "n6", "sourceHandle": "nao" }
+7. WEBHOOK (tipo: "webhook")
+{"id":"n7","type":"webhook","position":{"x":340,"y":1000},"data":{"label":"Notificar CRM","url":"https://webhook.site/...","metodo":"POST","descricao":"Envia dados do lead"}}
 
-Use variáveis dinâmicas nos textos: {nome}, {email}, {whatsapp}, {origem}
-Escreva mensagens em português brasileiro, profissionais e persuasivas.
-Inclua emojis nas mensagens para humanizar.`
+8. FIM (tipo: "fim") — último nó de cada caminho
+{"id":"n8","type":"fim","position":{"x":340,"y":1160},"data":{"label":"Fim do fluxo"}}
+
+════════ EDGES ════════
+Conexão simples: {"id":"e1-2","source":"n1","target":"n2"}
+Condição SIM/NÃO: {"id":"e4-5","source":"n4","target":"n5","sourceHandle":"sim"} e {"id":"e4-6","source":"n4","target":"n6","sourceHandle":"nao"}
+
+════════ REGRAS ════════
+- Gere 8 a 10 nós (fluxo rico mas conciso)
+- Mensagens com emojis, {nome}, gatilhos mentais, máx 600 chars cada
+- Sempre 1 condição para bifurcar leads engajados
+- y cresce 160px por nó. Ramos paralelos: x diferente (+300 ou -300)
+- Termine todo caminho com nó "fim"
+- Use \\n para quebras de linha no JSON`
 
 export async function POST(req: NextRequest) {
-  const { descricao, trigger_tipo } = await req.json()
-  if (!descricao) return NextResponse.json({ error: 'descricao required' }, { status: 400 })
+  const body = await req.json().catch(() => ({}))
+  const { descricao, trigger_tipo } = body as { descricao?: string; trigger_tipo?: string }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    temperature: 0.7,
-    messages: [
-      { role: 'system', content: SYSTEM },
-      {
-        role: 'user',
-        content: `Crie um fluxo de cadência para: "${descricao}"
-Gatilho: ${trigger_tipo || 'manual'}
-Gere entre 5 e 12 nós. Inclua mensagens de aquecimento, conteúdo de valor e CTA.
-Retorne APENAS o JSON: { "nodes": [...], "edges": [...] }`,
-      },
-    ],
-  })
+  if (!descricao?.trim()) {
+    return NextResponse.json({ error: 'descricao required' }, { status: 400 })
+  }
 
-  const raw = completion.choices[0].message.content ?? '{}'
   try {
-    // Strip potential markdown code blocks
-    const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    const data = JSON.parse(clean)
-    return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({ error: 'IA retornou JSON inválido', raw }, { status: 422 })
+    const result = streamText({
+      model: openai('gpt-4o-mini'),
+      temperature: 0.6,
+      maxOutputTokens: 3500,
+      system: SYSTEM,
+      prompt: `Crie um fluxo de cadência (8-10 nós) para:\n"${descricao}"\nGatilho: ${trigger_tipo || 'form_submit'}\nRetorne APENAS JSON: { "nodes": [...], "edges": [...] }`,
+    })
+
+    return result.toTextStreamResponse()
+  } catch (err) {
+    console.error('[gerar-ia] erro:', err)
+    return NextResponse.json({ error: 'Falha ao gerar fluxo' }, { status: 500 })
   }
 }

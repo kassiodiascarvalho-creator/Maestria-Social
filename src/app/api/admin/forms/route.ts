@@ -14,12 +14,28 @@ function gerarSlug(titulo: string): string {
 
 export async function GET() {
   const db = createAdminClient() as any
-  const { data, error } = await db
+  const { data: forms, error } = await db
     .from('forms')
-    .select('id, slug, titulo, descricao, status, modo_exibicao, total_respostas, criado_em, atualizado_em')
+    .select('id, slug, titulo, descricao, status, modo_exibicao, criado_em, atualizado_em')
     .order('criado_em', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+  if (!forms?.length) return NextResponse.json([])
+
+  // Conta respostas concluídas reais por form
+  const { data: respostas } = await db
+    .from('form_responses')
+    .select('form_id')
+    .eq('concluido', true)
+
+  const contagem: Record<string, number> = {}
+  for (const r of respostas ?? []) {
+    contagem[r.form_id] = (contagem[r.form_id] ?? 0) + 1
+  }
+
+  return NextResponse.json(forms.map((f: Record<string, unknown>) => ({
+    ...f,
+    total_respostas: contagem[f.id as string] ?? 0,
+  })))
 }
 
 export async function POST(req: NextRequest) {

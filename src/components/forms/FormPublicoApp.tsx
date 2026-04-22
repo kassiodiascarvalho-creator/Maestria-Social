@@ -127,9 +127,33 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
   const valorAtual = pergunta ? (valores[pergunta.id] ?? "") : "";
   const podeAvancar = pergunta ? (!pergunta.obrigatorio || valorAtual.trim() !== "") : true;
 
+  // Debounce ref para autosave
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const setValor = useCallback((id: string, val: string) => {
-    setValores(prev => ({ ...prev, [id]: val }));
-  }, []);
+    setValores(prev => {
+      const next = { ...prev, [id]: val };
+
+      // Autosave com debounce de 1.5s — salva respostas parciais no abandono
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = setTimeout(() => {
+        const rid = sessionStorage.getItem(`form_session_${slug}`);
+        if (!rid || !perguntas.length) return;
+        const respostas = perguntas
+          .filter(p => next[p.id]?.trim())
+          .map(p => ({ question_id: p.id, valor: next[p.id] }));
+        if (respostas.length === 0) return;
+        fetch(`/api/forms/${slug}/autosave`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ response_id: rid, respostas }),
+        }).catch(() => undefined);
+      }, 1500);
+
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, perguntas]);
 
   const avancar = useCallback(() => {
     if (idx < perguntas.length - 1) {
@@ -225,9 +249,10 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
       background: ${corFundo};
       color: ${corTexto};
       display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
+      align-items: center; justify-content: flex-start;
       font-family: ${fonte}, Inter, sans-serif;
       position: relative;
+      padding: clamp(40px, 8vh, 80px) 0 60px;
     }
     .form-bg {
       position: fixed; inset: 0; z-index: 0;
@@ -242,7 +267,7 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
     .form-content {
       position: relative; z-index: 2;
       width: 100%; max-width: 640px;
-      padding: 40px 24px 80px;
+      padding: 0 24px;
       display: flex; flex-direction: column; align-items: center;
     }
     .form-logo { width: 56px; height: 56px; object-fit: contain; margin-bottom: 28px; border-radius: 10px; }

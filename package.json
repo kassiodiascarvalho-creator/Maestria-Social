@@ -9,9 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.53",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "@xyflow/react": "^12.10.2",
+    "ai": "^6.0.168",
     "googleapis": "^171.4.0",
     "html2canvas": "^1.4.1",
     "imask": "^7.6.1",

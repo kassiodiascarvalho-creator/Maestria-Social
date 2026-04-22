@@ -533,9 +533,9 @@ function AIModal({ onClose, onGenerate }: {
           <button
             disabled={!desc.trim() || loading}
             onClick={async () => { setLoading(true); await onGenerate(desc, trigger); setLoading(false); onClose(); }}
-            style={{ flex: 2, background: "#c2a44a", color: "#0d0d0d", border: "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, cursor: "pointer", opacity: (!desc.trim() || loading) ? 0.6 : 1, fontFamily: "inherit" }}
+            style={{ flex: 2, background: loading ? "#1a1a1a" : "#c2a44a", color: loading ? "#a855f7" : "#0d0d0d", border: loading ? "1px solid #a855f740" : "none", borderRadius: 8, padding: "10px 0", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: (!desc.trim() || loading) ? 0.9 : 1, fontFamily: "inherit", transition: "all .3s" }}
           >
-            {loading ? "⏳ Gerando fluxo..." : "✨ Gerar com IA"}
+            {loading ? "🤖 Montando fluxo com IA..." : "✨ Gerar com IA"}
           </button>
         </div>
       </div>
@@ -642,8 +642,22 @@ function FlowCanvas({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ descricao: desc, trigger_tipo: trigger }),
     });
-    const d = await r.json();
-    if (d.nodes) {
+    if (!r.ok || !r.body) return;
+
+    // Lê o stream completo (gpt-4o-mini responde em ~5-10s)
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let raw = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      raw += decoder.decode(value, { stream: true });
+    }
+
+    try {
+      const clean = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const d = JSON.parse(clean);
+      if (!d.nodes) return;
       const rfNodes: FlowNode[] = d.nodes.map((n: Record<string, unknown>) => ({
         id: String(n.id), type: String(n.type),
         position: (n.position as { x: number; y: number }) ?? { x: 300, y: 100 },
@@ -658,6 +672,8 @@ function FlowCanvas({
       setEdges(rfEdges);
       const ini = rfNodes.find(n => n.type === "inicio");
       if (ini) setTriggerTipo(String((ini.data as Record<string, unknown>).trigger_tipo ?? trigger));
+    } catch {
+      // JSON inválido retornado pela IA — silencioso, usuário pode tentar novamente
     }
   };
 
