@@ -18,6 +18,7 @@ interface FormConfig {
   overlay_opacidade?: number; logo_url?: string; mensagem_obrigado?: string;
   barra_estilo?: "solida" | "pontilhada" | "tracejada" | "oculta";
   pixel_facebook?: string; gtm_id?: string; ga_id?: string;
+  mostrar_descricao?: boolean;
 }
 
 interface Form {
@@ -424,7 +425,7 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
           ) : (
             <div style={{ width: "100%" }}>
               <div className="q-label" style={{ marginBottom: 8 }}>{form?.titulo}</div>
-              {form?.descricao && <div className="q-desc">{form.descricao}</div>}
+              {form?.descricao && (cfg.mostrar_descricao ?? true) && <div className="q-desc">{form.descricao}</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 32, marginTop: 32 }}>
                 {perguntas.map((p, i) => (
                   <div key={p.id}>

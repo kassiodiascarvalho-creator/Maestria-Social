@@ -2,5 +2,11 @@
   "name": "maestria-social",
   "buildCommand": "next build",
   "devCommand": "next dev",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/processar-cadencia",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

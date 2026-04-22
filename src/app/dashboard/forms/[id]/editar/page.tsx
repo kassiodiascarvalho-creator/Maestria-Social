@@ -42,6 +42,7 @@ interface Form {
     pixel_facebook?: string;
     gtm_id?: string;
     ga_id?: string;
+    mostrar_descricao?: boolean;
   };
   envio_email?: string;
   envio_whatsapp?: string;
@@ -573,13 +574,30 @@ export default function EditarFormPage({ params }: { params: Promise<{ id: strin
           <div style={{ padding: "28px 32px", maxWidth: 560 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <div>
-                <label style={labelStyle}>Descrição do formulário</label>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Descrição do formulário</label>
+                  <button
+                    onClick={() => setForm(f => f ? { ...f, config: { ...f.config, mostrar_descricao: !(f.config.mostrar_descricao ?? true) } } : f)}
+                    style={{
+                      background: (form.config.mostrar_descricao ?? true) ? "#22c55e18" : "#1a1a1a",
+                      border: `1px solid ${(form.config.mostrar_descricao ?? true) ? "#22c55e40" : "#2a2a2a"}`,
+                      color: (form.config.mostrar_descricao ?? true) ? "#22c55e" : "#6b7280",
+                      borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer",
+                      fontFamily: "inherit", fontWeight: 600,
+                    }}
+                  >
+                    {(form.config.mostrar_descricao ?? true) ? "Visível no form" : "Oculta no form"}
+                  </button>
+                </div>
                 <textarea
                   value={form.descricao ?? ""}
                   onChange={e => setForm(f => f ? { ...f, descricao: e.target.value } : f)}
-                  style={{ ...inputStyle, minHeight: 80, resize: "vertical" }}
+                  style={{ ...inputStyle, minHeight: 80, resize: "vertical", opacity: (form.config.mostrar_descricao ?? true) ? 1 : 0.4 }}
                   placeholder="Descrição exibida no formulário..."
                 />
+                <div style={{ color: "#4b5563", fontSize: 12, marginTop: 4 }}>
+                  Clique no botão para mostrar ou ocultar no formulário público.
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Notificação WhatsApp (número)</label>

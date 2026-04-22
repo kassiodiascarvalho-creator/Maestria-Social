@@ -642,39 +642,23 @@ function FlowCanvas({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ descricao: desc, trigger_tipo: trigger }),
     });
-    if (!r.ok || !r.body) return;
-
-    // Lê o stream completo (gpt-4o-mini responde em ~5-10s)
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    let raw = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      raw += decoder.decode(value, { stream: true });
-    }
-
-    try {
-      const clean = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const d = JSON.parse(clean);
-      if (!d.nodes) return;
-      const rfNodes: FlowNode[] = d.nodes.map((n: Record<string, unknown>) => ({
-        id: String(n.id), type: String(n.type),
-        position: (n.position as { x: number; y: number }) ?? { x: 300, y: 100 },
-        data: { ...(n.data as FlowData) },
-      }));
-      const rfEdges: FlowEdge[] = (d.edges ?? []).map((e: Record<string, unknown>) => ({
-        id: String(e.id), source: String(e.source), target: String(e.target),
-        sourceHandle: (e.sourceHandle as string) ?? undefined,
-        animated: true, style: { stroke: "#c2a44a60", strokeWidth: 2 },
-      }));
-      setNodes(rfNodes);
-      setEdges(rfEdges);
-      const ini = rfNodes.find(n => n.type === "inicio");
-      if (ini) setTriggerTipo(String((ini.data as Record<string, unknown>).trigger_tipo ?? trigger));
-    } catch {
-      // JSON inválido retornado pela IA — silencioso, usuário pode tentar novamente
-    }
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.nodes) return;
+    const rfNodes: FlowNode[] = d.nodes.map((n: Record<string, unknown>) => ({
+      id: String(n.id), type: String(n.type),
+      position: (n.position as { x: number; y: number }) ?? { x: 300, y: 100 },
+      data: { ...(n.data as FlowData) },
+    }));
+    const rfEdges: FlowEdge[] = (d.edges ?? []).map((e: Record<string, unknown>) => ({
+      id: String(e.id), source: String(e.source), target: String(e.target),
+      sourceHandle: (e.sourceHandle as string) ?? undefined,
+      animated: true, style: { stroke: "#c2a44a60", strokeWidth: 2 },
+    }));
+    setNodes(rfNodes);
+    setEdges(rfEdges);
+    const ini = rfNodes.find(n => n.type === "inicio");
+    if (ini) setTriggerTipo(String((ini.data as Record<string, unknown>).trigger_tipo ?? trigger));
   };
 
   if (!loaded) return (

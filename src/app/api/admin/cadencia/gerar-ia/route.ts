@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { openai } from '@ai-sdk/openai'
-import { streamText } from 'ai'
+import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -45,7 +44,9 @@ operador: "existe" | "nao_existe" | "igual" | "contem" | "nao_contem"
 
 ════════ EDGES ════════
 Conexão simples: {"id":"e1-2","source":"n1","target":"n2"}
-Condição SIM/NÃO: {"id":"e4-5","source":"n4","target":"n5","sourceHandle":"sim"} e {"id":"e4-6","source":"n4","target":"n6","sourceHandle":"nao"}
+Condição SIM/NÃO:
+{"id":"e4-5","source":"n4","target":"n5","sourceHandle":"sim"}
+{"id":"e4-6","source":"n4","target":"n6","sourceHandle":"nao"}
 
 ════════ REGRAS ════════
 - Gere 8 a 10 nós (fluxo rico mas conciso)
@@ -63,18 +64,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'descricao required' }, { status: 400 })
   }
 
-  try {
-    const result = streamText({
-      model: openai('gpt-4o-mini'),
-      temperature: 0.6,
-      maxOutputTokens: 3500,
-      system: SYSTEM,
-      prompt: `Crie um fluxo de cadência (8-10 nós) para:\n"${descricao}"\nGatilho: ${trigger_tipo || 'form_submit'}\nRetorne APENAS JSON: { "nodes": [...], "edges": [...] }`,
-    })
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-    return result.toTextStreamResponse()
-  } catch (err) {
-    console.error('[gerar-ia] erro:', err)
-    return NextResponse.json({ error: 'Falha ao gerar fluxo' }, { status: 500 })
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4.1-mini',
+    temperature: 0.6,
+    max_tokens: 3500,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM },
+      {
+        role: 'user',
+        content: `Crie um fluxo de cadência (8-10 nós) para:\n"${descricao}"\nGatilho: ${trigger_tipo || 'form_submit'}\nRetorne APENAS JSON: { "nodes": [...], "edges": [...] }`,
+      },
+    ],
+  })
+
+  const raw = completion.choices[0].message.content ?? '{}'
+  try {
+    const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const data = JSON.parse(clean)
+    if (!data.nodes || !Array.isArray(data.nodes)) throw new Error('nodes missing')
+    return NextResponse.json(data)
+  } catch {
+    return NextResponse.json({ error: 'IA retornou JSON inválido', raw }, { status: 422 })
   }
 }
