@@ -48,16 +48,18 @@ export async function enviarAudioViaBaileys(telefone: string, audioUrl: string, 
  */
 export async function enviarMidiaViaBaileys(
   telefone: string,
-  tipo: 'image' | 'video' | 'document',
+  tipo: 'image' | 'video' | 'document' | 'audio',
   url: string,
   caption?: string,
   filename?: string,
   instanceId?: string,
+  ptt?: boolean,
 ): Promise<void> {
   const phone = telefone.replace(/\D/g, '')
   const payload: Record<string, unknown> = { type: tipo, content: url }
   if (caption) payload.caption = caption
   if (filename) payload.filename = filename
+  if (ptt !== undefined) payload.ptt = ptt
   await baileysDisparar(phone, payload, instanceId)
 }
 

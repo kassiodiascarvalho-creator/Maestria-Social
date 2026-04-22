@@ -62,7 +62,7 @@ async function resolverChatId(client, phone) {
   return numberId._serialized
 }
 
-async function enviarMensagem(inst, type, phone, content, caption, filename, mimeType) {
+async function enviarMensagem(inst, type, phone, content, caption, filename, mimeType, ptt) {
   const chatId = await resolverChatId(inst.client, phone)
 
   // content pode ser URL pública ou base64 raw (quando mimeType está presente)
@@ -80,7 +80,7 @@ async function enviarMensagem(inst, type, phone, content, caption, filename, mim
     await inst.client.sendMessage(chatId, media, { caption: caption || '' })
   } else if (type === 'audio') {
     const media = await resolverMidia()
-    await inst.client.sendMessage(chatId, media, { sendAudioAsVoice: false })
+    await inst.client.sendMessage(chatId, media, { sendAudioAsVoice: ptt ?? true })
   } else if (type === 'video') {
     const media = await resolverMidia()
     await inst.client.sendMessage(chatId, media, { caption: caption || '' })
@@ -355,12 +355,12 @@ app.post('/instancia/:id/disparar', async (req, res) => {
     return res.status(503).json({ error: `Instância ${req.params.id} não conectada (${inst.status})` })
   }
 
-  const { phone, type, content, caption, filename, mimeType } = req.body
+  const { phone, type, content, caption, filename, mimeType, ptt } = req.body
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
 
   try {
-    await enviarMensagem(inst, type, phone, content, caption, filename, mimeType)
+    await enviarMensagem(inst, type, phone, content, caption, filename, mimeType, ptt)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)
@@ -546,11 +546,11 @@ app.post('/disparar', async (req, res) => {
   if (!inst || inst.status !== 'conectado') {
     return res.status(503).json({ error: 'WhatsApp não conectado. Escaneie o QR code.' })
   }
-  const { phone, type, content, caption, filename, mimeType } = req.body
+  const { phone, type, content, caption, filename, mimeType, ptt } = req.body
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
   try {
-    await enviarMensagem(inst, type, phone, content, caption, filename, mimeType)
+    await enviarMensagem(inst, type, phone, content, caption, filename, mimeType, ptt)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)

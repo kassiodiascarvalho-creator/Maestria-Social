@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
-import { enviarViaBaileys, enviarMidiaBase64ViaBaileys } from '@/lib/baileys'
+import { enviarViaBaileys, enviarMidiaViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
+const BUCKET = 'midia-crm'
 
 function normalizarTelefone(tel: string): string {
   const digits = tel.replace(/\D/g, '')
@@ -18,6 +19,28 @@ function tipoMidia(mime: string): 'image' | 'video' | 'audio' | 'document' {
   return 'document'
 }
 
+function tagMensagem(tipo: string, filename: string, url: string): string {
+  if (tipo === 'audio') return `[áudio:${url}]`
+  if (tipo === 'image') return `[imagem:${url}]`
+  if (tipo === 'video') return `[vídeo:${url}]`
+  return `[documento:${filename}:${url}]`
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function uploadParaStorage(supabase: any, file: File): Promise<string> {
+  const ext = file.name.split('.').pop() || 'bin'
+  const storagePath = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(storagePath, file, { contentType: file.type, upsert: false })
+
+  if (error) throw new Error(`Upload Storage falhou: ${error.message}`)
+
+  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(storagePath)
+  return publicUrl
+}
+
 async function uploadMidiaParaMeta(file: File, phoneNumberId: string, accessToken: string): Promise<string> {
   const form = new FormData()
   form.append('file', file)
@@ -29,7 +52,7 @@ async function uploadMidiaParaMeta(file: File, phoneNumberId: string, accessToke
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
   })
-  if (!res.ok) throw new Error(`Erro ao fazer upload de mídia: ${await res.text()}`)
+  if (!res.ok) throw new Error(`Erro ao fazer upload de mídia na Meta: ${await res.text()}`)
   const data = await res.json() as { id: string }
   return data.id
 }
@@ -48,7 +71,7 @@ async function enviarMidiaViaMeta(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: tipo, [tipo]: mediaPayload }),
   })
-  if (!res.ok) throw new Error(`Erro ao enviar mídia: ${await res.text()}`)
+  if (!res.ok) throw new Error(`Erro ao enviar mídia via Meta: ${await res.text()}`)
 }
 
 export async function POST(req: NextRequest) {
@@ -62,7 +85,8 @@ export async function POST(req: NextRequest) {
     if (!leadId) return NextResponse.json({ error: 'lead_id é obrigatório' }, { status: 400 })
     if (!texto && !file) return NextResponse.json({ error: 'Envie texto ou arquivo' }, { status: 400 })
 
-    const supabase = createAdminClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
     const { data: lead } = await supabase.from('leads').select('whatsapp').eq('id', leadId).single()
     if (!lead?.whatsapp) return NextResponse.json({ error: 'Lead não encontrado ou sem WhatsApp' }, { status: 404 })
 
@@ -72,25 +96,35 @@ export async function POST(req: NextRequest) {
     if (file) {
       const tipo = tipoMidia(file.type)
 
-      // audio/webm não é suportado pela Meta API — rotear pelo Baileys com base64
-      if (tipo === 'audio' && file.type.includes('webm')) {
-        const buffer = await file.arrayBuffer()
-        const base64 = Buffer.from(buffer).toString('base64')
-        await enviarMidiaBase64ViaBaileys(para, base64, file.type, 'audio', file.name)
-        mensagemSalva = `[áudio: ${file.name}]`
-      } else {
-        // Demais mídias vão direto para Meta API
+      // 1. Upload para Supabase Storage → URL pública permanente
+      const publicUrl = await uploadParaStorage(supabase, file)
+      mensagemSalva = tagMensagem(tipo, file.name, publicUrl)
+
+      // 2. Tentar enviar via Baileys usando a URL (não base64)
+      let enviado = false
+      try {
+        if (tipo === 'audio') {
+          // ptt=true → WhatsApp exibe como nota de voz com player
+          await enviarMidiaViaBaileys(para, 'audio', publicUrl, undefined, file.name, undefined, true)
+        } else {
+          await enviarMidiaViaBaileys(para, tipo, publicUrl, caption ?? undefined, file.name)
+        }
+        enviado = true
+      } catch (errBaileys) {
+        console.warn('[enviar-mensagem] Baileys falhou:', errBaileys)
+      }
+
+      // 3. Fallback: Meta API
+      if (!enviado) {
         const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
         const accessToken = await getConfig('META_ACCESS_TOKEN')
         if (!phoneNumberId || !accessToken) {
-          return NextResponse.json({ error: 'META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados' }, { status: 500 })
+          throw new Error('Mídia não pôde ser enviada: Baileys indisponível e Meta API não configurada')
         }
         const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
         await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
-        mensagemSalva = caption ? `[${tipo}: ${file.name}] ${caption}` : `[${tipo}: ${file.name}]`
       }
     } else if (texto) {
-      // Tenta Baileys primeiro (sem restrição de janela 24h); fallback para Meta
       let enviado = false
       try {
         await enviarViaBaileys(para, texto)
@@ -105,9 +139,7 @@ export async function POST(req: NextRequest) {
 
     await supabase.from('conversas').insert({ lead_id: leadId, role: 'assistant', mensagem: mensagemSalva })
 
-    // Registra atividade humana: agente pausa por 5 min
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    await supabase
       .from('leads')
       .update({
         ultima_atividade_humana: new Date().toISOString(),

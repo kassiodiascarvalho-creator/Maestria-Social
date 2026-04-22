@@ -77,6 +77,70 @@ function urgente(lead: KanbanLead): boolean {
   return Date.now() - new Date(lead.ultima_atividade).getTime() > 12 * 60 * 60 * 1000;
 }
 
+function parseMidiaTag(mensagem: string, prefix: string): { url: string; rest: string } | null {
+  if (!mensagem.startsWith(prefix)) return null;
+  const after = mensagem.slice(prefix.length);
+  const end = after.indexOf(']');
+  if (end < 0) return null;
+  return { url: after.slice(0, end), rest: after.slice(end + 1).trim() };
+}
+
+function renderMensagemCRM(mensagem: string) {
+  // [áudio:URL]
+  const audio = parseMidiaTag(mensagem, '[áudio:');
+  if (audio) {
+    return (
+      <div>
+        <audio controls src={audio.url} style={{ maxWidth: "260px", display: "block" }} />
+        {audio.rest && <div style={{ marginTop: 4 }}>{audio.rest}</div>}
+      </div>
+    );
+  }
+  // [imagem:URL]
+  const img = parseMidiaTag(mensagem, '[imagem:');
+  if (img) {
+    return (
+      <div>
+        <img src={img.url} alt="imagem" style={{ maxWidth: "260px", borderRadius: 8, display: "block" }} />
+        {img.rest && <div style={{ marginTop: 4 }}>{img.rest}</div>}
+      </div>
+    );
+  }
+  // [vídeo:URL]
+  const vid = parseMidiaTag(mensagem, '[vídeo:');
+  if (vid) {
+    return (
+      <div>
+        <video controls src={vid.url} style={{ maxWidth: "260px", borderRadius: 8, display: "block" }} />
+        {vid.rest && <div style={{ marginTop: 4 }}>{vid.rest}</div>}
+      </div>
+    );
+  }
+  // [documento:nome:URL]
+  if (mensagem.startsWith('[documento:')) {
+    const inner = mensagem.slice('[documento:'.length);
+    const colonIdx = inner.lastIndexOf(':http');
+    if (colonIdx > 0) {
+      const nome = inner.slice(0, colonIdx);
+      const afterNome = inner.slice(colonIdx + 1);
+      const endBracket = afterNome.indexOf(']');
+      if (endBracket > 0) {
+        const url = afterNome.slice(0, endBracket);
+        const rest = afterNome.slice(endBracket + 1).trim();
+        return (
+          <div>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, color: "inherit", textDecoration: "underline" }}>
+              📄 {nome}
+            </a>
+            {rest && <div style={{ marginTop: 4 }}>{rest}</div>}
+          </div>
+        );
+      }
+    }
+  }
+  return <span style={{ whiteSpace: "pre-wrap" }}>{mensagem}</span>;
+}
+
 const ETIQUETAS_CHAT = [
   { valor: "ia_atendendo",          label: "IA atendendo",         cor: "#6acca0" },
   { valor: "humano_atendendo",      label: "Humano",               cor: "#c2904d" },
@@ -721,7 +785,7 @@ export default function CRMPage() {
                     return (
                       <div key={msg.id} className={`crm-bubble-wrap ${isBot ? "wrap-bot" : "wrap-user"}`}>
                         <div className={`crm-bubble ${isBot ? "bubble-bot" : "bubble-user"}`}>
-                          <div className="crm-bubble-text">{msg.mensagem}</div>
+                          <div className="crm-bubble-text">{renderMensagemCRM(msg.mensagem)}</div>
                           <div className="crm-bubble-hora">{horaMsg(msg.criado_em)}{isBot && " ✓"}</div>
                         </div>
                       </div>
