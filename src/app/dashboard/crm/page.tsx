@@ -173,6 +173,10 @@ export default function CRMPage() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [texto, setTexto] = useState("");
+  const [canal, setCanal] = useState<"baileys" | "meta">(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("crm_canal") as "baileys" | "meta") || "baileys";
+    return "baileys";
+  });
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState("");
   const [mostrarEtiquetas, setMostrarEtiquetas] = useState(false);
@@ -315,6 +319,7 @@ export default function CRMPage() {
     setEnviando(true); setErroEnvio("");
     const form = new FormData();
     form.append("lead_id", leadSelecionado.id);
+    form.append("canal", canal);
     if (arquivo) { form.append("file", arquivo); if (caption.trim()) form.append("caption", caption.trim()); }
     else form.append("texto", texto.trim());
     const res = await fetch("/api/admin/enviar-mensagem", { method: "POST", body: form });
@@ -882,6 +887,17 @@ export default function CRMPage() {
                           </div>
                         )}
                       </div>
+                      <button
+                        className={`crm-canal-toggle ${canal === "meta" ? "canal-meta" : "canal-baileys"}`}
+                        onClick={() => setCanal(c => {
+                          const next = c === "baileys" ? "meta" : "baileys";
+                          localStorage.setItem("crm_canal", next);
+                          return next;
+                        })}
+                        title={canal === "meta" ? "Usando Meta API Oficial — clique para Baileys" : "Usando Baileys Local — clique para Meta Oficial"}
+                      >
+                        {canal === "meta" ? "📡 Oficial" : "⚡ Baileys"}
+                      </button>
                       <button className="crm-tool-btn" onClick={() => setMostrarAgendar(v => !v)} title="Agendar mensagem">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                       </button>
@@ -1204,6 +1220,10 @@ const css = `
   .crm-toolbar{display:flex;align-items:center;gap:2px;}
   .crm-tool-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;background:transparent;border:none;cursor:pointer;border-radius:6px;transition:background .15s;}
   .crm-tool-btn:hover{background:#2a1f18;}
+  .crm-canal-toggle{padding:3px 8px;font-size:11px;font-weight:600;border:none;border-radius:12px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+  .crm-canal-toggle.canal-baileys{background:#1a2f1a;color:#6acca0;}
+  .crm-canal-toggle.canal-meta{background:#1a1f2f;color:#7ab0e0;}
+  .crm-canal-toggle:hover{opacity:.8;}
   .crm-tool-sep{width:1px;height:20px;background:#2a1f18;margin:0 4px;}
   .crm-tool-save{opacity:.7;}
   .crm-tpl-wrap{position:relative;}

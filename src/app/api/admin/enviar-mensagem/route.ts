@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
     const texto = form.get('texto') as string | null
     const caption = form.get('caption') as string | null
     const file = form.get('file') as File | null
+    const canal = (form.get('canal') as string | null) ?? 'baileys'
 
     if (!leadId) return NextResponse.json({ error: 'lead_id é obrigatório' }, { status: 400 })
     if (!texto && !file) return NextResponse.json({ error: 'Envie texto ou arquivo' }, { status: 400 })
@@ -100,39 +101,49 @@ export async function POST(req: NextRequest) {
       const publicUrl = await uploadParaStorage(supabase, file)
       mensagemSalva = tagMensagem(tipo, file.name, publicUrl)
 
-      // 2. Tentar enviar via Baileys usando a URL (não base64)
-      let enviado = false
-      try {
-        if (tipo === 'audio') {
-          // ptt=true → WhatsApp exibe como nota de voz com player
-          await enviarMidiaViaBaileys(para, 'audio', publicUrl, undefined, file.name, undefined, true)
-        } else {
-          await enviarMidiaViaBaileys(para, tipo, publicUrl, caption ?? undefined, file.name)
-        }
-        enviado = true
-      } catch (errBaileys) {
-        console.warn('[enviar-mensagem] Baileys falhou:', errBaileys)
-      }
-
-      // 3. Fallback: Meta API
-      if (!enviado) {
+      if (canal === 'meta') {
+        // Canal Oficial: Meta API diretamente
         const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
         const accessToken = await getConfig('META_ACCESS_TOKEN')
         if (!phoneNumberId || !accessToken) {
-          throw new Error('Mídia não pôde ser enviada: Baileys indisponível e Meta API não configurada')
+          throw new Error('META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados')
         }
         const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
         await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
+      } else {
+        // Canal Baileys: envia via URL com fallback para Meta
+        let enviado = false
+        try {
+          if (tipo === 'audio') {
+            await enviarMidiaViaBaileys(para, 'audio', publicUrl, undefined, file.name, undefined, true)
+          } else {
+            await enviarMidiaViaBaileys(para, tipo, publicUrl, caption ?? undefined, file.name)
+          }
+          enviado = true
+        } catch (errBaileys) {
+          console.warn('[enviar-mensagem] Baileys falhou, tentando Meta:', errBaileys)
+        }
+
+        if (!enviado) {
+          const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
+          const accessToken = await getConfig('META_ACCESS_TOKEN')
+          if (!phoneNumberId || !accessToken) {
+            throw new Error('Mídia não pôde ser enviada: Baileys indisponível e Meta API não configurada')
+          }
+          const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
+          await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
+        }
       }
     } else if (texto) {
-      let enviado = false
-      try {
-        await enviarViaBaileys(para, texto)
-        enviado = true
-      } catch { /* fallback abaixo */ }
-
-      if (!enviado) {
+      if (canal === 'meta') {
         await enviarMensagemWhatsApp(para, texto)
+      } else {
+        let enviado = false
+        try {
+          await enviarViaBaileys(para, texto)
+          enviado = true
+        } catch { /* fallback abaixo */ }
+        if (!enviado) await enviarMensagemWhatsApp(para, texto)
       }
       mensagemSalva = texto
     }
