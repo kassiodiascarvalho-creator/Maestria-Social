@@ -3,8 +3,6 @@ import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-
 const SYSTEM = `Você é um especialista em marketing digital e automação de WhatsApp.
 Gere um fluxo de cadência em JSON com base na descrição do usuário.
 
@@ -88,6 +86,7 @@ export async function POST(req: NextRequest) {
   const { descricao, trigger_tipo } = await req.json()
   if (!descricao) return NextResponse.json({ error: 'descricao required' }, { status: 400 })
 
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     temperature: 0.7,
