@@ -11,12 +11,21 @@
       "Bash(grep -v \"^$\")",
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/followup/configs\")",
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/followup/configs/[id]\")",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/forms/[id]\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/forms/[id]/perguntas\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/forms/[id]/respostas\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/f/[slug]\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/dashboard/forms/[id]/editar\")",
+      "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/dashboard/forms/[id]/respostas\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\crm\\conversas",
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\crm\\templates",
-      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\pipeline\\etapas"
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\pipeline\\etapas",
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\forms",
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\forms\\[slug]",
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\forms"
     ]
   }
 }

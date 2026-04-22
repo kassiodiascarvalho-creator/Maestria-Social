@@ -33,8 +33,15 @@ interface Form {
     fonte: string;
     alinhamento: string;
     imagem_fundo?: string;
+    imagem_posicao_x?: string;
+    imagem_posicao_y?: string;
+    overlay_opacidade?: number;
     logo_url?: string;
     mensagem_obrigado?: string;
+    barra_estilo?: string;
+    pixel_facebook?: string;
+    gtm_id?: string;
+    ga_id?: string;
   };
   envio_email?: string;
   envio_whatsapp?: string;
@@ -520,6 +527,37 @@ export default function EditarFormPage({ params }: { params: Promise<{ id: strin
                   </label>
                 </div>
               </Row>
+              <Row label="Posição da imagem">
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(["left","center","right"] as const).map(v => (
+                    <button key={v} onClick={() => setForm(f => f ? { ...f, config: { ...f.config, imagem_posicao_x: v } } : f)}
+                      style={{ background: (cfg.imagem_posicao_x ?? "center") === v ? "#c2a44a" : "#1a1a1a", color: (cfg.imagem_posicao_x ?? "center") === v ? "#0d0d0d" : "#6b7280", border: "1px solid #2a2a2a", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+                      {v === "left" ? "Esq" : v === "center" ? "Centro" : "Dir"}
+                    </button>
+                  ))}
+                  {(["top","center","bottom"] as const).map(v => (
+                    <button key={v} onClick={() => setForm(f => f ? { ...f, config: { ...f.config, imagem_posicao_y: v } } : f)}
+                      style={{ background: (cfg.imagem_posicao_y ?? "center") === v ? "#c2a44a" : "#1a1a1a", color: (cfg.imagem_posicao_y ?? "center") === v ? "#0d0d0d" : "#6b7280", border: "1px solid #2a2a2a", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+                      {v === "top" ? "Topo" : v === "center" ? "Meio" : "Base"}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row label="Escurecimento da imagem">
+                <input type="range" min={0} max={95} value={cfg.overlay_opacidade ?? 55}
+                  onChange={e => setForm(f => f ? { ...f, config: { ...f.config, overlay_opacidade: Number(e.target.value) } } : f)}
+                  style={{ width: 160 }} />
+                <span style={{ color: "#6b7280", fontSize: 13, minWidth: 30 }}>{cfg.overlay_opacidade ?? 55}%</span>
+                <span style={{ color: "#4b5563", fontSize: 12 }}>(0 = sem escurecer, 95 = quase preto)</span>
+              </Row>
+              <Row label="Barra de progresso">
+                {([["solida","Sólida"],["pontilhada","Pontilhada"],["tracejada","Tracejada"],["oculta","Ocultar"]] as const).map(([v, l]) => (
+                  <button key={v} onClick={() => setForm(f => f ? { ...f, config: { ...f.config, barra_estilo: v } } : f)}
+                    style={{ background: (cfg.barra_estilo ?? "solida") === v ? "#c2a44a" : "#1a1a1a", color: (cfg.barra_estilo ?? "solida") === v ? "#0d0d0d" : "#6b7280", border: "1px solid #2a2a2a", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+                    {l}
+                  </button>
+                ))}
+              </Row>
               <Row label="Mensagem de obrigado">
                 <textarea value={cfg.mensagem_obrigado ?? ""}
                   onChange={e => setForm(f => f ? { ...f, config: { ...f.config, mensagem_obrigado: e.target.value } } : f)}
@@ -583,6 +621,28 @@ export default function EditarFormPage({ params }: { params: Promise<{ id: strin
                   Chamado via POST a cada resposta com todos os dados.
                 </div>
               </div>
+              {/* Rastreamento */}
+              <div style={{ paddingTop: 8, borderTop: "1px solid #1a1a1a" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 14 }}>
+                  Rastreamento & Analytics
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div>
+                    <label style={labelStyle}>Facebook Pixel ID</label>
+                    <input value={form.config.pixel_facebook ?? ""} onChange={e => setForm(f => f ? { ...f, config: { ...f.config, pixel_facebook: e.target.value } } : f)} placeholder="Ex: 123456789012345" style={inputStyle} />
+                    <div style={{ color: "#4b5563", fontSize: 12, marginTop: 4 }}>Dispara PageView automaticamente quando o formulário abre.</div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Google Tag Manager ID</label>
+                    <input value={form.config.gtm_id ?? ""} onChange={e => setForm(f => f ? { ...f, config: { ...f.config, gtm_id: e.target.value } } : f)} placeholder="Ex: GTM-XXXXXXX" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Google Analytics 4 ID</label>
+                    <input value={form.config.ga_id ?? ""} onChange={e => setForm(f => f ? { ...f, config: { ...f.config, ga_id: e.target.value } } : f)} placeholder="Ex: G-XXXXXXXXXX" style={inputStyle} />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label style={labelStyle}>Link público do formulário</label>
                 <div style={{
