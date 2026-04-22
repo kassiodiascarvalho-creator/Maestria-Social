@@ -191,6 +191,7 @@ export default function CRMPage() {
   // ── gravação ──────────────────────────────────────────────────────────────
   const [gravando, setGravando] = useState(false);
   const [tempoGrav, setTempoGrav] = useState(0);
+  const [micBloqueado, setMicBloqueado] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const gravTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -336,33 +337,38 @@ export default function CRMPage() {
 
   // ── gravação de áudio ─────────────────────────────────────────────────────
   async function iniciarGravacao() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus") ? "audio/ogg;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2") ? "audio/mp4;codecs=mp4a.40.2"
-        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4"
-        : "audio/webm;codecs=opus";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      audioChunksRef.current = [];
-      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("ogg") ? "ogg" : "mp4";
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        setArquivo(new File([blob], `audio-gravado.${ext}`, { type: mimeType }));
-        setGravando(false); setTempoGrav(0);
-        if (gravTimerRef.current) clearInterval(gravTimerRef.current);
-      };
-      recorder.start(250);
-      mediaRecorderRef.current = recorder;
-      setGravando(true);
-      gravTimerRef.current = setInterval(() => setTempoGrav(t => t + 1), 1000);
-    } catch (err) {
-      const msg = err instanceof DOMException && err.name === "NotAllowedError"
-        ? "Permissão de microfone negada. Clique no ícone de cadeado na barra de endereço e permita o microfone."
-        : "Não foi possível acessar o microfone. Verifique se o dispositivo tem microfone e se o navegador tem permissão.";
-      alert(msg);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Seu navegador não suporta gravação de áudio. Use Chrome ou Edge.");
+      return;
     }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      setMicBloqueado(false);
+    } catch (err) {
+      setMicBloqueado(true);
+      return;
+    }
+    // Escolhe o melhor formato suportado
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+      .find(m => MediaRecorder.isTypeSupported(m)) ?? "";
+    const recOpts = mimeType ? { mimeType } : {};
+    const recorder = new MediaRecorder(stream, recOpts);
+    const usedMime = recorder.mimeType || "audio/webm";
+    audioChunksRef.current = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const ext = usedMime.includes("ogg") ? "ogg" : usedMime.includes("mp4") ? "mp4" : "webm";
+      const blob = new Blob(audioChunksRef.current, { type: usedMime });
+      setArquivo(new File([blob], `audio-gravado.${ext}`, { type: usedMime }));
+      setGravando(false); setTempoGrav(0);
+      if (gravTimerRef.current) clearInterval(gravTimerRef.current);
+    };
+    recorder.start(250);
+    mediaRecorderRef.current = recorder;
+    setGravando(true);
+    gravTimerRef.current = setInterval(() => setTempoGrav(t => t + 1), 1000);
   }
   function pararGravacao() { mediaRecorderRef.current?.stop(); }
   function cancelarGravacao() {
@@ -807,6 +813,12 @@ export default function CRMPage() {
                 {/* Input area */}
                 <div className="crm-input-area">
                   {erroEnvio && <div className="crm-envio-erro">{erroEnvio}</div>}
+                  {micBloqueado && (
+                    <div className="crm-mic-aviso">
+                      🎤 Microfone bloqueado. Clique no <strong>🔒 cadeado</strong> na barra de endereço do navegador → <strong>Microfone</strong> → <strong>Permitir</strong> → recarregue a página.
+                      <button className="crm-mic-aviso-ok" onClick={() => { setMicBloqueado(false); window.location.reload(); }}>Recarregar</button>
+                    </div>
+                  )}
 
                   {arquivo && !gravando && (
                     <div className="crm-file-preview">
@@ -1191,6 +1203,8 @@ const css = `
   /* Input area */
   .crm-input-area{border-top:1px solid #2a1f18;padding:10px 14px;background:#111009;display:flex;flex-direction:column;gap:6px;flex-shrink:0;}
   .crm-envio-erro{font-size:12px;color:#e07070;background:#e0707015;padding:6px 10px;border-radius:6px;}
+  .crm-mic-aviso{font-size:12px;color:#c2904d;background:#c2904d15;border:1px solid #c2904d40;padding:8px 12px;border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .crm-mic-aviso-ok{margin-left:auto;padding:3px 10px;background:#c2904d;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;}
   .crm-file-preview{display:flex;align-items:center;justify-content:space-between;background:#1a170f;border:1px solid #2a1f18;border-radius:8px;padding:7px 10px;}
   .crm-file-info{display:flex;gap:8px;align-items:center;}
   .crm-file-type{font-size:11px;font-weight:600;color:#c2904d;background:#c2904d15;padding:2px 6px;border-radius:4px;}

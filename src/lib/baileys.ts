@@ -70,7 +70,10 @@ export async function enviarMidiaBase64ViaBaileys(
   tipo: 'audio' | 'image' | 'video' | 'document',
   filename: string,
   instanceId?: string,
+  ptt?: boolean,
 ): Promise<void> {
   const phone = telefone.replace(/\D/g, '')
-  await baileysDisparar(phone, { type: tipo, content: base64, mimeType, filename }, instanceId)
+  const payload: Record<string, unknown> = { type: tipo, content: base64, mimeType, filename }
+  if (ptt !== undefined) payload.ptt = ptt
+  await baileysDisparar(phone, payload, instanceId)
 }

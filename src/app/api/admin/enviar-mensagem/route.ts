@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarMensagemWhatsApp } from '@/lib/meta'
-import { enviarViaBaileys, enviarMidiaViaBaileys } from '@/lib/baileys'
+import { enviarViaBaileys, enviarMidiaBase64ViaBaileys } from '@/lib/baileys'
 import { getConfig } from '@/lib/config'
 
 const META_API_URL = 'https://graph.facebook.com/v21.0'
@@ -106,7 +106,11 @@ export async function POST(req: NextRequest) {
     if (file) {
       const tipo = tipoMidia(file.type)
 
-      // 1. Upload para Supabase Storage → URL pública permanente
+      // 1. Converte para base64 (para Baileys — mais confiável que URL download)
+      const buffer = await file.arrayBuffer()
+      const base64 = Buffer.from(buffer).toString('base64')
+
+      // 2. Upload para Supabase Storage → URL para exibição no CRM
       const publicUrl = await uploadParaStorage(supabase, file)
       mensagemSalva = tagMensagem(tipo, file.name, publicUrl)
 
@@ -120,14 +124,11 @@ export async function POST(req: NextRequest) {
         const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
         await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
       } else {
-        // Canal Baileys: envia via URL com fallback para Meta
+        // Canal Baileys: envia base64 direto (sem download de URL no servidor Baileys)
         let enviado = false
         try {
-          if (tipo === 'audio') {
-            await enviarMidiaViaBaileys(para, 'audio', publicUrl, undefined, file.name, undefined, true)
-          } else {
-            await enviarMidiaViaBaileys(para, tipo, publicUrl, caption ?? undefined, file.name)
-          }
+          const isAudio = tipo === 'audio'
+          await enviarMidiaBase64ViaBaileys(para, base64, file.type, tipo, file.name, undefined, isAudio ? true : undefined)
           enviado = true
         } catch (errBaileys) {
           console.warn('[enviar-mensagem] Baileys falhou, tentando Meta:', errBaileys)
