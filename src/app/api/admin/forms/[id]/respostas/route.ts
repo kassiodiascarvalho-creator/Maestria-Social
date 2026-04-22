@@ -106,3 +106,17 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     perguntas_stats: perguntas ?? [],
   })
 }
+
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const { id } = await params
+  const db = createAdminClient() as any
+  const { searchParams } = new URL(req.url)
+  const responseId = searchParams.get('response_id')
+  if (!responseId) return NextResponse.json({ error: 'response_id required' }, { status: 400 })
+  await db.from('form_answers').delete().eq('response_id', responseId)
+  const { error } = await db
+    .from('form_responses').delete()
+    .eq('id', responseId).eq('form_id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

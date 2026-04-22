@@ -91,8 +91,13 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
   }, [form?.id]);
 
   // ── Inicia sessão (rastreia abandonos) ───────────────────────────────────
+  // Usa sessionStorage para não criar múltiplos registros no mesmo browser
   useEffect(() => {
     if (status !== "form" || !form) return;
+    const sessionKey = `form_session_${slug}`;
+    const existente = sessionStorage.getItem(sessionKey);
+    if (existente) { setResponseId(existente); return; }
+
     const utm = new URLSearchParams(window.location.search);
     fetch(`/api/forms/${slug}/start`, {
       method: "POST",
@@ -106,7 +111,12 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
       }),
     })
       .then(r => r.json())
-      .then(d => { if (d.response_id) setResponseId(d.response_id); })
+      .then(d => {
+        if (d.response_id) {
+          setResponseId(d.response_id);
+          sessionStorage.setItem(sessionKey, d.response_id);
+        }
+      })
       .catch(() => undefined);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, form?.id]);
@@ -162,6 +172,8 @@ export default function FormPublicoApp({ slug }: { slug: string }) {
         utm_content: utm.get("utm_content") ?? undefined,
       }),
     }).catch(() => undefined);
+    // Remove sessão após submissão — permite preencher novamente se necessário
+    sessionStorage.removeItem(`form_session_${slug}`);
     setStatus("done");
   }
 

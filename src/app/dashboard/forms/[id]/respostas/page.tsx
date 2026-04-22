@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import React, { useState, useEffect, use } from "react";
 import Link from "next/link";
 
 interface Resposta {
@@ -61,6 +61,21 @@ export default function RespostasPage({ params }: { params: Promise<{ id: string
     const d = await r.json();
     setDetalhe(d.detalhes ?? []);
     setLoadingDetalhe(false);
+  };
+
+  const excluirResposta = async (responseId: string) => {
+    if (!confirm('Excluir esta resposta permanentemente? Isso não pode ser desfeito.')) return;
+    await fetch(`/api/admin/forms/${id}/respostas?response_id=${responseId}`, { method: 'DELETE' });
+    setDados(prev => prev ? {
+      ...prev,
+      respostas: prev.respostas.filter(r => r.id !== responseId),
+      total: prev.total - 1,
+      total_concluidos: prev.respostas.find(r => r.id === responseId)?.concluido
+        ? prev.total_concluidos - 1 : prev.total_concluidos,
+      total_abandonados: prev.respostas.find(r => r.id === responseId)?.concluido
+        ? prev.total_abandonados : prev.total_abandonados - 1,
+    } : prev);
+    if (expandido === responseId) { setExpandido(null); setDetalhe(null); }
   };
 
   const exportarCSV = () => {
@@ -178,8 +193,8 @@ export default function RespostasPage({ params }: { params: Promise<{ id: string
               </thead>
               <tbody>
                 {dados.respostas.map(r => (
-                  <>
-                    <tr key={r.id} style={{ borderBottom: expandido === r.id ? "none" : "1px solid #111", cursor: "pointer" }}
+                  <React.Fragment key={r.id}>
+                    <tr style={{ borderBottom: expandido === r.id ? "none" : "1px solid #111", cursor: "pointer" }}
                       onClick={() => abrirDetalhe(r.id)}>
                       <td style={td}>{r.leads?.nome ?? <Em>—</Em>}</td>
                       <td style={td}>{r.leads?.email ?? <Em>—</Em>}</td>
@@ -197,11 +212,25 @@ export default function RespostasPage({ params }: { params: Promise<{ id: string
                         {new Date(r.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </td>
                       <td style={td}>
-                        <span style={{ color: "#6b7280", fontSize: 11 }}>{expandido === r.id ? "▲" : "▼"} detalhes</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ color: "#6b7280", fontSize: 11 }}>{expandido === r.id ? "▲" : "▼"} detalhes</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); excluirResposta(r.id); }}
+                            title="Excluir resposta"
+                            style={{
+                              background: "transparent", border: "1px solid #2a2a2a",
+                              color: "#6b7280", borderRadius: 5, padding: "2px 7px",
+                              cursor: "pointer", fontSize: 12, fontFamily: "inherit",
+                              lineHeight: 1,
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#ef444480"; (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#2a2a2a"; (e.currentTarget as HTMLButtonElement).style.color = "#6b7280"; }}
+                          >✕</button>
+                        </div>
                       </td>
                     </tr>
                     {expandido === r.id && (
-                      <tr key={`${r.id}-det`}>
+                      <tr>
                         <td colSpan={7} style={{ padding: "0 12px 16px", background: "#0d0d0d", borderBottom: "1px solid #1e1e1e" }}>
                           {loadingDetalhe ? (
                             <div style={{ color: "#6b7280", fontSize: 13, padding: "12px 0" }}>Carregando respostas...</div>
@@ -233,7 +262,7 @@ export default function RespostasPage({ params }: { params: Promise<{ id: string
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

@@ -19,6 +19,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   if (!form) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
 
+  // Rate limiting: máx 10 submissões concluídas por form nos últimos 60s (proteção anti-spam)
+  const { count: submissoesRecentes } = await db
+    .from('form_responses')
+    .select('id', { count: 'exact', head: true })
+    .eq('form_id', form.id)
+    .eq('concluido', true)
+    .gte('criado_em', new Date(Date.now() - 60 * 1000).toISOString())
+
+  if ((submissoesRecentes ?? 0) >= 10) {
+    return NextResponse.json({ error: 'Muitas submissões. Tente novamente em alguns segundos.' }, { status: 429 })
+  }
+
   const body = await req.json()
   const {
     respostas, response_id,

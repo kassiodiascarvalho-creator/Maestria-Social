@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 
 type TipoQ = "nome" | "email" | "whatsapp" | "texto_curto" | "texto_longo"
@@ -527,22 +527,15 @@ export default function EditarFormPage({ params }: { params: Promise<{ id: strin
                   </label>
                 </div>
               </Row>
-              <Row label="Posição da imagem">
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {(["left","center","right"] as const).map(v => (
-                    <button key={v} onClick={() => setForm(f => f ? { ...f, config: { ...f.config, imagem_posicao_x: v } } : f)}
-                      style={{ background: (cfg.imagem_posicao_x ?? "center") === v ? "#c2a44a" : "#1a1a1a", color: (cfg.imagem_posicao_x ?? "center") === v ? "#0d0d0d" : "#6b7280", border: "1px solid #2a2a2a", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
-                      {v === "left" ? "Esq" : v === "center" ? "Centro" : "Dir"}
-                    </button>
-                  ))}
-                  {(["top","center","bottom"] as const).map(v => (
-                    <button key={v} onClick={() => setForm(f => f ? { ...f, config: { ...f.config, imagem_posicao_y: v } } : f)}
-                      style={{ background: (cfg.imagem_posicao_y ?? "center") === v ? "#c2a44a" : "#1a1a1a", color: (cfg.imagem_posicao_y ?? "center") === v ? "#0d0d0d" : "#6b7280", border: "1px solid #2a2a2a", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
-                      {v === "top" ? "Topo" : v === "center" ? "Meio" : "Base"}
-                    </button>
-                  ))}
-                </div>
-              </Row>
+              <div>
+                <div style={{ fontSize: 14, color: "#9ca3af", marginBottom: 10 }}>Posição da imagem</div>
+                <PhoneMockup
+                  imageUrl={cfg.imagem_fundo ?? ""}
+                  posX={cfg.imagem_posicao_x ?? "50%"}
+                  posY={cfg.imagem_posicao_y ?? "50%"}
+                  onChange={(x, y) => setForm(f => f ? { ...f, config: { ...f.config, imagem_posicao_x: x, imagem_posicao_y: y } } : f)}
+                />
+              </div>
               <Row label="Escurecimento da imagem">
                 <input type="range" min={0} max={95} value={cfg.overlay_opacidade ?? 55}
                   onChange={e => setForm(f => f ? { ...f, config: { ...f.config, overlay_opacidade: Number(e.target.value) } } : f)}
@@ -665,6 +658,92 @@ export default function EditarFormPage({ params }: { params: Promise<{ id: strin
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PhoneMockup({ imageUrl, posX, posY, onChange }: {
+  imageUrl: string; posX: string; posY: string;
+  onChange: (x: string, y: string) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const screenRef = useRef<HTMLDivElement>(null);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; });
+
+  const parsePos = (val: string, def: number) => {
+    if (!val) return def;
+    if (val.endsWith('%')) return parseFloat(val);
+    const m: Record<string, number> = { left: 0, top: 0, center: 50, right: 100, bottom: 100 };
+    return m[val] ?? def;
+  };
+  const xPct = parsePos(posX, 50);
+  const yPct = parsePos(posY, 50);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const el = screenRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const x = Math.max(0, Math.min(100, Math.round(((e.clientX - rect.left) / rect.width) * 100)));
+      const y = Math.max(0, Math.min(100, Math.round(((e.clientY - rect.top) / rect.height) * 100)));
+      onChangeRef.current(`${x}%`, `${y}%`);
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [dragging]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+      {/* Moldura do celular */}
+      <div style={{
+        width: 160, height: 290, border: '8px solid #333', borderRadius: 28,
+        overflow: 'hidden', position: 'relative',
+        boxShadow: '0 0 0 1px #222, 0 12px 40px rgba(0,0,0,.7)', background: '#0a0a0a',
+      }}>
+        {/* Notch */}
+        <div style={{
+          position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+          width: 50, height: 10, background: '#333', borderRadius: '0 0 8px 8px', zIndex: 3,
+        }} />
+        {/* Tela arrastável */}
+        <div
+          ref={screenRef}
+          style={{
+            width: '100%', height: '100%', position: 'relative',
+            backgroundImage: imageUrl ? `url(${imageUrl})` : 'none',
+            backgroundSize: 'cover',
+            backgroundPosition: `${posX || '50%'} ${posY || '50%'}`,
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: '#1e1e1e',
+            cursor: dragging ? 'grabbing' : 'grab',
+            userSelect: 'none',
+          }}
+          onMouseDown={() => setDragging(true)}
+        >
+          {/* Ponto focal */}
+          <div style={{
+            position: 'absolute', left: `${xPct}%`, top: `${yPct}%`,
+            transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 2,
+          }}>
+            <div style={{
+              width: 18, height: 18, border: '2px solid #c2a44a', borderRadius: '50%',
+              boxShadow: '0 0 0 1px rgba(0,0,0,.6), 0 0 8px rgba(194,164,74,.5)',
+            }} />
+          </div>
+          {!imageUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#4b5563', fontSize: 11, flexDirection: 'column', gap: 4 }}>
+              <span>📷</span><span>Sem imagem</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: '#6b7280' }}>
+        {imageUrl ? `Arraste para posicionar · ${xPct}% × ${yPct}%` : 'Adicione uma imagem de fundo primeiro'}
       </div>
     </div>
   );
