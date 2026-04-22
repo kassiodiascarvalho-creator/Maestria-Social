@@ -18,6 +18,7 @@ const NAV = [
   { href: "/dashboard/pipeline",         label: "Pipeline",         icon: "◧" },
   { href: "/dashboard/whatsapp-numeros", label: "Números WhatsApp",  icon: "◈" },
   { href: "/dashboard/forms",        label: "Formulários",      icon: "◫" },
+  { href: "/dashboard/cadencia",     label: "Cadência",         icon: "◈" },
   { href: "/dashboard/integracoes", label: "Integrações",      icon: "⬡" },
 ];
 

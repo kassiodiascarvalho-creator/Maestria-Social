@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
+    "@xyflow/react": "^12.10.2",
     "googleapis": "^171.4.0",
     "html2canvas": "^1.4.1",
     "imask": "^7.6.1",
