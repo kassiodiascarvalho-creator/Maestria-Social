@@ -22,7 +22,10 @@
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/cadencia/gerar-ia\")",
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/cron/processar-cadencia\")",
       "Bash(node -e \"require\\('ai'\\); require\\('@ai-sdk/openai'\\); console.log\\('ok'\\)\")",
-      "Bash(xargs basename *)"
+      "Bash(xargs basename *)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx next build --no-turbopack)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx next build)",
+      "Bash(taskkill /F /IM node.exe)"
     ],
     "additionalDirectories": [
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\crm\\conversas",

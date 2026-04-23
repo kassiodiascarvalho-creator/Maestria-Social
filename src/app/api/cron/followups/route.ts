@@ -147,46 +147,48 @@ async function processarReengajamento(supabase: any): Promise<number> {
   return criadas
 }
 
-// ─── Detecta leads que responderam e move para fluxo de interação ─────────────
+// ─── Detecta leads que responderam e move para o fluxo configurado ───────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processarDeteccaoInteracao(supabase: any): Promise<number> {
-  // Busca leads que estão em fluxos de inatividade/personalizado
+  // Busca leads em fluxos que têm "ao responder → ir para fluxo X" configurado
   const { data: estados } = await supabase
     .from('followup_lead_estado')
-    .select('lead_id, fluxo_id, followup_fluxos(tipo, agente_id)')
+    .select('lead_id, fluxo_id, followup_fluxos(tipo, agente_id, fluxo_ao_responder_id)')
     .eq('pausado', false)
 
   if (!estados?.length) return 0
   let movidos = 0
 
   for (const estado of estados ?? []) {
-    const tipo = estado.followup_fluxos?.tipo
-    if (tipo === 'interacao' || tipo === 'lembrete_reuniao') continue
+    const fluxo = estado.followup_fluxos
+    // Pula fluxos sem destino configurado para resposta OU já no fluxo destino
+    if (!fluxo?.fluxo_ao_responder_id) continue
+    if (estado.fluxo_id === fluxo.fluxo_ao_responder_id) continue
 
     // Última mensagem desta conversa
     const { data: ultima } = await supabase
-      .from('conversas').select('role')
+      .from('conversas').select('role, criado_em')
       .eq('lead_id', estado.lead_id)
       .order('criado_em', { ascending: false }).limit(1).single()
 
     if (!ultima || ultima.role !== 'user') continue
 
-    // Encontra fluxo de interação para este agente
-    const agenteId = estado.followup_fluxos?.agente_id
-    const { data: fluxoInteracao } = await supabase
-      .from('followup_fluxos').select('id')
-      .eq('agente_id', agenteId).eq('tipo', 'interacao').eq('ativo', true)
-      .limit(1).single()
+    // Verifica se o fluxo destino está ativo
+    const { data: fluxoDestino } = await supabase
+      .from('followup_fluxos').select('id, ativo')
+      .eq('id', fluxo.fluxo_ao_responder_id).single()
 
-    if (fluxoInteracao) {
-      await supabase.from('followup_lead_estado').upsert({
-        lead_id: estado.lead_id, fluxo_id: fluxoInteracao.id,
-        proxima_ordem: 0, ultima_atividade: new Date().toISOString(), pausado: false,
-      }, { onConflict: 'lead_id' })
-    } else {
-      // Sem fluxo de interação configurado → remove do estado atual
-      await supabase.from('followup_lead_estado').delete().eq('lead_id', estado.lead_id)
-    }
+    if (!fluxoDestino?.ativo) continue
+
+    // Move para o fluxo configurado para resposta
+    await supabase.from('followup_lead_estado').upsert({
+      lead_id: estado.lead_id,
+      fluxo_id: fluxo.fluxo_ao_responder_id,
+      proxima_ordem: 0,
+      ultima_atividade: ultima.criado_em,
+      pausado: false,
+    }, { onConflict: 'lead_id' })
+
     movidos++
   }
   return movidos

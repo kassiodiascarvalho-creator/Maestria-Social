@@ -12,6 +12,7 @@ type Fluxo = {
   ativo: boolean;
   ao_finalizar: "parar" | "proximo_fluxo";
   fluxo_destino_id: string | null;
+  fluxo_ao_responder_id: string | null;
   condicao_parada: string | null;
   criado_em: string;
   followup_configs: MensagemFluxo[];
@@ -298,7 +299,7 @@ export default function FollowupPage() {
                   Sequências automáticas de mensagens. Leads entram quando ficam sem responder (Inatividade) ou quando respondem (Interação).
                 </p>
                 <button className="fu-btn-add" style={{ flexShrink: 0, marginLeft: 16 }} onClick={() => setModalFluxo({
-                  nome: "", tipo: "inatividade", ativo: true, ao_finalizar: "parar", fluxo_destino_id: null, condicao_parada: null,
+                  nome: "", tipo: "inatividade", ativo: true, ao_finalizar: "parar", fluxo_destino_id: null, fluxo_ao_responder_id: null, condicao_parada: null,
                 })}>+ Novo fluxo</button>
               </div>
 
@@ -336,9 +337,14 @@ export default function FollowupPage() {
                             Para ao agendar
                           </span>
                         )}
+                        {fluxo.fluxo_ao_responder_id && (
+                          <span style={{ fontSize: 10, color: "#34d399", background: "rgba(52,211,153,.1)", border: "1px solid rgba(52,211,153,.2)", borderRadius: 6, padding: "1px 6px" }}>
+                            resposta → {fluxos.find(f => f.id === fluxo.fluxo_ao_responder_id)?.nome ?? "outro fluxo"}
+                          </span>
+                        )}
                         {fluxo.ao_finalizar === "proximo_fluxo" && fluxo.fluxo_destino_id && (
                           <span style={{ fontSize: 10, color: "#a78bfa", background: "rgba(167,139,250,.1)", border: "1px solid rgba(167,139,250,.2)", borderRadius: 6, padding: "1px 6px" }}>
-                            → {fluxos.find(f => f.id === fluxo.fluxo_destino_id)?.nome ?? "outro fluxo"}
+                            fim → {fluxos.find(f => f.id === fluxo.fluxo_destino_id)?.nome ?? "outro fluxo"}
                           </span>
                         )}
                       </div>
@@ -446,6 +452,21 @@ export default function FollowupPage() {
                   <option value="">Nenhuma — percorre todas as mensagens</option>
                   <option value="agendamento">Parar quando o lead fizer um agendamento</option>
                 </select>
+              </div>
+
+              <div style={{ borderTop: "1px solid #2a1f18", paddingTop: 14 }}>
+                <label className="fu-label" style={{ marginBottom: 6 }}>Quando o lead responder (em qualquer momento)</label>
+                <select className="fu-input" value={modalFluxo.fluxo_ao_responder_id ?? ""} onChange={e => setModalFluxo(m => ({ ...m!, fluxo_ao_responder_id: e.target.value || null }))}>
+                  <option value="">Continuar no fluxo atual</option>
+                  {fluxos.filter(f => f.id !== modalFluxo.id).map(f => (
+                    <option key={f.id} value={f.id}>{f.nome} ({TIPO_LABELS[f.tipo]})</option>
+                  ))}
+                </select>
+                {modalFluxo.fluxo_ao_responder_id && (
+                  <p style={{ fontSize: 11, color: "#34d399", marginTop: 6 }}>
+                    Assim que o lead responder, ele sai deste fluxo e entra em "{fluxos.find(f => f.id === modalFluxo.fluxo_ao_responder_id)?.nome ?? "..."}".
+                  </p>
+                )}
               </div>
 
               <div style={{ borderTop: "1px solid #2a1f18", paddingTop: 14 }}>
