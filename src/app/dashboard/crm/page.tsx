@@ -195,7 +195,6 @@ export default function CRMPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const gravTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoEnviarRef = useRef(false);
-  const leadSelecionadoRef = useRef(leadSelecionado);
   const canalRef = useRef(canal);
 
   // ── templates ─────────────────────────────────────────────────────────────
