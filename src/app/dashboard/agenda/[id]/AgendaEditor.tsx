@@ -306,6 +306,22 @@ export default function AgendaEditor({ pessoa, googleStatus }: Props) {
                   {DURACOES.map(d => (
                     <button key={d} className={`ed-chip ${duracao === d ? 'chip-on' : ''}`} onClick={() => setDuracao(d)} type="button">{d} min</button>
                   ))}
+                  <div className={`ed-chip-custom ${!DURACOES.includes(duracao) ? 'chip-on' : ''}`}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={480}
+                      value={DURACOES.includes(duracao) ? '' : duracao}
+                      onChange={e => {
+                        const v = parseInt(e.target.value, 10)
+                        if (!isNaN(v) && v > 0) setDuracao(v)
+                        else if (e.target.value === '') setDuracao(0)
+                      }}
+                      placeholder="Outro"
+                      className="ed-chip-custom-input"
+                    />
+                    <span className="ed-chip-custom-suffix">min</span>
+                  </div>
                 </div>
               </div>
               <div className="ed-field">
@@ -444,7 +460,14 @@ const css = `
   .ed-chip{background:rgba(255,255,255,.03);border:1px solid #2a1f18;border-radius:20px;padding:4px 12px;font-size:12px;color:#7a6e5e;cursor:pointer;font-family:inherit;transition:all .15s;}
   .ed-chip:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
   .chip-on{background:rgba(194,144,77,.1)!important;border-color:rgba(194,144,77,.4)!important;color:#c2904d!important;font-weight:600;}
-  .ed-duracao-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .ed-duracao-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .ed-chip-custom{display:inline-flex;align-items:center;gap:4px;background:transparent;border:1px solid #2a1f18;border-radius:8px;padding:0 10px;height:32px;transition:border-color .15s,color .15s;}
+  .ed-chip-custom:hover{border-color:rgba(194,144,77,.3);}
+  .ed-chip-custom.chip-on{background:rgba(194,144,77,.1);border-color:rgba(194,144,77,.4);}
+  .ed-chip-custom-input{width:52px;background:transparent;border:none;outline:none;color:#c2904d;font-size:13px;font-weight:600;text-align:right;padding:0;}
+  .ed-chip-custom-input::placeholder{color:#4a3e30;font-weight:400;}
+  .ed-chip-custom-input::-webkit-outer-spin-button,.ed-chip-custom-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .ed-chip-custom-suffix{font-size:13px;color:#c2904d;}
   .ed-slug-row{display:flex;align-items:center;gap:0;}
   .ed-slug-prefix{background:#111009;border:1px solid #2a1f18;border-right:none;border-radius:10px 0 0 10px;padding:10px 12px;font-size:13px;color:#4a3e30;font-family:monospace;white-space:nowrap;}
   .ed-slug-input{border-radius:0 10px 10px 0!important;}
