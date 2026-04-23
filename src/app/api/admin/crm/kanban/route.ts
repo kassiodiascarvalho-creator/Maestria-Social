@@ -11,6 +11,7 @@ export async function GET() {
     (supabase as any)
       .from('leads')
       .select('id, nome, email, whatsapp, qs_total, nivel_qs, pilar_fraco, scores, status_lead, etiqueta, pipeline_etapa, origem, criado_em, notas_crm')
+      .or('via_disparo.is.null,via_disparo.eq.false,disparo_confirmado.eq.true')
       .order('criado_em', { ascending: false })
       .limit(500),
     supabase

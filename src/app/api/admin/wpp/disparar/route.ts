@@ -330,6 +330,8 @@ async function sincronizarContatosComoLeads(
               origem: listaNome,
               etiqueta: 'ia_atendendo',
               status_lead: 'frio',
+              via_disparo: true,
+              disparo_confirmado: false,
             },
             { onConflict: 'whatsapp', ignoreDuplicates: false }
           )
@@ -391,6 +393,9 @@ async function salvarDisparoNaConversa(
 
     if (inserts.length > 0) {
       await db.from('conversas').insert(inserts)
+      // Marca leads com envio confirmado para exibição no CRM/Leads
+      const leadIds = [...new Set(inserts.map(i => i.lead_id))]
+      await db.from('leads').update({ disparo_confirmado: true }).in('id', leadIds)
     }
   } catch (err) {
     console.error('[disparo] Erro ao salvar conversa:', err)

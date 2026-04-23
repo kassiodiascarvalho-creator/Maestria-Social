@@ -21,7 +21,8 @@
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/cadencia/flows\")",
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/admin/cadencia/gerar-ia\")",
       "Bash(mkdir -p \"c:/Users/kassi/Maestria-Social/src/app/api/cron/processar-cadencia\")",
-      "Bash(node -e \"require\\('ai'\\); require\\('@ai-sdk/openai'\\); console.log\\('ok'\\)\")"
+      "Bash(node -e \"require\\('ai'\\); require\\('@ai-sdk/openai'\\); console.log\\('ok'\\)\")",
+      "Bash(xargs basename *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\crm\\conversas",
@@ -31,7 +32,8 @@
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\forms\\[slug]",
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\forms",
       "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\cadencia\\flows\\[id]",
-      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\dashboard\\cadencia"
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\dashboard\\cadencia",
+      "c:\\Users\\kassi\\Maestria-Social\\src\\app\\api\\admin\\followup\\fluxos"
     ]
   }
 }

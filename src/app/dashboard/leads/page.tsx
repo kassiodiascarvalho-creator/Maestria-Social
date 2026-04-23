@@ -51,6 +51,8 @@ export default async function LeadsPage({
   let query: any = supabase
     .from("leads")
     .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,renda_mensal,criado_em,etiqueta,origem")
+    // Exibe apenas leads com envio confirmado OU leads não oriundos de disparo (formulários, manuais)
+    .or("via_disparo.is.null,via_disparo.eq.false,disparo_confirmado.eq.true")
     .order("criado_em", { ascending: false });
 
   const status = params.status?.trim();
