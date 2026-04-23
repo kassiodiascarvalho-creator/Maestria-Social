@@ -194,6 +194,9 @@ export default function CRMPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const gravTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoEnviarRef = useRef(false);
+  const leadSelecionadoRef = useRef(leadSelecionado);
+  const canalRef = useRef(canal);
 
   // ── templates ─────────────────────────────────────────────────────────────
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -235,8 +238,9 @@ export default function CRMPage() {
       .then(d => { if (Array.isArray(d)) setTemplates(d); }).catch(() => {});
   }, []);
 
-  // Mantém ref sincronizado para uso nos callbacks de realtime (evita closure stale)
+  // Mantém refs sincronizados para uso nos callbacks (evita closure stale)
   useEffect(() => { leadSelecionadoRef.current = leadSelecionado; }, [leadSelecionado]);
+  useEffect(() => { canalRef.current = canal; }, [canal]);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -346,13 +350,38 @@ export default function CRMPage() {
       const usedMime = recorder.mimeType || mimeType || "audio/webm";
       audioChunksRef.current = [];
       recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         const ext = usedMime.includes("ogg") ? "ogg" : usedMime.includes("mp4") ? "mp4" : "webm";
         const blob = new Blob(audioChunksRef.current, { type: usedMime });
-        setArquivo(new File([blob], `audio-gravado.${ext}`, { type: usedMime }));
+        const file = new File([blob], `audio-gravado.${ext}`, { type: usedMime });
         setGravando(false); setTempoGrav(0);
         if (gravTimerRef.current) clearInterval(gravTimerRef.current);
+
+        if (autoEnviarRef.current) {
+          autoEnviarRef.current = false;
+          const lead = leadSelecionadoRef.current;
+          if (!lead) { setArquivo(file); return; }
+          setEnviando(true); setErroEnvio("");
+          const form = new FormData();
+          form.append("lead_id", lead.id);
+          form.append("canal", canalRef.current);
+          form.append("file", file);
+          const res = await fetch("/api/admin/enviar-mensagem", { method: "POST", body: form });
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            setErroEnvio(d.error || "Erro ao enviar áudio");
+            setArquivo(file);
+          } else {
+            setArquivo(null);
+            const upd = { etiqueta: "humano_atendendo" };
+            setLeadSelecionado(prev => prev ? { ...prev, ...upd } : prev);
+            setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l));
+          }
+          setEnviando(false);
+        } else {
+          setArquivo(file);
+        }
       };
       recorder.start(250);
       mediaRecorderRef.current = recorder;
@@ -369,8 +398,12 @@ export default function CRMPage() {
       }
     }
   }
-  function pararGravacao() { mediaRecorderRef.current?.stop(); }
+  function pararGravacao() {
+    autoEnviarRef.current = true;
+    mediaRecorderRef.current?.stop();
+  }
   function cancelarGravacao() {
+    autoEnviarRef.current = false;
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.onstop = null;
       mediaRecorderRef.current.stop();
