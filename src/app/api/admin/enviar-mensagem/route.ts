@@ -114,6 +114,11 @@ export async function POST(req: NextRequest) {
       const publicUrl = await uploadParaStorage(supabase, file)
       mensagemSalva = tagMensagem(tipo, file.name, publicUrl)
 
+      // Para Meta API, audio/webm não é suportado — reempacota como audio/ogg (mesmo codec Opus, container diferente)
+      const fileParaMeta = (tipo === 'audio' && file.type.includes('webm'))
+        ? new File([buffer], file.name.replace(/\.webm$/, '') + '.ogg', { type: 'audio/ogg' })
+        : file
+
       if (canal === 'meta') {
         // Canal Oficial: Meta API diretamente
         const phoneNumberId = await getConfig('META_PHONE_NUMBER_ID')
@@ -121,14 +126,15 @@ export async function POST(req: NextRequest) {
         if (!phoneNumberId || !accessToken) {
           throw new Error('META_PHONE_NUMBER_ID ou META_ACCESS_TOKEN não configurados')
         }
-        const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
-        await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
+        const mediaId = await uploadMidiaParaMeta(fileParaMeta, phoneNumberId, accessToken)
+        await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, fileParaMeta.name, phoneNumberId, accessToken)
       } else {
-        // Canal Baileys: envia base64 direto (sem download de URL no servidor Baileys)
+        // Canal Baileys: envia base64 direto
+        // Para áudio webm: ptt=false (arquivo de áudio normal, sem exigir OGG)
         let enviado = false
         try {
-          const isAudio = tipo === 'audio'
-          await enviarMidiaBase64ViaBaileys(para, base64, file.type, tipo, file.name, undefined, isAudio ? true : undefined)
+          const ptt = tipo === 'audio' && !file.type.includes('webm') ? true : false
+          await enviarMidiaBase64ViaBaileys(para, base64, file.type, tipo, file.name, undefined, tipo === 'audio' ? ptt : undefined)
           enviado = true
         } catch (errBaileys) {
           console.warn('[enviar-mensagem] Baileys falhou, tentando Meta:', errBaileys)
@@ -140,8 +146,8 @@ export async function POST(req: NextRequest) {
           if (!phoneNumberId || !accessToken) {
             throw new Error('Mídia não pôde ser enviada: Baileys indisponível e Meta API não configurada')
           }
-          const mediaId = await uploadMidiaParaMeta(file, phoneNumberId, accessToken)
-          await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, file.name, phoneNumberId, accessToken)
+          const mediaId = await uploadMidiaParaMeta(fileParaMeta, phoneNumberId, accessToken)
+          await enviarMidiaViaMeta(para, mediaId, tipo, caption ?? undefined, fileParaMeta.name, phoneNumberId, accessToken)
         }
       }
     } else if (texto) {

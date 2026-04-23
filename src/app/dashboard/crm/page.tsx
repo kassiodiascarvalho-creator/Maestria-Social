@@ -740,6 +740,7 @@ export default function CRMPage() {
                         <span className="crm-conv-nome">{lead.nome}</span>
                         <span className="crm-conv-time">{tempoRelativo(lead.ultima_atividade)}</span>
                       </div>
+                      <div className="crm-conv-wpp">{lead.whatsapp}</div>
                       <div className="crm-conv-preview">
                         {lead.ultima_mensagem?.slice(0, 42)}{(lead.ultima_mensagem?.length ?? 0) > 42 ? "…" : ""}
                       </div>
@@ -1187,6 +1188,7 @@ const css = `
   .crm-conv-top{display:flex;justify-content:space-between;align-items:center;}
   .crm-conv-nome{font-size:13px;font-weight:600;color:#fff9e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .crm-conv-time{font-size:10px;color:#4a3e30;flex-shrink:0;}
+  .crm-conv-wpp{font-size:10px;color:#4a3e60;font-family:monospace;letter-spacing:.3px;margin-bottom:1px;}
   .crm-conv-preview{font-size:11px;color:#5a4e40;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .crm-conv-badges{display:flex;gap:5px;align-items:center;}
   .crm-etq-badge{font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;}

@@ -127,13 +127,21 @@ export default function FollowupPage() {
   async function salvarFluxo() {
     if (!modalFluxo) return;
     setSavingFluxo(true);
-    const body = { ...modalFluxo, agente_id: agenteId };
+    // Exclui followup_configs (relação nested) — não é coluna da tabela
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { followup_configs: _fc, criado_em: _ce, ...fluxoData } = modalFluxo as Fluxo;
+    const body = { ...fluxoData, agente_id: agenteId };
     const isNew = !modalFluxo.id;
-    await fetch(
+    const res = await fetch(
       isNew ? "/api/admin/followup/fluxos" : `/api/admin/followup/fluxos/${modalFluxo.id}`,
       { method: isNew ? "POST" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     );
     setSavingFluxo(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert("Erro ao salvar fluxo: " + (d.error ?? res.statusText));
+      return;
+    }
     setModalFluxo(null);
     carregar();
   }

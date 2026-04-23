@@ -5,7 +5,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   const { id } = await params
-  const body = await req.json()
+  const raw = await req.json()
+
+  // Só permite atualizar colunas que existem na tabela followup_fluxos
+  const COLUNAS_PERMITIDAS = ['nome', 'tipo', 'ativo', 'ao_finalizar', 'fluxo_destino_id',
+    'fluxo_ao_responder_id', 'condicao_parada', 'agente_id']
+  const body: Record<string, unknown> = {}
+  for (const col of COLUNAS_PERMITIDAS) {
+    if (Object.prototype.hasOwnProperty.call(raw, col)) body[col] = raw[col]
+  }
 
   const { data, error } = await supabase
     .from('followup_fluxos')
