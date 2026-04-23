@@ -11,6 +11,9 @@
       "phone": "5511917110736"
     }
   ],
+  "agentWebhookUrl": "https://www.maestriasocial.com/api/webhook/baileys",
   "agentWebhookSecret": "23926647302eefddb0dc6a224c6b1ac0f48a81ddd5f477ee",
-  "agentInstances": []
+  "agentInstances": [
+    "2"
+  ]
 }

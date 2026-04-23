@@ -338,38 +338,36 @@ export default function CRMPage() {
   // ── gravação de áudio ─────────────────────────────────────────────────────
   async function iniciarGravacao() {
     setErroEnvio("");
-    let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+        .find(m => MediaRecorder.isTypeSupported(m)) ?? "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const usedMime = recorder.mimeType || mimeType || "audio/webm";
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const ext = usedMime.includes("ogg") ? "ogg" : usedMime.includes("mp4") ? "mp4" : "webm";
+        const blob = new Blob(audioChunksRef.current, { type: usedMime });
+        setArquivo(new File([blob], `audio-gravado.${ext}`, { type: usedMime }));
+        setGravando(false); setTempoGrav(0);
+        if (gravTimerRef.current) clearInterval(gravTimerRef.current);
+      };
+      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      setGravando(true);
+      gravTimerRef.current = setInterval(() => setTempoGrav(t => t + 1), 1000);
     } catch (err) {
       const name = err instanceof DOMException ? err.name : "";
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setErroEnvio("Microfone bloqueado. Clique no 🔒 cadeado na barra de endereço → Microfone → Permitir sempre.");
+        setErroEnvio("Microfone bloqueado. Clique no 🔒 cadeado → Microfone → Permitir.");
       } else if (name === "NotFoundError") {
         setErroEnvio("Nenhum microfone encontrado no dispositivo.");
       } else {
-        setErroEnvio("Não foi possível acessar o microfone: " + (err instanceof Error ? err.message : String(err)));
+        setErroEnvio("Erro ao gravar áudio: " + (err instanceof Error ? err.message : String(err)));
       }
-      return;
     }
-    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
-      .find(m => MediaRecorder.isTypeSupported(m)) ?? "";
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-    const usedMime = recorder.mimeType || mimeType || "audio/webm";
-    audioChunksRef.current = [];
-    recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-    recorder.onstop = () => {
-      stream.getTracks().forEach(t => t.stop());
-      const ext = usedMime.includes("ogg") ? "ogg" : usedMime.includes("mp4") ? "mp4" : "webm";
-      const blob = new Blob(audioChunksRef.current, { type: usedMime });
-      setArquivo(new File([blob], `audio-gravado.${ext}`, { type: usedMime }));
-      setGravando(false); setTempoGrav(0);
-      if (gravTimerRef.current) clearInterval(gravTimerRef.current);
-    };
-    recorder.start(250);
-    mediaRecorderRef.current = recorder;
-    setGravando(true);
-    gravTimerRef.current = setInterval(() => setTempoGrav(t => t + 1), 1000);
   }
   function pararGravacao() { mediaRecorderRef.current?.stop(); }
   function cancelarGravacao() {

@@ -26,6 +26,12 @@ const EMPTY_REENG: Omit<FollowupConfig, "id"> = {
   horas_antes: null, horas_sem_resposta: 2, mensagem: "", ordem: 0,
 };
 
+function formatarTempo(horas: number | null | undefined): string {
+  if (horas == null) return "—";
+  if (horas < 1) return `${Math.round(horas * 60)} min`;
+  return `${horas}h`;
+}
+
 export default function FollowupPage() {
   const [agentes, setAgentes] = useState<Agente[]>([]);
   const [agenteId, setAgenteId] = useState<string>("");
@@ -33,6 +39,7 @@ export default function FollowupPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [modal, setModal] = useState<Partial<FollowupConfig> | null>(null);
+  const [modalUnidade, setModalUnidade] = useState<"minutos" | "horas">("horas");
   const [tab, setTab] = useState<"lembrete_reuniao" | "reengajamento">("lembrete_reuniao");
 
   useEffect(() => {
@@ -87,7 +94,10 @@ export default function FollowupPage() {
   }
 
   function novoModal(tipo: "lembrete_reuniao" | "reengajamento") {
-    setModal(tipo === "lembrete_reuniao" ? { ...EMPTY_LEMBRETE } : { ...EMPTY_REENG });
+    const cfg = tipo === "lembrete_reuniao" ? { ...EMPTY_LEMBRETE } : { ...EMPTY_REENG };
+    const val = tipo === "lembrete_reuniao" ? cfg.horas_antes : cfg.horas_sem_resposta;
+    setModalUnidade(val != null && val < 1 ? "minutos" : "horas");
+    setModal(cfg);
   }
 
   function inserirVariavel(v: string) {
@@ -140,10 +150,10 @@ export default function FollowupPage() {
               {lembretes.length === 0 && <p style={{ color: "#4a3e30", fontSize: 13 }}>Nenhum lembrete configurado.</p>}
               {lembretes.map(c => (
                 <ConfigCard key={c.id} cfg={c} saving={saving === c.id}
-                  onEdit={() => setModal({ ...c })}
+                  onEdit={() => { setModalUnidade(c.horas_antes != null && c.horas_antes < 1 ? "minutos" : "horas"); setModal({ ...c }); }}
                   onToggle={() => toggleAtivo(c)}
                   onDelete={() => excluir(c.id)}
-                  label={`${c.horas_antes}h antes da reunião`}
+                  label={`${formatarTempo(c.horas_antes)} antes da reunião`}
                 />
               ))}
             </div>
@@ -160,10 +170,10 @@ export default function FollowupPage() {
               {reengajamentos.length === 0 && <p style={{ color: "#4a3e30", fontSize: 13 }}>Nenhum reengajamento configurado.</p>}
               {reengajamentos.map(c => (
                 <ConfigCard key={c.id} cfg={c} saving={saving === c.id}
-                  onEdit={() => setModal({ ...c })}
+                  onEdit={() => { setModalUnidade(c.horas_sem_resposta != null && c.horas_sem_resposta < 1 ? "minutos" : "horas"); setModal({ ...c }); }}
                   onToggle={() => toggleAtivo(c)}
                   onDelete={() => excluir(c.id)}
-                  label={`${c.horas_sem_resposta}h sem resposta`}
+                  label={`${formatarTempo(c.horas_sem_resposta)} sem resposta`}
                 />
               ))}
             </div>
@@ -190,15 +200,39 @@ export default function FollowupPage() {
 
               {modal.tipo === "lembrete_reuniao" && (
                 <div>
-                  <label className="fu-label">Horas antes da reunião</label>
-                  <input className="fu-input" type="number" min={1} value={modal.horas_antes ?? ""} onChange={e => setModal(m => ({ ...m!, horas_antes: Number(e.target.value) }))} placeholder="Ex: 24" />
+                  <label className="fu-label">Quanto tempo antes da reunião</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input className="fu-input" type="number" min={1} style={{ flex: 1 }}
+                      value={modal.horas_antes != null ? (modalUnidade === "minutos" ? Math.round(modal.horas_antes * 60) : modal.horas_antes) : ""}
+                      onChange={e => { const n = Number(e.target.value); setModal(m => ({ ...m!, horas_antes: modalUnidade === "minutos" ? n / 60 : n })); }}
+                      placeholder={modalUnidade === "minutos" ? "Ex: 30" : "Ex: 24"} />
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {(["minutos", "horas"] as const).map(u => (
+                        <button key={u} className={`fu-unit-btn${modalUnidade === u ? " fu-unit-active" : ""}`} onClick={() => setModalUnidade(u)}>
+                          {u === "minutos" ? "min" : "hrs"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
               {modal.tipo === "reengajamento" && (
                 <div>
-                  <label className="fu-label">Horas sem resposta do lead</label>
-                  <input className="fu-input" type="number" min={1} value={modal.horas_sem_resposta ?? ""} onChange={e => setModal(m => ({ ...m!, horas_sem_resposta: Number(e.target.value) }))} placeholder="Ex: 2" />
+                  <label className="fu-label">Tempo sem resposta do lead</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input className="fu-input" type="number" min={1} style={{ flex: 1 }}
+                      value={modal.horas_sem_resposta != null ? (modalUnidade === "minutos" ? Math.round(modal.horas_sem_resposta * 60) : modal.horas_sem_resposta) : ""}
+                      onChange={e => { const n = Number(e.target.value); setModal(m => ({ ...m!, horas_sem_resposta: modalUnidade === "minutos" ? n / 60 : n })); }}
+                      placeholder={modalUnidade === "minutos" ? "Ex: 30" : "Ex: 2"} />
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {(["minutos", "horas"] as const).map(u => (
+                        <button key={u} className={`fu-unit-btn${modalUnidade === u ? " fu-unit-active" : ""}`} onClick={() => setModalUnidade(u)}>
+                          {u === "minutos" ? "min" : "hrs"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -296,4 +330,7 @@ const css = `
   .fu-btn-save{background:#c2904d;border:none;color:#0e0f09;padding:9px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s;font-family:inherit;}
   .fu-btn-save:hover:not(:disabled){background:#d4a060;}
   .fu-btn-save:disabled{opacity:.5;cursor:default;}
+  .fu-unit-btn{background:#0e0f09;border:1px solid #2a1f18;color:#4a3e30;padding:0 14px;height:42px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s;white-space:nowrap;}
+  .fu-unit-btn:hover{color:#c8b99a;}
+  .fu-unit-active{background:rgba(194,144,77,.15);border-color:rgba(194,144,77,.3);color:#c2904d;}
 `;
