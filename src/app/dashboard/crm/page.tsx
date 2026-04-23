@@ -191,6 +191,7 @@ export default function CRMPage() {
   // ── gravação ──────────────────────────────────────────────────────────────
   const [gravando, setGravando] = useState(false);
   const [tempoGrav, setTempoGrav] = useState(0);
+  const [micPermissao, setMicPermissao] = useState<"unknown" | "granted" | "denied" | "prompt">("unknown");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const gravTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -240,6 +241,15 @@ export default function CRMPage() {
   // Mantém refs sincronizados para uso nos callbacks (evita closure stale)
   useEffect(() => { leadSelecionadoRef.current = leadSelecionado; }, [leadSelecionado]);
   useEffect(() => { canalRef.current = canal; }, [canal]);
+
+  // Monitora permissão de microfone em tempo real
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.permissions) return;
+    navigator.permissions.query({ name: "microphone" as PermissionName }).then(status => {
+      setMicPermissao(status.state as "granted" | "denied" | "prompt");
+      status.onchange = () => setMicPermissao(status.state as "granted" | "denied" | "prompt");
+    }).catch(() => {});
+  }, []);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -341,8 +351,20 @@ export default function CRMPage() {
   // ── gravação de áudio ─────────────────────────────────────────────────────
   async function iniciarGravacao() {
     setErroEnvio("");
+
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setErroEnvio("Seu navegador não suporta gravação de áudio. Use Chrome ou Firefox.");
+      return;
+    }
+
+    if (micPermissao === "denied") {
+      setErroEnvio("🔒 Microfone bloqueado. Clique no cadeado 🔒 na barra de endereço do navegador → Microfone → Permitir → recarregue a página.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      setMicPermissao("granted");
       const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
         .find(m => MediaRecorder.isTypeSupported(m)) ?? "";
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
@@ -387,13 +409,14 @@ export default function CRMPage() {
       setGravando(true);
       gravTimerRef.current = setInterval(() => setTempoGrav(t => t + 1), 1000);
     } catch (err) {
-      const name = err instanceof DOMException ? err.name : "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setErroEnvio("Microfone bloqueado. Clique no 🔒 cadeado → Microfone → Permitir.");
-      } else if (name === "NotFoundError") {
+      const errName = err instanceof Error ? err.name : "";
+      if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+        setMicPermissao("denied");
+        setErroEnvio("🔒 Microfone bloqueado. Clique no cadeado 🔒 na barra de endereço → Microfone → Permitir → recarregue a página.");
+      } else if (errName === "NotFoundError") {
         setErroEnvio("Nenhum microfone encontrado no dispositivo.");
       } else {
-        setErroEnvio("Erro ao gravar áudio: " + (err instanceof Error ? err.message : String(err)));
+        setErroEnvio("Erro ao gravar áudio (" + errName + "): " + (err instanceof Error ? err.message : String(err)));
       }
     }
   }
@@ -960,7 +983,11 @@ export default function CRMPage() {
                       )}
                       {/* Áudio: fica no canto direito, substitui envio quando não há texto */}
                       {!texto.trim() && !arquivo ? (
-                        <button className="crm-mic-btn" onClick={iniciarGravacao} title="Gravar áudio">
+                        <button
+                          className={`crm-mic-btn${micPermissao === "denied" ? " crm-mic-blocked" : ""}`}
+                          onClick={iniciarGravacao}
+                          title={micPermissao === "denied" ? "Microfone bloqueado — clique para ver como liberar" : "Gravar áudio (clique, grave, clique novamente para enviar)"}
+                        >
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                         </button>
                       ) : (
@@ -1285,8 +1312,10 @@ const css = `
   .crm-send-btn{width:38px;height:38px;background:#c2904d;border:none;border-radius:8px;color:#0e0f09;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;transition:background .15s;}
   .crm-send-btn:hover:not(:disabled){background:#d4a05d;}
   .crm-send-btn:disabled{opacity:.4;cursor:default;}
-  .crm-mic-btn{width:38px;height:38px;background:#1e1a12;border:1px solid #2a1f18;border-radius:8px;color:#7a6e5e;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s;}
+  .crm-mic-btn{width:38px;height:38px;background:#1e1a12;border:1px solid #2a1f18;border-radius:8px;color:#7a6e5e;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,border-color .15s;}
   .crm-mic-btn:hover{background:#2a1f18;color:#c2904d;}
+  .crm-mic-blocked{border-color:rgba(239,68,68,.4);color:#ef4444;}
+  .crm-mic-blocked:hover{background:rgba(239,68,68,.1);color:#ef4444;}
   .crm-input-hint{font-size:10px;color:#2a2218;text-align:center;}
 
   /* Overlays */
