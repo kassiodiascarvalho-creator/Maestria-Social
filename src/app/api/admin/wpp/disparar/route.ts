@@ -409,6 +409,7 @@ export async function POST(req: NextRequest) {
     const payload = await req.json()
     const lista_id: string = payload.lista_id
     const filtros: Filtros = payload.filtros ?? {}
+    const delayMs: number = typeof payload.delay_ms === 'number' ? Math.max(1000, payload.delay_ms) : 10000
     const apiProvider: 'meta' | 'zapi' | 'baileys' = ['zapi', 'baileys'].includes(payload.api_provider)
       ? payload.api_provider
       : 'meta'
@@ -640,7 +641,7 @@ export async function POST(req: NextRequest) {
       const baileysRes = await fetch(`${base}/disparar-lista`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys }),
+        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys, delayMs }),
         signal: AbortSignal.timeout(10000),
       })
 
@@ -682,12 +683,16 @@ export async function POST(req: NextRequest) {
     // ── Meta / Z-API: processa no Vercel (sem timeout para listas razoáveis) ──
     let enviados = 0
     let falhas = 0
-    const erros: string[] = []
+    const erros: { phone: string; nome: string; msg: string }[] = []
+    const enviadosLista: { phone: string; nome: string }[] = []
     const registrosConversa: Array<{ phone: string; mensagem: string }> = []
+    // Delay entre picadas de um mesmo contato (fixo pequeno para não travar)
+    const delayPicadas = 300
 
     for (const contato of contatosFiltrados) {
       let contatoOk = true
       let primeiroTextoEnviado: string | null = null
+      const nome = contato.nome || ''
 
       if (apiProvider === 'zapi') {
         for (const msg of mensagens) {
@@ -706,10 +711,10 @@ export async function POST(req: NextRequest) {
             }
           } catch (err) {
             contatoOk = false
-            erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
+            erros.push({ phone: contato.telefone, nome, msg: err instanceof Error ? err.message : String(err) })
             break
           }
-          if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
+          if (mensagens.length > 1) await new Promise(r => setTimeout(r, delayPicadas))
         }
       } else {
         // ── Meta API: respeita janela 24h ──
@@ -736,10 +741,10 @@ export async function POST(req: NextRequest) {
               }
             } catch (err) {
               contatoOk = false
-              erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
+              erros.push({ phone: contato.telefone, nome, msg: err instanceof Error ? err.message : String(err) })
               break
             }
-            if (mensagens.length > 1) await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
+            if (mensagens.length > 1) await new Promise(r => setTimeout(r, delayPicadas))
           }
         } else {
           const templatesDaFila = mensagens.filter(m => m.tipo === 'template')
@@ -751,16 +756,13 @@ export async function POST(req: NextRequest) {
                 if (!primeiroTextoEnviado) primeiroTextoEnviado = `[template: ${msg.template_name}]`
               } catch (err) {
                 contatoOk = false
-                erros.push(`${contato.telefone}: ${err instanceof Error ? err.message : String(err)}`)
+                erros.push({ phone: contato.telefone, nome, msg: err instanceof Error ? err.message : String(err) })
                 break
               }
-              if (templatesDaFila.length > 1) await new Promise(r => setTimeout(r, 200))
+              if (templatesDaFila.length > 1) await new Promise(r => setTimeout(r, delayPicadas))
             }
           } else if (templatePadrao) {
             const c = contato as Record<string, unknown>
-            // Usa template_param_count do config para não enviar params errados.
-            // Se META_TEMPLATE_PARAM_COUNT não estiver definido, envia sem vars
-            // (templates sem parâmetros funcionam; com params o user precisa configurar a contagem)
             const paramCountStr = await getConfig('META_TEMPLATE_PARAM_COUNT')
             const paramCount = paramCountStr ? parseInt(paramCountStr, 10) : 0
             const pool = [(contato.nome || 'Lead') as string, String(c.qs_total ?? 0), (c.pilar_fraco as string) || 'N/A']
@@ -775,22 +777,23 @@ export async function POST(req: NextRequest) {
               if (!primeiroTextoEnviado) primeiroTextoEnviado = `[template: ${templatePadrao}]`
             } catch (err) {
               contatoOk = false
-              erros.push(`${contato.telefone} (template): ${err instanceof Error ? err.message : String(err)}`)
+              erros.push({ phone: contato.telefone, nome, msg: `(template): ${err instanceof Error ? err.message : String(err)}` })
             }
           } else {
             contatoOk = false
-            erros.push(`${contato.telefone}: fora da janela 24h e nenhum template configurado.`)
+            erros.push({ phone: contato.telefone, nome, msg: 'fora da janela 24h e nenhum template configurado.' })
           }
         }
       }
 
       if (contatoOk) {
         enviados++
+        enviadosLista.push({ phone: normalizarTelefone(contato.telefone), nome })
         if (primeiroTextoEnviado) {
           registrosConversa.push({ phone: normalizarTelefone(contato.telefone), mensagem: primeiroTextoEnviado })
         }
       } else falhas++
-      await new Promise(r => setTimeout(r, 300))
+      await new Promise(r => setTimeout(r, delayMs))
     }
 
     // Salva mensagens enviadas no histórico de conversa dos leads
@@ -810,7 +813,7 @@ export async function POST(req: NextRequest) {
       falhas,
     })
 
-    return NextResponse.json({ ok: true, total: contatosFiltrados.length, enviados, falhas, erros })
+    return NextResponse.json({ ok: true, total: contatosFiltrados.length, enviados, falhas, erros, enviados_phones: enviadosLista })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

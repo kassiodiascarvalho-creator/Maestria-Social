@@ -127,9 +127,10 @@ export default function WhatsAppPage() {
 
   // Disparo
   const [disparando, setDisparando] = useState(false)
-  const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: string[] } | null>(null)
+  const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: { phone: string; nome: string; msg: string }[]; enviados_phones?: { phone: string; nome: string }[] } | null>(null)
   const [disparoErro, setDisparoErro] = useState("")
   const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
+  const [intervaloSegundos, setIntervaloSegundos] = useState(10)
 
   // Instâncias Meta (múltiplos números)
   type MetaInstancia = { id: string; label: string; phone: string | null; meta_phone_number_id: string; meta_access_token: string; principal: boolean }
@@ -166,9 +167,26 @@ export default function WhatsAppPage() {
   }, [metaInstSelecionada])
 
   // Baileys job — progresso em tempo real
-  type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "concluido" | "erro"; erroGeral?: string }
+  type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "pausado" | "concluido" | "erro"; erroGeral?: string }
   const [baileysJob, setBaileysJob] = useState<BaileysJob | null>(null)
+  const [pausando, setPausando] = useState(false)
   const baileysJobIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function pausarResumir(jobId: string, acao: "pause" | "resume") {
+    setPausando(true)
+    try {
+      const res = await fetch(`/api/admin/wpp/baileys-job`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, acao }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setBaileysJob(prev => prev ? { ...prev, status: data.status ?? prev.status } : prev)
+      }
+    } catch { /* servidor inacessível */ }
+    setPausando(false)
+  }
 
   function iniciarPollingJob(jobId: string, total: number) {
     if (baileysJobIntervalRef.current) clearInterval(baileysJobIntervalRef.current)
@@ -538,32 +556,45 @@ export default function WhatsAppPage() {
     total: number,
     enviados: number,
     falhas: number,
-    erros: { phone: string; msg: string }[] | string[]
+    erros: { phone: string; nome?: string; msg: string }[] | string[],
+    enviadosPhones?: { phone: string; nome: string }[]
   ) {
     const linhas: string[] = []
-    linhas.push("Resumo")
+
+    // Resumo
+    linhas.push("RESUMO")
     linhas.push(`Total,${total}`)
     linhas.push(`Enviados,${enviados}`)
     linhas.push(`Falhas,${falhas}`)
     linhas.push("")
 
+    // Enviados
+    if (enviadosPhones && enviadosPhones.length > 0) {
+      linhas.push("ENVIADOS")
+      linhas.push("Nome,Telefone")
+      for (const e of enviadosPhones) {
+        linhas.push(`"${(e.nome || "").replace(/"/g, '""')}","${e.phone}"`)
+      }
+      linhas.push("")
+    }
+
+    // Não enviados (falhas)
     if (erros.length > 0) {
-      linhas.push("Erros")
-      linhas.push("Telefone,Motivo")
+      linhas.push("NÃO ENVIADOS")
+      linhas.push("Nome,Telefone,Motivo")
       for (const e of erros) {
         if (typeof e === "string") {
-          // formato "phone: mensagem"
           const sep = e.indexOf(": ")
           const phone = sep > -1 ? e.slice(0, sep) : e
           const msg = sep > -1 ? e.slice(sep + 2) : ""
-          linhas.push(`"${phone}","${msg.replace(/"/g, '""')}"`)
+          linhas.push(`"","${phone}","${msg.replace(/"/g, '""')}"`)
         } else {
-          linhas.push(`"${e.phone}","${e.msg.replace(/"/g, '""')}"`)
+          linhas.push(`"${(e.nome || "").replace(/"/g, '""')}","${e.phone}","${e.msg.replace(/"/g, '""')}"`)
         }
       }
     }
 
-    const blob = new Blob([linhas.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const blob = new Blob(["\uFEFF" + linhas.join("\n")], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -609,6 +640,7 @@ export default function WhatsAppPage() {
         api_provider: apiProvider,
         baileys_instance_id: baileysInstSelecionada,
         meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
+        delay_ms: intervaloSegundos * 1000,
       }),
     })
     const data = await res.json()
@@ -625,7 +657,7 @@ export default function WhatsAppPage() {
       iniciarPollingJob(data.jobId, data.total)
     } else {
       // Meta / Z-API: resultado imediato
-      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas, erros: data.erros })
+      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas, erros: data.erros, enviados_phones: data.enviados_phones })
     }
   }
 
@@ -635,7 +667,7 @@ export default function WhatsAppPage() {
     if (m.tipo === "text") return m.conteudo.trim().length > 0
     return m.conteudo.length > 0 // URL da mídia
   })
-  const podeDisparar = listaAtiva && contatos.length > 0 && filaValida && !disparando && baileysJob?.status !== "rodando"
+  const podeDisparar = listaAtiva && contatos.length > 0 && filaValida && !disparando && baileysJob?.status !== "rodando" && baileysJob?.status !== "pausado"
 
   return (
     <>
@@ -1393,6 +1425,16 @@ export default function WhatsAppPage() {
                         <span className="wpp-disparo-count">
                           {contatos.length} destinatário{contatos.length !== 1 ? "s" : ""} × {fila.length} msg{fila.length !== 1 ? "s" : ""}
                         </span>
+                        <div className="wpp-intervalo-wrap" title="Intervalo entre cada envio">
+                          <span style={{ fontSize: 11, color: "#4a3e30" }}>⏱</span>
+                          <input
+                            className="wpp-intervalo-input"
+                            type="number" min={1} max={120}
+                            value={intervaloSegundos}
+                            onChange={e => setIntervaloSegundos(Math.max(1, Math.min(120, Number(e.target.value))))}
+                          />
+                          <span style={{ fontSize: 11, color: "#4a3e30" }}>s/envio</span>
+                        </div>
                       </div>
                       <button
                         className="wpp-btn wpp-btn-disparo"
@@ -1403,7 +1445,9 @@ export default function WhatsAppPage() {
                           ? "Preparando disparo..."
                           : baileysJob?.status === "rodando"
                           ? `Aguardando... ${baileysJob.enviados + baileysJob.falhas}/${baileysJob.total}`
-                          : `Disparar ${fila.length} mensagem${fila.length !== 1 ? "s" : ""} para ${contatos.length} contato${contatos.length !== 1 ? "s" : ""}`}
+                          : baileysJob?.status === "pausado"
+                          ? "Pausado — clique para novo disparo"
+                          : `Disparar ${fila.length} msg${fila.length !== 1 ? "s" : ""} para ${contatos.length} contato${contatos.length !== 1 ? "s" : ""}`}
                       </button>
                     </div>
 
@@ -1423,7 +1467,7 @@ export default function WhatsAppPage() {
                         <button
                           className="wpp-btn wpp-btn-outline"
                           style={{ alignSelf: "flex-start", fontSize: 12, padding: "5px 12px" }}
-                          onClick={() => exportarResultadoCSV(disparoResult.total, disparoResult.enviados, disparoResult.falhas, disparoResult.erros ?? [])}
+                          onClick={() => exportarResultadoCSV(disparoResult.total, disparoResult.enviados, disparoResult.falhas, disparoResult.erros ?? [], disparoResult.enviados_phones)}
                         >
                           ↓ Exportar CSV
                         </button>
@@ -1433,9 +1477,19 @@ export default function WhatsAppPage() {
                     {/* Progresso Baileys — tempo real */}
                     {baileysJob && (
                       <div className={`wpp-result ${baileysJob.status === "erro" ? "erro" : "ok"}`}>
-                        {baileysJob.status === "rodando" ? (
+                        {(baileysJob.status === "rodando" || baileysJob.status === "pausado") ? (
                           <>
-                            <strong>Disparando via Baileys...</strong>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <strong>{baileysJob.status === "pausado" ? "⏸ Disparo pausado" : "Disparando via Baileys..."}</strong>
+                              <button
+                                className="wpp-btn wpp-btn-outline"
+                                style={{ fontSize: 12, padding: "4px 12px" }}
+                                onClick={() => pausarResumir(baileysJob.jobId, baileysJob.status === "pausado" ? "resume" : "pause")}
+                                disabled={pausando}
+                              >
+                                {pausando ? "..." : baileysJob.status === "pausado" ? "▶ Retomar" : "⏸ Pausar"}
+                              </button>
+                            </div>
                             <div className="wpp-progress-bar">
                               <div
                                 className="wpp-progress-fill"
@@ -1612,9 +1666,11 @@ const css = `
   .wpp-btn-primary:disabled { opacity:.5; cursor:default; }
   .wpp-provider-btn:hover:not(.active) { border-color:rgba(194,144,77,.4); color:#a07840; }
   .wpp-disparo-footer { margin-top:12px; padding-top:16px; border-top:1px solid #2a1f18; display:flex; flex-direction:column; gap:10px; }
-  .wpp-disparo-info { display:flex; align-items:center; gap:10px; }
+  .wpp-disparo-info { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .wpp-disparo-tag { font-size:12px; color:#c2904d; background:rgba(194,144,77,.08); border:1px solid rgba(194,144,77,.15); padding:3px 10px; border-radius:20px; }
   .wpp-disparo-count { font-size:12px; color:#4a3e30; }
+  .wpp-intervalo-wrap { display:flex; align-items:center; gap:5px; margin-left:auto; background:#111009; border:1px solid #2a1f18; border-radius:8px; padding:4px 10px; }
+  .wpp-intervalo-input { width:44px; background:transparent; border:none; color:#c8b99a; font-size:13px; font-family:inherit; outline:none; text-align:center; }
 
   /* Botões */
   .wpp-btn { padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; border:none; transition:all .15s; white-space:nowrap; }
