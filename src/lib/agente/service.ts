@@ -239,7 +239,9 @@ export async function encontrarAgentePorCanal(
     }
   }
 
-  return null
+  // 3ª passagem: último recurso — usa o primeiro agente ativo independente de canal
+  // Cobre o caso onde o agente existe mas não tem canais configurados explicitamente
+  return data[0] as AgenteDB
 }
 
 export async function responderAgenteParaLead(

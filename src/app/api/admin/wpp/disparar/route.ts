@@ -329,7 +329,7 @@ async function sincronizarContatosComoLeads(
               whatsapp: c.normalizado,
               origem: listaNome,
               etiqueta: 'ia_atendendo',
-              status_lead: 'morno',
+              status_lead: 'frio',
               via_disparo: true,
               disparo_confirmado: true,
             },
