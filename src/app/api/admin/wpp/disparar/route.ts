@@ -329,9 +329,9 @@ async function sincronizarContatosComoLeads(
               whatsapp: c.normalizado,
               origem: listaNome,
               etiqueta: 'ia_atendendo',
-              status_lead: 'frio',
+              status_lead: 'morno',
               via_disparo: true,
-              disparo_confirmado: false,
+              disparo_confirmado: true,
             },
             { onConflict: 'whatsapp', ignoreDuplicates: false }
           )
@@ -489,8 +489,8 @@ export async function POST(req: NextRequest) {
 
     const isLeads = listaInfo?.is_leads === true
 
-    // Sincroniza todos os contatos da lista como leads (upsert silencioso)
-    void sincronizarContatosComoLeads(db, lista_id, listaInfo?.nome ?? '')
+    // Sincroniza todos os contatos da lista como leads (await — deve concluir antes do envio)
+    await sincronizarContatosComoLeads(db, lista_id, listaInfo?.nome ?? '')
 
     // Busca template padrão para contatos fora da janela 24h
     const templatePadrao = await getConfig('META_TEMPLATE_NAME')
@@ -653,7 +653,7 @@ export async function POST(req: NextRequest) {
       const { jobId } = await baileysRes.json()
 
       // Salva primeiro texto de cada contato no histórico de conversa do lead
-      void salvarDisparoNaConversa(
+      await salvarDisparoNaConversa(
         db,
         listaParaBaileys.map(c => ({
           phone: normalizarTelefone(c.phone),
@@ -797,7 +797,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Salva mensagens enviadas no histórico de conversa dos leads
-    void salvarDisparoNaConversa(db, registrosConversa)
+    await salvarDisparoNaConversa(db, registrosConversa)
 
     // Registra disparo
     const resumo = mensagens.map(m => m.tipo === 'template' ? `template:${m.template_name}` : m.tipo).join(' + ')
