@@ -15,6 +15,18 @@ async function saveDebug(etapa: string, detalhes: unknown) {
   } catch {}
 }
 
+// Normaliza JID do WhatsApp para número de telefone puro.
+// @s.whatsapp.net / @c.us → baseados em telefone, pode extrair.
+// @lid → ID interno multi-device, NÃO é telefone, retorna null.
+// @g.us → grupo, ignora.
+function extrairTelefoneDeJID(raw: string): string | null {
+  if (raw.includes('@s.whatsapp.net') || raw.includes('@c.us')) {
+    return raw.split('@')[0]
+  }
+  if (raw.includes('@')) return null // @lid, @g.us ou outro JID não resolvível
+  return raw
+}
+
 function normalizarTelefone(raw: string): { full: string; short: string } {
   const digits = raw.replace(/\D/g, '')
   const full = digits.startsWith('55') ? digits : `55${digits}`
@@ -104,11 +116,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    atualizarUltimaMsgUser(phone).catch(() => {})
+    // Resolve JID para telefone real antes de buscar o lead
+    const phoneParsed = extrairTelefoneDeJID(phone)
+    if (!phoneParsed) {
+      await saveDebug('jid_nao_resolvivel', {
+        phone,
+        instrucao: 'O servidor Baileys está enviando @lid em vez do número real. Configure-o para enviar o telefone (ex: 5511999999999) ou o JID @s.whatsapp.net.',
+      })
+      return NextResponse.json({ status: 'ok' })
+    }
+    const phoneReal = phoneParsed
 
-    const lead = await buscarLeadPorTelefone(phone)
+    atualizarUltimaMsgUser(phoneReal).catch(() => {})
+
+    const lead = await buscarLeadPorTelefone(phoneReal)
     if (!lead) {
-      await saveDebug('lead_nao_encontrado', { phone })
+      await saveDebug('lead_nao_encontrado', { phone: phoneReal, phoneOriginal: phone })
       return NextResponse.json({ status: 'ok' })
     }
 
@@ -118,9 +141,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok' })
     }
 
-    await saveDebug('processando', { leadId: lead.id, agenteId: agente.id, instanceId })
+    await saveDebug('processando', { leadId: lead.id, agenteId: agente.id, instanceId, phone: phoneReal })
     await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente, messageId)
-    await saveDebug('respondeu', { leadId: lead.id })
+    await saveDebug('respondeu', { leadId: lead.id, phone: phoneReal })
   } catch (err) {
     await saveDebug('erro', { msg: String(err) })
     console.error('[webhook/baileys]', err)
