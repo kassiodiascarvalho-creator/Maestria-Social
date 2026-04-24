@@ -170,21 +170,32 @@ export default function WhatsAppPage() {
   type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "pausado" | "concluido" | "erro"; erroGeral?: string }
   const [baileysJob, setBaileysJob] = useState<BaileysJob | null>(null)
   const [pausando, setPausando] = useState(false)
+  const [pauseErro, setPauseErro] = useState("")
+  // Guarda o status que o usuário definiu manualmente (evita o polling sobrescrever por alguns ciclos)
+  const statusOverrideRef = useRef<{ status: BaileysJob["status"]; expira: number } | null>(null)
   const baileysJobIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function pausarResumir(jobId: string, acao: "pause" | "resume") {
     setPausando(true)
+    setPauseErro("")
     try {
       const res = await fetch(`/api/admin/wpp/baileys-job`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId, acao }),
       })
+      const data = await res.json()
       if (res.ok) {
-        const data = await res.json()
-        setBaileysJob(prev => prev ? { ...prev, status: data.status ?? prev.status } : prev)
+        const novoStatus: BaileysJob["status"] = data.status ?? (acao === "pause" ? "pausado" : "rodando")
+        // Override por 6 segundos para não ser sobrescrito pelo polling imediatamente
+        statusOverrideRef.current = { status: novoStatus, expira: Date.now() + 6000 }
+        setBaileysJob(prev => prev ? { ...prev, status: novoStatus } : prev)
+      } else {
+        setPauseErro(data.error || `Falha ao ${acao === "pause" ? "pausar" : "retomar"}`)
       }
-    } catch { /* servidor inacessível */ }
+    } catch {
+      setPauseErro("Servidor Baileys inacessível")
+    }
     setPausando(false)
   }
 
@@ -195,8 +206,12 @@ export default function WhatsAppPage() {
         const res = await fetch(`/api/admin/wpp/baileys-job?jobId=${jobId}`)
         if (res.ok) {
           const job = await res.json()
-          setBaileysJob({ jobId, total, ...job })
+          // Se o usuário clicou em pausar/retomar recentemente, mantém o status local por mais tempo
+          const override = statusOverrideRef.current
+          const statusFinal = (override && Date.now() < override.expira) ? override.status : job.status
+          setBaileysJob({ jobId, total, ...job, status: statusFinal })
           if (job.status === "concluido" || job.status === "erro") {
+            statusOverrideRef.current = null
             clearInterval(baileysJobIntervalRef.current!)
             baileysJobIntervalRef.current = null
           }
@@ -610,6 +625,8 @@ export default function WhatsAppPage() {
     setDisparoResult(null)
     setDisparoErro("")
     setBaileysJob(null)
+    setPauseErro("")
+    statusOverrideRef.current = null
     if (baileysJobIntervalRef.current) { clearInterval(baileysJobIntervalRef.current); baileysJobIntervalRef.current = null }
 
     const mensagens = fila.map(m => {
@@ -1490,6 +1507,11 @@ export default function WhatsAppPage() {
                                 {pausando ? "..." : baileysJob.status === "pausado" ? "▶ Retomar" : "⏸ Pausar"}
                               </button>
                             </div>
+                            {pauseErro && (
+                              <div style={{ fontSize: 11, color: "#e07070", marginTop: 2 }}>
+                                ⚠ {pauseErro} — verifique se o servidor Baileys suporta pausa
+                              </div>
+                            )}
                             <div className="wpp-progress-bar">
                               <div
                                 className="wpp-progress-fill"

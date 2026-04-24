@@ -4,6 +4,17 @@ import { getConfig } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
 
+type JobStatus = 'rodando' | 'pausado' | 'concluido' | 'erro'
+
+// Normaliza status retornado pelo servidor Baileys (pode vir em inglês ou português)
+function normalizarStatus(raw: unknown): JobStatus {
+  const s = String(raw ?? '').toLowerCase()
+  if (s === 'pausado' || s === 'paused' || s === 'pausing') return 'pausado'
+  if (s === 'concluido' || s === 'completed' || s === 'done' || s === 'finished') return 'concluido'
+  if (s === 'erro' || s === 'error' || s === 'failed' || s === 'failure') return 'erro'
+  return 'rodando'
+}
+
 // GET /api/admin/wpp/baileys-job?jobId=xxx — consulta progresso de um job de disparo
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
@@ -23,7 +34,9 @@ export async function GET(req: NextRequest) {
       const data = await res.json().catch(() => ({}))
       return NextResponse.json({ error: data.error || 'Erro ao consultar job' }, { status: res.status })
     }
-    return NextResponse.json(await res.json())
+    const data = await res.json()
+    // Normaliza status para garantir compatibilidade com a UI (inglês ou português)
+    return NextResponse.json({ ...data, status: normalizarStatus(data.status) })
   } catch {
     return NextResponse.json({ error: 'Servidor Baileys offline ou inacessível' }, { status: 502 })
   }
@@ -44,6 +57,8 @@ export async function POST(req: NextRequest) {
   if (!apiUrl) return NextResponse.json({ error: 'BAILEYS_API_URL não configurada' }, { status: 400 })
 
   const base = apiUrl.replace(/\/$/, '')
+  const statusEsperado: JobStatus = acao === 'pause' ? 'pausado' : 'rodando'
+
   try {
     const res = await fetch(`${base}/job/${jobId}/${acao}`, {
       method: 'POST',
@@ -51,10 +66,15 @@ export async function POST(req: NextRequest) {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      return NextResponse.json({ error: data.error || `Falha ao ${acao === 'pause' ? 'pausar' : 'retomar'} job` }, { status: res.status })
+      return NextResponse.json(
+        { error: data.error || `Falha ao ${acao === 'pause' ? 'pausar' : 'retomar'} job` },
+        { status: res.status }
+      )
     }
     const data = await res.json().catch(() => ({}))
-    return NextResponse.json({ ok: true, status: data.status ?? (acao === 'pause' ? 'pausado' : 'rodando') })
+    // Usa statusEsperado como fallback se o servidor não retornar status
+    const status = data.status ? normalizarStatus(data.status) : statusEsperado
+    return NextResponse.json({ ok: true, status })
   } catch {
     return NextResponse.json({ error: 'Servidor Baileys offline ou inacessível' }, { status: 502 })
   }
