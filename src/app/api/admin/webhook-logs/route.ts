@@ -14,7 +14,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, cleared: true })
   }
 
-  const raw = (await getConfig('WEBHOOK_DEBUG_LOG')) || '[]'
+  const canal = searchParams.get('canal') ?? 'meta'
+  const chave = canal === 'baileys' ? 'BAILEYS_WEBHOOK_DEBUG' : 'WEBHOOK_DEBUG_LOG'
+  const raw = (await getConfig(chave)) || '[]'
   try {
     return NextResponse.json({ logs: JSON.parse(raw) })
   } catch {

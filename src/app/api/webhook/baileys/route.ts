@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getConfig } from '@/lib/config'
+import { getConfig, setConfig } from '@/lib/config'
 import { responderAgenteParaLead, encontrarAgentePorCanal } from '@/lib/agente/service'
 import { atualizarUltimaMsgUser } from '@/lib/wpp-leads'
 
 export const dynamic = 'force-dynamic'
+
+async function saveDebug(etapa: string, detalhes: unknown) {
+  try {
+    const existing = (await getConfig('BAILEYS_WEBHOOK_DEBUG')) || '[]'
+    const arr = JSON.parse(existing) as unknown[]
+    arr.push({ ts: new Date().toISOString(), etapa, detalhes })
+    await setConfig('BAILEYS_WEBHOOK_DEBUG', JSON.stringify(arr.slice(-30)))
+  } catch {}
+}
 
 function normalizarTelefone(raw: string): { full: string; short: string } {
   const digits = raw.replace(/\D/g, '')
@@ -53,7 +62,6 @@ async function buscarLeadPorTelefone(raw: string) {
   if (data) return data
 
   // Fallback: busca via wpp_contatos.lead_id (vínculo criado na sincronização do disparo)
-  // Garante que o webhook sempre encontra o mesmo lead que o disparo usou
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any
   const { data: contato } = await db
@@ -74,6 +82,7 @@ export async function POST(req: NextRequest) {
   if (secret) {
     const headerSecret = req.headers.get('x-baileys-secret')
     if (headerSecret !== secret) {
+      await saveDebug('auth_falhou', { headerSecret: headerSecret?.slice(0, 8) })
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
   }
@@ -82,11 +91,15 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json()
   } catch {
+    await saveDebug('body_invalido', {})
     return NextResponse.json({ status: 'ok' })
   }
 
   const { instanceId, phone, texto, messageId } = body
+  await saveDebug('recebido', { instanceId, phone, texto: texto?.slice(0, 50), messageId })
+
   if (!phone || !texto || !instanceId) {
+    await saveDebug('campos_faltando', { phone: !!phone, texto: !!texto, instanceId: !!instanceId })
     return NextResponse.json({ status: 'ok' })
   }
 
@@ -94,14 +107,22 @@ export async function POST(req: NextRequest) {
     atualizarUltimaMsgUser(phone).catch(() => {})
 
     const lead = await buscarLeadPorTelefone(phone)
-    if (!lead) return NextResponse.json({ status: 'ok' })
+    if (!lead) {
+      await saveDebug('lead_nao_encontrado', { phone })
+      return NextResponse.json({ status: 'ok' })
+    }
 
     const agente = await encontrarAgentePorCanal('baileys', instanceId)
-    // Sem agente para esta instância Baileys — não processa (evita resposta dupla
-    // quando o mesmo número está conectado a Baileys e Meta simultaneamente)
-    if (!agente) return NextResponse.json({ status: 'ok' })
+    if (!agente) {
+      await saveDebug('agente_nao_encontrado', { instanceId })
+      return NextResponse.json({ status: 'ok' })
+    }
+
+    await saveDebug('processando', { leadId: lead.id, agenteId: agente.id, instanceId })
     await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente, messageId)
+    await saveDebug('respondeu', { leadId: lead.id })
   } catch (err) {
+    await saveDebug('erro', { msg: String(err) })
     console.error('[webhook/baileys]', err)
   }
 
