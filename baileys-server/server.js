@@ -205,7 +205,21 @@ function criarInstancia(id, label) {
     if (!config.agentWebhookUrl) return
     // Não filtra por instância aqui — o Next.js decide qual agente responde
 
-    const phone = msg.from.replace(/@c\.us$|@s\.whatsapp\.net$/, '')
+    // Extrai número real do JID. @lid é ID interno do multi-device — usa getContact() para resolver.
+    let phone = msg.from
+    if (phone.includes('@lid')) {
+      try {
+        const contact = await msg.getContact()
+        phone = contact.number || contact.id?.user || phone.split('@')[0]
+        console.log(`[${id}] @lid resolvido para: ${phone}`)
+      } catch {
+        phone = phone.split('@')[0]
+        console.warn(`[${id}] Não foi possível resolver @lid — usando: ${phone}`)
+      }
+    } else {
+      phone = phone.replace(/@c\.us$|@s\.whatsapp\.net$/, '')
+    }
+
     let texto = msg.body || ''
 
     // Transcreve áudio/voz via Whisper quando não há texto
@@ -385,7 +399,7 @@ setInterval(() => {
 
 // POST /disparar-lista — recebe lista já personalizada, processa em background
 app.post('/disparar-lista', (req, res) => {
-  const { instanceId, contatos } = req.body
+  const { instanceId, contatos, delayMs } = req.body
   // contatos: [{ phone, mensagens: [{ type, content, caption, filename }] }]
 
   const instId = String(instanceId || '1')
@@ -398,6 +412,8 @@ app.post('/disparar-lista', (req, res) => {
     return res.status(400).json({ error: '"contatos" obrigatório e não pode estar vazio' })
   }
 
+  const intervalo = typeof delayMs === 'number' && delayMs >= 1000 ? delayMs : 10000
+
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
   jobs[jobId] = {
     total: contatos.length,
@@ -406,13 +422,14 @@ app.post('/disparar-lista', (req, res) => {
     erros: [],
     status: 'rodando',
     iniciadoEm: Date.now(),
+    delayMs: intervalo,
   }
 
   // Responde imediatamente com o jobId
   res.json({ ok: true, jobId, total: contatos.length })
 
   // Processa em background (sem await na resposta)
-  processarLista(jobId, instId, contatos).catch(err => {
+  processarLista(jobId, instId, contatos, intervalo).catch(err => {
     if (jobs[jobId]) {
       jobs[jobId].status = 'erro'
       jobs[jobId].erroGeral = err.message
@@ -425,6 +442,26 @@ app.get('/job/:jobId', (req, res) => {
   const job = jobs[req.params.jobId]
   if (!job) return res.status(404).json({ error: 'Job não encontrado ou expirado' })
   res.json(job)
+})
+
+// POST /job/:jobId/pause — pausa o job
+app.post('/job/:jobId/pause', (req, res) => {
+  const job = jobs[req.params.jobId]
+  if (!job) return res.status(404).json({ error: 'Job não encontrado' })
+  if (job.status !== 'rodando') return res.status(400).json({ error: `Job não está rodando (${job.status})` })
+  job.status = 'pausado'
+  console.log(`[Job ${req.params.jobId}] ⏸ Pausado`)
+  res.json({ ok: true, status: 'pausado' })
+})
+
+// POST /job/:jobId/resume — retoma o job
+app.post('/job/:jobId/resume', (req, res) => {
+  const job = jobs[req.params.jobId]
+  if (!job) return res.status(404).json({ error: 'Job não encontrado' })
+  if (job.status !== 'pausado') return res.status(400).json({ error: `Job não está pausado (${job.status})` })
+  job.status = 'rodando'
+  console.log(`[Job ${req.params.jobId}] ▶ Retomado`)
+  res.json({ ok: true, status: 'rodando' })
 })
 
 // Aguarda a instância ficar conectada (até timeoutMs ms)
@@ -444,11 +481,22 @@ function isFrameDetachedError(err) {
   return msg.includes('detached Frame') || msg.includes('Target closed') || msg.includes('Session closed')
 }
 
+// Aguarda enquanto o job estiver pausado (verifica a cada 1s)
+async function aguardarSeNecessario(jobId) {
+  while (jobs[jobId]?.status === 'pausado') {
+    await new Promise(r => setTimeout(r, 1000))
+  }
+}
+
 // Processa a lista em background
-async function processarLista(jobId, instId, contatos) {
+async function processarLista(jobId, instId, contatos, delayMs = 10000) {
   const job = jobs[jobId]
 
   for (const contato of contatos) {
+    // Aguarda se o job foi pausado
+    await aguardarSeNecessario(jobId)
+    if (job.status === 'erro' || job.status === 'concluido') return
+
     let inst = instances[instId]
     // Se instância desconectou no meio do caminho, aguarda até 30s reconectar
     if (!inst || inst.status !== 'conectado') {
@@ -503,10 +551,10 @@ async function processarLista(jobId, instId, contatos) {
     if (contatoOk) job.enviados++
     else job.falhas++
 
-    // Delay entre contatos: 2-8s (anti-ban)
+    // Delay entre contatos: usa o intervalo configurado pelo usuário (mínimo 1s)
     if (contatos.indexOf(contato) < contatos.length - 1) {
-      const delay = 2000 + Math.random() * 6000
-      await new Promise(r => setTimeout(r, delay))
+      const jitter = Math.random() * 1000 // ±1s de variação para anti-ban
+      await new Promise(r => setTimeout(r, delayMs + jitter))
     }
   }
 
@@ -542,9 +590,16 @@ app.get('/status', (req, res) => {
 })
 
 app.post('/disparar', async (req, res) => {
-  const inst = instances['1']
+  // Usa instância 1 se conectada; senão, usa a primeira instância conectada disponível
+  let inst = instances['1']
   if (!inst || inst.status !== 'conectado') {
-    return res.status(503).json({ error: 'WhatsApp não conectado. Escaneie o QR code.' })
+    const conectada = Object.values(instances).find(i => i.status === 'conectado')
+    if (conectada) {
+      inst = conectada
+      console.log(`[/disparar] Instância 1 offline — usando instância conectada: ${conectada.phone}`)
+    } else {
+      return res.status(503).json({ error: 'Nenhuma instância WhatsApp conectada.' })
+    }
   }
   const { phone, type, content, caption, filename, mimeType, ptt } = req.body
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })

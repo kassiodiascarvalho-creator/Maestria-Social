@@ -158,8 +158,18 @@ export async function POST(req: NextRequest) {
         try {
           await enviarViaBaileys(para, texto)
           enviado = true
-        } catch { /* fallback abaixo */ }
-        if (!enviado) await enviarMensagemWhatsApp(para, texto)
+        } catch (errBaileys) {
+          console.warn('[enviar-mensagem] Baileys falhou, tentando Meta:', errBaileys)
+        }
+        if (!enviado) {
+          try {
+            await enviarMensagemWhatsApp(para, texto)
+            enviado = true
+          } catch (errMeta) {
+            console.error('[enviar-mensagem] Meta também falhou:', errMeta)
+          }
+        }
+        if (!enviado) throw new Error('Não foi possível entregar a mensagem: Baileys offline e Meta indisponível')
       }
       mensagemSalva = texto
     }
