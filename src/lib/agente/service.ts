@@ -221,6 +221,7 @@ export async function encontrarAgentePorCanal(
   const { data } = await (supabase as any).from('agentes').select('*').eq('ativo', true)
   if (!data?.length) return null
 
+  // 1ª passagem: match exato (instanceId bate com canal configurado)
   for (const ag of data) {
     const canais = (ag.canais || []) as Array<{ provider: string; id: string }>
     const match = canais.some(c =>
@@ -228,6 +229,16 @@ export async function encontrarAgentePorCanal(
     )
     if (match) return ag as AgenteDB
   }
+
+  // 2ª passagem (Baileys apenas): fallback para qualquer agente com canal Baileys
+  // Garante que todas as instâncias respondem mesmo sem ID exato configurado
+  if (provider === 'baileys') {
+    for (const ag of data) {
+      const canais = (ag.canais || []) as Array<{ provider: string; id: string }>
+      if (canais.some(c => c.provider === 'baileys')) return ag as AgenteDB
+    }
+  }
+
   return null
 }
 
