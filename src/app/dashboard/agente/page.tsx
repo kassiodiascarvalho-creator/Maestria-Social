@@ -66,6 +66,8 @@ type Agente = {
   id: string;
   nome: string;
   descricao: string;
+  nome_persona: string;
+  descricao_papel: string;
   prompt: string;
   temperatura: number;
   modelo: string;
@@ -409,6 +411,28 @@ export default function AgentePage() {
                     onChange={e => update({ descricao: e.target.value })}
                     placeholder="Descrição (opcional)"
                   />
+
+                  {/* Persona — nome e papel visíveis no CRM e usados na transferência */}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="ag-field-label">Nome da persona</label>
+                      <input
+                        className="ag-desc-input"
+                        value={selecionado.nome_persona ?? ""}
+                        onChange={e => update({ nome_persona: e.target.value })}
+                        placeholder="Ex: Carlos, Ana, Ricardo…"
+                      />
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <label className="ag-field-label">Papel / especialidade</label>
+                      <input
+                        className="ag-desc-input"
+                        value={selecionado.descricao_papel ?? ""}
+                        onChange={e => update({ descricao_papel: e.target.value })}
+                        placeholder="Ex: especialista em vendas e matrículas"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Canais */}
@@ -817,6 +841,7 @@ const css = `
   .ag-toggle-label{font-size:12px;color:#7a6e5e;white-space:nowrap;}
   .ag-desc-input{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:10px 14px;font-size:13px;color:#7a6e5e;font-family:inherit;outline:none;transition:border-color .2s;}
   .ag-desc-input:focus{border-color:rgba(194,144,77,.3);}
+  .ag-field-label{display:block;font-size:11px;font-weight:600;color:#4a3e30;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
   .ag-canal-vazio{font-size:13px;color:#4a3e30;}
   .ag-canais{display:flex;flex-wrap:wrap;gap:10px;}
   .ag-canal{background:rgba(255,255,255,.02);border:1px solid #2a1f18;border-radius:12px;padding:12px 14px;cursor:pointer;font-family:inherit;transition:all .15s;text-align:left;min-width:160px;}

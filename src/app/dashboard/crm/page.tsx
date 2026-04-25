@@ -24,6 +24,7 @@ type KanbanLead = {
   criado_em: string; notas_crm: string | null;
   ultima_mensagem: string; ultima_role: string; ultima_atividade: string;
   num_qualificacoes: number;
+  agente_id: string | null;
 };
 type Qualificacao = { id: string; campo: string; valor: string; criado_em: string };
 type LeadDetalhe = KanbanLead & { qualificacoes: Qualificacao[] };
@@ -169,6 +170,7 @@ export default function CRMPage() {
 
   // ── chat ──────────────────────────────────────────────────────────────────
   const [leadSelecionado, setLeadSelecionado] = useState<KanbanLead | null>(null);
+  const [agentePersona, setAgentePersona] = useState<{ nome: string; papel: string | null } | null>(null);
   const [leadDetalhe, setLeadDetalhe] = useState<LeadDetalhe | null>(null);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
@@ -299,6 +301,7 @@ export default function CRMPage() {
   // ── seleciona lead ────────────────────────────────────────────────────────
   async function selecionarLead(lead: KanbanLead) {
     setLeadSelecionado(lead);
+    setAgentePersona(null);
     setView("chat");
     setErroEnvio(""); setMostrarEtiquetas(false);
     setArquivo(null); setCaption("");
@@ -315,6 +318,18 @@ export default function CRMPage() {
     setLoadingMsgs(false);
     if (detalhe && !detalhe.error) setLeadDetalhe(detalhe);
     setAgendamentos(Array.isArray(agend) ? agend.filter((a: Agendamento) => a.status === "pendente") : []);
+
+    // Busca nome_persona do agente responsável pelo lead
+    if (lead.agente_id) {
+      fetch(`/api/admin/agentes/${lead.agente_id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(ag => {
+          if (ag?.nome_persona || ag?.nome) {
+            setAgentePersona({ nome: ag.nome_persona || ag.nome, papel: ag.descricao_papel || null })
+          }
+        })
+        .catch(() => {})
+    }
   }
 
   // ── enviar mensagem ───────────────────────────────────────────────────────
@@ -775,6 +790,11 @@ export default function CRMPage() {
                   <div className="crm-chat-info">
                     <span className="crm-chat-nome">{leadSelecionado.nome}</span>
                     <span className="crm-chat-phone">{leadSelecionado.whatsapp}</span>
+                    {agentePersona && (
+                      <span className="crm-chat-agente" title={agentePersona.papel ?? ""}>
+                        🤖 {agentePersona.nome}{agentePersona.papel ? ` · ${agentePersona.papel}` : ""}
+                      </span>
+                    )}
                   </div>
                   <div className="crm-chat-actions">
                     <button className="crm-action-btn crm-btn-ia" onClick={() => trocarEtiqueta("ia_atendendo")}>🤖 IA</button>
@@ -1200,6 +1220,7 @@ const css = `
   .crm-placeholder-icon{font-size:48px;opacity:.3;}
   .crm-placeholder-sub{font-size:12px;color:#2a2218;}
   .crm-chat-header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #2a1f18;flex-shrink:0;background:#111009;}
+  .crm-chat-agente{font-size:11px;color:#7a6e5e;margin-top:2px;display:block;}
   .crm-chat-avatar{width:36px;height:36px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff9e6;flex-shrink:0;}
   .crm-chat-info{display:flex;flex-direction:column;flex:1;min-width:0;}
   .crm-chat-nome{font-size:14px;font-weight:600;color:#fff9e6;}

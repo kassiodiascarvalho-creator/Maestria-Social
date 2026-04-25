@@ -10,7 +10,7 @@ export async function GET() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from('leads')
-      .select('id, nome, email, whatsapp, qs_total, nivel_qs, pilar_fraco, scores, status_lead, etiqueta, pipeline_etapa, origem, criado_em, notas_crm')
+      .select('id, nome, email, whatsapp, qs_total, nivel_qs, pilar_fraco, scores, status_lead, etiqueta, pipeline_etapa, origem, criado_em, notas_crm, agente_id')
       .order('criado_em', { ascending: false })
       .limit(500),
     supabase

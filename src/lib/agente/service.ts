@@ -447,7 +447,28 @@ export async function responderAgenteParaLead(
   const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, agenteDB?.config?.condicoes_transferencia, jaAgendado)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
   const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
-  const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}`
+  // Se é o agente recepcionista (is_default), injeta lista de agentes disponíveis para transferência
+  let blocoAgentes = ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((agenteDB as any)?.is_default) {
+    const { data: outrosAgentes } = await (supabase as any)
+      .from('agentes')
+      .select('id, nome, nome_persona, descricao_papel')
+      .eq('ativo', true)
+      .eq('is_default', false)
+    if (outrosAgentes?.length) {
+      const lista = (outrosAgentes as Array<{ id: string; nome: string; nome_persona: string | null; descricao_papel: string | null }>)
+        .map(a => {
+          const personaNome = a.nome_persona || a.nome
+          const papel = a.descricao_papel ? `: ${a.descricao_papel}` : ''
+          return `- ${personaNome}${papel}`
+        })
+        .join('\n')
+      blocoAgentes = `\n\n---AGENTES DISPONÍVEIS---\nPara transferir o lead, use [TRANSFERIR:NomePersona] no final da sua mensagem (invisível para o lead).\nEscolha o agente mais adequado pelo interesse demonstrado:\n${lista}\n---FIM AGENTES---`
+    }
+  }
+
+  const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}${blocoAgentes}`
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },
@@ -701,18 +722,37 @@ export async function responderAgenteParaLead(
   }
 
   // ── Transferência para outro agente IA ──────────────────────────────────────
-  // O prompt do recepcionista pode incluir [TRANSFERIR:uuid-do-agente] para redirecionar o lead.
-  // O sistema detecta, atualiza lead.agente_id e remove o marcador da resposta enviada.
-  const matchTransfer = resposta.match(/\[TRANSFERIR:([a-f0-9-]{36})\]/i)
+  // Suporta [TRANSFERIR:NomePersona] ou [TRANSFERIR:uuid].
+  // Resolve nome → UUID automaticamente buscando por nome_persona ou nome.
+  const matchTransfer = resposta.match(/\[TRANSFERIR:([^\]]+)\]/i)
   if (matchTransfer) {
-    const novoAgenteId = matchTransfer[1]
+    const valor = matchTransfer[1].trim()
     resposta = resposta.replace(matchTransfer[0], '').trim()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
-      .from('leads')
-      .update({ agente_id: novoAgenteId })
-      .eq('id', leadId)
-    console.log(`[agente] Lead ${leadId} transferido para agente ${novoAgenteId}`)
+
+    let novoAgenteId: string | null = null
+
+    // Se for UUID direto
+    if (/^[a-f0-9-]{36}$/i.test(valor)) {
+      novoAgenteId = valor
+    } else {
+      // Resolve pelo nome_persona ou nome (case-insensitive)
+      const { data: agenteAlvo } = await (supabase as any)
+        .from('agentes')
+        .select('id, nome_persona, nome')
+        .eq('ativo', true)
+        .or(`nome_persona.ilike.${valor},nome.ilike.${valor}`)
+        .maybeSingle()
+      novoAgenteId = agenteAlvo?.id ?? null
+    }
+
+    if (novoAgenteId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('leads')
+        .update({ agente_id: novoAgenteId })
+        .eq('id', leadId)
+      console.log(`[agente] Lead ${leadId} transferido para agente ${novoAgenteId} (via "${valor}")`)
+    }
   }
 
   const respostaImediata = resposta
