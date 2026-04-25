@@ -797,26 +797,33 @@ export async function responderAgenteParaLead(
     }
   }
 
-  const respostaImediata = resposta
+  // Se há partes (|||), o histórico é salvo parte a parte no envio — não salva o bloco inteiro aqui
+  const temPartes = resposta.includes('|||')
+  const respostaImediata = temPartes
+    ? resposta.split('|||').map(p => p.trim()).filter(Boolean).join(' ')
+    : resposta
 
   // Dedup: evita inserir a mesma mensagem imediata duas vezes (webhook duplo)
-  const doisMin = new Date(Date.now() - 2 * 60 * 1000).toISOString()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count: jaRegistrado } = await (supabase as any)
-    .from('conversas')
-    .select('id', { count: 'exact', head: true })
-    .eq('lead_id', leadId)
-    .eq('role', 'assistant')
-    .eq('mensagem', respostaImediata)
-    .gte('criado_em', doisMin)
-  if (!jaRegistrado) {
+  // Quando tem partes, o save é feito no loop de envio — pula aqui
+  if (!temPartes) {
+    const doisMin = new Date(Date.now() - 2 * 60 * 1000).toISOString()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('conversas').insert({
-      lead_id: leadId,
-      role: 'assistant',
-      mensagem: respostaImediata,
-      agente_id: agenteDB?.id ?? null,
-    })
+    const { count: jaRegistrado } = await (supabase as any)
+      .from('conversas')
+      .select('id', { count: 'exact', head: true })
+      .eq('lead_id', leadId)
+      .eq('role', 'assistant')
+      .eq('mensagem', respostaImediata)
+      .gte('criado_em', doisMin)
+    if (!jaRegistrado) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('conversas').insert({
+        lead_id: leadId,
+        role: 'assistant',
+        mensagem: respostaImediata,
+        agente_id: agenteDB?.id ?? null,
+      })
+    }
   }
 
   if (dados.qualificacoes && dados.qualificacoes.length > 0) {
@@ -887,12 +894,36 @@ export async function responderAgenteParaLead(
 
   if (enviarWhatsApp && lead.whatsapp) {
     try {
-      // Envia texto (se houver)
       if (resposta) {
-        if (canal?.provider === 'baileys') {
-          await enviarViaBaileys(lead.whatsapp, resposta, canal.instanceId)
-        } else {
-          await enviarMensagemWhatsApp(lead.whatsapp, resposta)
+        // Divide em partes se o agente usou ||| como separador
+        const partes = resposta.split('|||').map(p => p.trim()).filter(Boolean)
+
+        for (let i = 0; i < partes.length; i++) {
+          const parte = partes[i]
+
+          // Delay de digitação proporcional ao tamanho — simula humano digitando
+          // mínimo 1s, máximo 4s, ~40ms por caractere + jitter aleatório
+          if (i > 0) {
+            const base = Math.max(1000, Math.min(4000, parte.length * 40))
+            const jitter = Math.floor(Math.random() * 800)
+            await new Promise(r => setTimeout(r, base + jitter))
+          }
+
+          if (canal?.provider === 'baileys') {
+            await enviarViaBaileys(lead.whatsapp, parte, canal.instanceId)
+          } else {
+            await enviarMensagemWhatsApp(lead.whatsapp, parte)
+          }
+
+          // Salva cada parte separada no histórico
+          if (partes.length > 1) {
+            await (supabase as any).from('conversas').insert({
+              lead_id: leadId,
+              role: 'assistant',
+              mensagem: parte,
+              agente_id: agenteDB?.id ?? null,
+            })
+          }
         }
       }
 
