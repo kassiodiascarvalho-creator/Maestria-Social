@@ -412,6 +412,7 @@ export async function POST(req: NextRequest) {
     const lista_id: string = payload.lista_id
     const filtros: Filtros = payload.filtros ?? {}
     const delayMs: number = typeof payload.delay_ms === 'number' ? Math.max(1000, payload.delay_ms) : 10000
+    const delayMsMax: number | null = typeof payload.delay_ms_max === 'number' && payload.delay_ms_max > delayMs ? payload.delay_ms_max : null
     const apiProvider: 'meta' | 'zapi' | 'baileys' = ['zapi', 'baileys'].includes(payload.api_provider)
       ? payload.api_provider
       : 'meta'
@@ -644,7 +645,7 @@ export async function POST(req: NextRequest) {
       const baileysRes = await fetch(`${base}/disparar-lista`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys, delayMs }),
+        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys, delayMs, ...(delayMsMax ? { delayMsMax } : {}) }),
         signal: AbortSignal.timeout(10000),
       })
 

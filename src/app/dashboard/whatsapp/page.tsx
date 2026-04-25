@@ -130,7 +130,9 @@ export default function WhatsAppPage() {
   const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: { phone: string; nome: string; msg: string }[]; enviados_phones?: { phone: string; nome: string }[] } | null>(null)
   const [disparoErro, setDisparoErro] = useState("")
   const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
-  const [intervaloSegundos, setIntervaloSegundos] = useState(10)
+  const [intervaloMin, setIntervaloMin] = useState(10)
+  const [intervaloMax, setIntervaloMax] = useState(60)
+  const [intervaloDinamico, setIntervaloDinamico] = useState(false)
 
   // Agente responsável pelo disparo
   type AgenteOpcao = { id: string; nome: string }
@@ -673,7 +675,8 @@ export default function WhatsAppPage() {
         api_provider: apiProvider,
         baileys_instance_id: baileysInstSelecionada,
         meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
-        delay_ms: intervaloSegundos * 1000,
+        delay_ms: intervaloDinamico ? intervaloMin * 1000 : intervaloMin * 1000,
+        delay_ms_max: intervaloDinamico ? intervaloMax * 1000 : undefined,
         agente_id: agenteSelecionado || undefined,
       }),
     })
@@ -1459,15 +1462,33 @@ export default function WhatsAppPage() {
                         <span className="wpp-disparo-count">
                           {contatos.length} destinatário{contatos.length !== 1 ? "s" : ""} × {fila.length} msg{fila.length !== 1 ? "s" : ""}
                         </span>
-                        <div className="wpp-intervalo-wrap" title="Intervalo entre cada envio">
+                        <div className="wpp-intervalo-wrap" title="Intervalo entre envios">
                           <span style={{ fontSize: 11, color: "#4a3e30" }}>⏱</span>
                           <input
                             className="wpp-intervalo-input"
-                            type="number" min={1} max={120}
-                            value={intervaloSegundos}
-                            onChange={e => setIntervaloSegundos(Math.max(1, Math.min(120, Number(e.target.value))))}
+                            type="number" min={1} max={300}
+                            value={intervaloMin}
+                            onChange={e => setIntervaloMin(Math.max(1, Math.min(300, Number(e.target.value))))}
                           />
-                          <span style={{ fontSize: 11, color: "#4a3e30" }}>s/envio</span>
+                          {intervaloDinamico && (
+                            <>
+                              <span style={{ fontSize: 11, color: "#4a3e30" }}>–</span>
+                              <input
+                                className="wpp-intervalo-input"
+                                type="number" min={intervaloMin} max={600}
+                                value={intervaloMax}
+                                onChange={e => setIntervaloMax(Math.max(intervaloMin, Math.min(600, Number(e.target.value))))}
+                              />
+                            </>
+                          )}
+                          <span style={{ fontSize: 11, color: "#4a3e30" }}>s</span>
+                          <button
+                            className={`wpp-intervalo-toggle${intervaloDinamico ? " wpp-intervalo-toggle-on" : ""}`}
+                            onClick={() => setIntervaloDinamico(v => !v)}
+                            title={intervaloDinamico ? "Intervalo dinâmico ativo — clique para fixo" : "Ativar intervalo dinâmico (sorteia entre mín e máx)"}
+                          >
+                            {intervaloDinamico ? "🎲 dinâmico" : "fixo"}
+                          </button>
                         </div>
                       </div>
                       {agentes.length > 0 && (
@@ -1729,6 +1750,9 @@ const css = `
   .wpp-agente-select:focus { border-color:rgba(194,144,77,.4); }
   .wpp-intervalo-wrap { display:flex; align-items:center; gap:5px; margin-left:auto; background:#111009; border:1px solid #2a1f18; border-radius:8px; padding:4px 10px; }
   .wpp-intervalo-input { width:44px; background:transparent; border:none; color:#c8b99a; font-size:13px; font-family:inherit; outline:none; text-align:center; }
+  .wpp-intervalo-toggle { background:transparent; border:1px solid #2a1f18; border-radius:6px; padding:2px 7px; font-size:10px; color:#4a3e30; cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .wpp-intervalo-toggle:hover { border-color:#c2904d44; color:#c8b99a; }
+  .wpp-intervalo-toggle-on { background:rgba(194,144,77,.12); border-color:rgba(194,144,77,.3); color:#c2904d; }
 
   /* Botões */
   .wpp-btn { padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; border:none; transition:all .15s; white-space:nowrap; }

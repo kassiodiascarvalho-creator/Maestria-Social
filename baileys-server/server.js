@@ -399,8 +399,8 @@ setInterval(() => {
 
 // POST /disparar-lista — recebe lista já personalizada, processa em background
 app.post('/disparar-lista', (req, res) => {
-  const { instanceId, contatos, delayMs } = req.body
   // contatos: [{ phone, mensagens: [{ type, content, caption, filename }] }]
+  const { instanceId, contatos, delayMs, delayMsMax } = req.body
 
   const instId = String(instanceId || '1')
   const inst = instances[instId]
@@ -412,7 +412,13 @@ app.post('/disparar-lista', (req, res) => {
     return res.status(400).json({ error: '"contatos" obrigatório e não pode estar vazio' })
   }
 
-  const intervalo = typeof delayMs === 'number' && delayMs >= 1000 ? delayMs : 10000
+  const intervaloMin = typeof delayMs === 'number' && delayMs >= 1000 ? delayMs : 10000
+  const intervaloMax = typeof delayMsMax === 'number' && delayMsMax > intervaloMin ? delayMsMax : null
+  // Função que sorteia delay entre min e max (ou usa fixo se não há max)
+  const sortearDelay = () => intervaloMax
+    ? Math.floor(intervaloMin + Math.random() * (intervaloMax - intervaloMin))
+    : intervaloMin
+  const intervalo = intervaloMin
 
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
   jobs[jobId] = {
@@ -429,7 +435,7 @@ app.post('/disparar-lista', (req, res) => {
   res.json({ ok: true, jobId, total: contatos.length })
 
   // Processa em background (sem await na resposta)
-  processarLista(jobId, instId, contatos, intervalo).catch(err => {
+  processarLista(jobId, instId, contatos, sortearDelay).catch(err => {
     if (jobs[jobId]) {
       jobs[jobId].status = 'erro'
       jobs[jobId].erroGeral = err.message
@@ -489,7 +495,9 @@ async function aguardarSeNecessario(jobId) {
 }
 
 // Processa a lista em background
-async function processarLista(jobId, instId, contatos, delayMs = 10000) {
+// getDelay pode ser número fixo ou função que retorna delay aleatório a cada chamada
+async function processarLista(jobId, instId, contatos, getDelay = 10000) {
+  const sortear = typeof getDelay === 'function' ? getDelay : () => getDelay
   const job = jobs[jobId]
 
   for (const contato of contatos) {
@@ -551,10 +559,11 @@ async function processarLista(jobId, instId, contatos, delayMs = 10000) {
     if (contatoOk) job.enviados++
     else job.falhas++
 
-    // Delay entre contatos: usa o intervalo configurado pelo usuário (mínimo 1s)
+    // Delay entre contatos: sorteia entre mín e máx (ou usa fixo)
     if (contatos.indexOf(contato) < contatos.length - 1) {
-      const jitter = Math.random() * 1000 // ±1s de variação para anti-ban
-      await new Promise(r => setTimeout(r, delayMs + jitter))
+      const delay = sortear()
+      console.log(`[Job ${jobId}] Aguardando ${(delay/1000).toFixed(1)}s antes do próximo envio...`)
+      await new Promise(r => setTimeout(r, delay))
     }
   }
 
