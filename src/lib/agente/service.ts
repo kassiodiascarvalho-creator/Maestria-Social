@@ -189,10 +189,14 @@ type AgenteConfig = {
 type AgenteDB = {
   id: string
   nome: string
+  nome_persona?: string | null
+  descricao_papel?: string | null
   prompt: string
   temperatura: number
   modelo: string
   ativo: boolean
+  is_default?: boolean
+  transferir_para_id?: string | null
   canais: Array<{ provider: string; id: string }>
   link_agendamento: string | null
   config?: AgenteConfig
@@ -468,7 +472,45 @@ export async function responderAgenteParaLead(
     }
   }
 
-  const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}${blocoAgentes}`
+  // Se o agente tem transferir_para_id, injeta instrução de transferência automática
+  let blocoTransferencia = ''
+  if (agenteDB?.transferir_para_id) {
+    const { data: agenteDestino } = await (supabase as any)
+      .from('agentes')
+      .select('nome, nome_persona, descricao_papel')
+      .eq('id', agenteDB.transferir_para_id)
+      .maybeSingle()
+    if (agenteDestino) {
+      const nomeDestino = agenteDestino.nome_persona || agenteDestino.nome
+      const papelDestino = agenteDestino.descricao_papel ? ` (${agenteDestino.descricao_papel})` : ''
+      blocoTransferencia = `\n\n---TRANSFERÊNCIA---\nQuando você avaliar que chegou o momento certo (lead demonstrou interesse claro, qualificação concluída ou pediu próximo passo), transfira para: ${nomeDestino}${papelDestino}.\nUse [TRANSFERIR:${nomeDestino}] ao final da sua última mensagem — invisível para o lead.\n---FIM TRANSFERÊNCIA---`
+    }
+  }
+
+  // Injeta contexto das últimas 5 mensagens do agente anterior (se o lead foi transferido recentemente)
+  let blocoContextoAnterior = ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leadAny3 = lead as any
+  if (agenteDB?.id && leadAny3.agente_id === agenteDB.id) {
+    // Busca mensagens de outros agentes (conversa anterior) — últimas 5
+    const { data: msgAnteriores } = await (supabase as any)
+      .from('conversas')
+      .select('role, mensagem, criado_em')
+      .eq('lead_id', leadId)
+      .neq('agente_id', agenteDB.id)
+      .not('agente_id', 'is', null)
+      .order('criado_em', { ascending: false })
+      .limit(5)
+    if (msgAnteriores?.length) {
+      const linhas = (msgAnteriores as Array<{ role: string; mensagem: string }>)
+        .reverse()
+        .map(m => `${m.role === 'user' ? 'Lead' : 'Agente anterior'}: ${m.mensagem.slice(0, 200)}`)
+        .join('\n')
+      blocoContextoAnterior = `\n\n---CONTEXTO DA CONVERSA ANTERIOR---\n${linhas}\n---FIM DO CONTEXTO---`
+    }
+  }
+
+  const systemPrompt = `DATA ATUAL: ${dataHoje}\n\n${promptSemJson}\n${agendamentoBlock}${blocoAgentes}${blocoTransferencia}${blocoContextoAnterior}`
 
   const mensagensOpenAI: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },

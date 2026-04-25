@@ -73,6 +73,7 @@ type Agente = {
   modelo: string;
   ativo: boolean;
   is_default: boolean;
+  transferir_para_id: string | null;
   canais: Canal[];
   link_agendamento: string | null;
   config?: AgenteConfig;
@@ -464,6 +465,25 @@ export default function AgentePage() {
                       })}
                     </div>
                   )}
+                </div>
+
+                {/* Transferir para */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Transferir para</div>
+                  <p className="ag-card-desc">Quando este agente decidir que chegou a hora, ele passa o lead automaticamente para o agente selecionado — com o contexto da conversa.</p>
+                  <select
+                    className="ag-link-input"
+                    style={{ cursor: "pointer" }}
+                    value={selecionado.transferir_para_id ?? ""}
+                    onChange={e => update({ transferir_para_id: e.target.value || null })}
+                  >
+                    <option value="">Nenhum — este agente não transfere</option>
+                    {agentes.filter(a => a.id !== selecionado.id).map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.nome_persona || a.nome}{a.descricao_papel ? ` — ${a.descricao_papel.slice(0, 60)}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Link de agendamento */}
