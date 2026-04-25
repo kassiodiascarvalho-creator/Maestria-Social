@@ -1434,13 +1434,11 @@ export default function WhatsAppPage() {
                                   {inst.connected && (
                                     <div className={`wpp-inst-radio ${baileysInstSelecionada === inst.id ? "checked" : ""}`} />
                                   )}
-                                  {inst.id !== "1" && (
-                                    <button
-                                      className="wpp-icon-btn-sm wpp-icon-del"
-                                      onClick={e => { e.stopPropagation(); removerInstancia(inst.id) }}
-                                      title="Remover número"
-                                    >✕</button>
-                                  )}
+                                  <button
+                                    className="wpp-icon-btn-sm wpp-icon-del"
+                                    onClick={e => { e.stopPropagation(); removerInstancia(inst.id) }}
+                                    title="Remover número"
+                                  >✕</button>
                                 </div>
                                 {inst.qr && (
                                   <div className="wpp-inst-qr">
