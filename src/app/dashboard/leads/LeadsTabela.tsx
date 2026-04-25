@@ -16,6 +16,7 @@ type Lead = {
   criado_em: string
   etiqueta: string | null
   origem: string | null
+  pipeline_etapa: string | null
 }
 
 type Agente = { id: string; nome: string; nome_persona: string | null }

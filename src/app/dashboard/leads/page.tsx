@@ -6,11 +6,17 @@ import LeadsTabela from "./LeadsTabela";
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; pilar?: string; nivel?: string; renda?: string; q?: string; etiqueta?: string; origem?: string }>
+  searchParams: Promise<{ status?: string; pilar?: string; nivel?: string; renda?: string; q?: string; etiqueta?: string; origem?: string; pipeline?: string }>
 }) {
   const params = await searchParams;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any;
+
+  // Busca etapas do pipeline para o filtro
+  const { data: etapas } = await supabase
+    .from("pipeline_etapas")
+    .select("slug,label,emoji,cor")
+    .order("ordem")
 
   // Busca origens distintas para o dropdown
   const { data: origensRaw } = await supabase
@@ -35,7 +41,7 @@ export default async function LeadsPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase
     .from("leads")
-    .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,renda_mensal,criado_em,etiqueta,origem")
+    .select("id,nome,email,whatsapp,status_lead,nivel_qs,pilar_fraco,qs_total,renda_mensal,criado_em,etiqueta,origem,pipeline_etapa")
     .order("criado_em", { ascending: false });
 
   const status = params.status?.trim();
@@ -45,6 +51,7 @@ export default async function LeadsPage({
   const q = params.q?.trim();
   const etiqueta = params.etiqueta?.trim();
   const origem = params.origem?.trim();
+  const pipeline = params.pipeline?.trim();
 
   if (status) query = query.eq("status_lead", status as "frio" | "morno" | "quente");
   if (nivel) query = query.eq("nivel_qs", nivel as "Negligente" | "Iniciante" | "Intermediário" | "Avançado" | "Mestre");
@@ -54,6 +61,8 @@ export default async function LeadsPage({
   if (etiqueta === "ia_atendendo") query = query.or("etiqueta.eq.ia_atendendo,etiqueta.is.null");
   else if (etiqueta) query = query.eq("etiqueta", etiqueta);
   if (origem) query = query.ilike("origem", `%${origem}%`);
+  if (pipeline === "__sem_pipeline__") query = query.is("pipeline_etapa", null);
+  else if (pipeline) query = query.eq("pipeline_etapa", pipeline);
 
   const { data: leads } = await query.limit(200);
 
@@ -103,6 +112,13 @@ export default async function LeadsPage({
             <option value="">Todas as rendas</option>
             {["Até R$ 3.000","R$ 3.000 – R$ 7.000","R$ 7.000 – R$ 15.000","R$ 15.000 – R$ 30.000","Acima de R$ 30.000"].map(r => (
               <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <select className="filter-select" name="pipeline" defaultValue={params.pipeline ?? ""}>
+            <option value="">Todos os pipelines</option>
+            <option value="__sem_pipeline__">— Sem pipeline</option>
+            {((etapas ?? []) as Array<{ slug: string; label: string; emoji: string | null; cor: string }>).map(e => (
+              <option key={e.slug} value={e.slug}>{e.emoji ? `${e.emoji} ` : ""}{e.label}</option>
             ))}
           </select>
           <button className="filter-btn" type="submit">Filtrar</button>
