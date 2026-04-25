@@ -276,6 +276,7 @@ async function sincronizarContatosComoLeads(
   db: any,
   listaId: string,
   listaNome: string,
+  agenteId?: string | null,
 ): Promise<void> {
   try {
     const { data: contatos } = await db
@@ -332,6 +333,7 @@ async function sincronizarContatosComoLeads(
               status_lead: 'frio',
               via_disparo: true,
               disparo_confirmado: true,
+              ...(agenteId ? { agente_id: agenteId } : {}),
             },
             { onConflict: 'whatsapp', ignoreDuplicates: false }
           )
@@ -415,6 +417,7 @@ export async function POST(req: NextRequest) {
       : 'meta'
     const baileysInstanceId: string = payload.baileys_instance_id || '1'
     const metaInstanciaId: string | null = payload.meta_instancia_id || null
+    const disparoAgenteId: string | null = payload.agente_id || null
 
     // Compatibilidade com formato antigo (tipo + conteudo)
     let mensagens: MensagemItem[]
@@ -490,7 +493,7 @@ export async function POST(req: NextRequest) {
     const isLeads = listaInfo?.is_leads === true
 
     // Sincroniza todos os contatos da lista como leads (await — deve concluir antes do envio)
-    await sincronizarContatosComoLeads(db, lista_id, listaInfo?.nome ?? '')
+    await sincronizarContatosComoLeads(db, lista_id, listaInfo?.nome ?? '', disparoAgenteId)
 
     // Busca template padrão para contatos fora da janela 24h
     const templatePadrao = await getConfig('META_TEMPLATE_NAME')

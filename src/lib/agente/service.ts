@@ -268,21 +268,54 @@ export async function responderAgenteParaLead(
     throw new Error('Lead não encontrado')
   }
 
-  // ── Verifica agente ANTES de inserir mensagem ──────────────────────────────
-  // Ordem correta: checar canal/agente primeiro, só depois registrar a mensagem.
-  // Isso evita que o webhook do Baileys (sem agente) "queime" o dedup e silencie
-  // o webhook da Meta, que é quem de fato vai responder.
-  if (agenteDB) {
-    if (!agenteDB.ativo) return { ok: true, resposta: '' }
-  } else {
-    // Canal explícito (Baileys ou Meta) sem agente configurado: sai sem registrar nada.
-    // A Meta vai registrar e responder; Baileys apenas sai limpo.
-    if (canal) return { ok: true, resposta: '' }
+  // ── Roteamento de agente ──────────────────────────────────────────────────
+  // Prioridade: 1) agente passado explicitamente  2) agente fixo do lead  3) canal  4) default
+  let agenteResolvido: AgenteDB | null = agenteDB ?? null
 
-    // Fallback legado sem canal (invocação direta via API interna)
+  // Se o lead tem um agente fixo e nenhum foi passado explicitamente, usa o fixo
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leadAny2 = lead as any
+  if (!agenteResolvido && leadAny2.agente_id) {
+    const { data: agenteFixo } = await (supabase as any)
+      .from('agentes')
+      .select('*')
+      .eq('id', leadAny2.agente_id)
+      .eq('ativo', true)
+      .maybeSingle()
+    if (agenteFixo) agenteResolvido = agenteFixo as AgenteDB
+  }
+
+  // Se ainda não tem agente e não há canal, tenta o agente padrão (recepcionista)
+  if (!agenteResolvido && !canal) {
+    const { data: agenteDefault } = await (supabase as any)
+      .from('agentes')
+      .select('*')
+      .eq('ativo', true)
+      .eq('is_default', true)
+      .maybeSingle()
+    if (agenteDefault) agenteResolvido = agenteDefault as AgenteDB
+  }
+
+  // Se lead sem agente_id recebe mensagem pelo canal, atribui o recepcionista ao lead
+  if (!leadAny2.agente_id && agenteResolvido) {
+    await (supabase as any)
+      .from('leads')
+      .update({ agente_id: agenteResolvido.id })
+      .eq('id', leadId)
+  }
+
+  // Verifica agente ANTES de inserir mensagem para evitar queimar dedup sem resposta.
+  if (agenteResolvido) {
+    if (!agenteResolvido.ativo) return { ok: true, resposta: '' }
+  } else {
+    if (canal) return { ok: true, resposta: '' }
     const agenteAtivo = await getConfig('AGENT_ATIVO')
     if (agenteAtivo === 'false') return { ok: true, resposta: '' }
   }
+
+  // Usa agente resolvido daqui em diante
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  agenteDB = agenteResolvido
 
   // ── Registra mensagem do lead com dedup ────────────────────────────────────
   // extMessageId (Meta) ou hash de conteúdo (Baileys sem ID padronizado).
@@ -665,6 +698,21 @@ export async function responderAgenteParaLead(
   if (dados.acao === 'transferir_para_humano') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from('leads').update({ etiqueta: 'humano_atendendo' }).eq('id', leadId)
+  }
+
+  // ── Transferência para outro agente IA ──────────────────────────────────────
+  // O prompt do recepcionista pode incluir [TRANSFERIR:uuid-do-agente] para redirecionar o lead.
+  // O sistema detecta, atualiza lead.agente_id e remove o marcador da resposta enviada.
+  const matchTransfer = resposta.match(/\[TRANSFERIR:([a-f0-9-]{36})\]/i)
+  if (matchTransfer) {
+    const novoAgenteId = matchTransfer[1]
+    resposta = resposta.replace(matchTransfer[0], '').trim()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('leads')
+      .update({ agente_id: novoAgenteId })
+      .eq('id', leadId)
+    console.log(`[agente] Lead ${leadId} transferido para agente ${novoAgenteId}`)
   }
 
   const respostaImediata = resposta

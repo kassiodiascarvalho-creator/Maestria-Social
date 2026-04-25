@@ -70,6 +70,7 @@ type Agente = {
   temperatura: number;
   modelo: string;
   ativo: boolean;
+  is_default: boolean;
   canais: Canal[];
   link_agendamento: string | null;
   config?: AgenteConfig;
@@ -392,6 +393,15 @@ export default function AgentePage() {
                       <span className="tog-knob" />
                     </button>
                     <span className="ag-toggle-label">{selecionado.ativo ? "Ativo" : "Inativo"}</span>
+                    <button
+                      className={`ag-toggle ${selecionado.is_default ? "tog-on" : "tog-off"}`}
+                      onClick={() => update({ is_default: !selecionado.is_default })}
+                      title={selecionado.is_default ? "Recepcionista ativo — atende quem mandar mensagem sem origem definida" : "Ativar como recepcionista"}
+                      style={{ marginLeft: 8 }}
+                    >
+                      <span className="tog-knob" />
+                    </button>
+                    <span className="ag-toggle-label" title="Atende leads que mandam mensagem sem terem passado por disparo ou quiz">🎯 Recepcionista</span>
                   </div>
                   <input
                     className="ag-desc-input"

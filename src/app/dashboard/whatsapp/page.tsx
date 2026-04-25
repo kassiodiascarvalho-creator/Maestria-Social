@@ -132,6 +132,22 @@ export default function WhatsAppPage() {
   const [apiProvider, setApiProvider] = useState<"meta" | "zapi" | "baileys">("meta")
   const [intervaloSegundos, setIntervaloSegundos] = useState(10)
 
+  // Agente responsável pelo disparo
+  type AgenteOpcao = { id: string; nome: string }
+  const [agentes, setAgentes] = useState<AgenteOpcao[]>([])
+  const [agenteSelecionado, setAgenteSelecionado] = useState<string>("")
+  useEffect(() => {
+    fetch("/api/admin/agentes")
+      .then(r => r.json())
+      .then((data: unknown) => {
+        const arr = Array.isArray(data) ? data : (data as Record<string, unknown>)?.agentes
+        if (Array.isArray(arr)) {
+          setAgentes((arr as AgenteOpcao[]).filter(a => (a as Record<string,unknown>).ativo !== false))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Instâncias Meta (múltiplos números)
   type MetaInstancia = { id: string; label: string; phone: string | null; meta_phone_number_id: string; meta_access_token: string; principal: boolean }
   const [metaInstancias, setMetaInstancias] = useState<MetaInstancia[]>([])
@@ -658,6 +674,7 @@ export default function WhatsAppPage() {
         baileys_instance_id: baileysInstSelecionada,
         meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
         delay_ms: intervaloSegundos * 1000,
+        agente_id: agenteSelecionado || undefined,
       }),
     })
     const data = await res.json()
@@ -1453,6 +1470,21 @@ export default function WhatsAppPage() {
                           <span style={{ fontSize: 11, color: "#4a3e30" }}>s/envio</span>
                         </div>
                       </div>
+                      {agentes.length > 0 && (
+                        <div className="wpp-agente-select-wrap">
+                          <span className="wpp-agente-select-label">🤖 Agente responsável:</span>
+                          <select
+                            className="wpp-agente-select"
+                            value={agenteSelecionado}
+                            onChange={e => setAgenteSelecionado(e.target.value)}
+                          >
+                            <option value="">Sem agente (apenas disparo)</option>
+                            {agentes.map(a => (
+                              <option key={a.id} value={a.id}>{a.nome}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <button
                         className="wpp-btn wpp-btn-disparo"
                         onClick={disparar}
@@ -1691,6 +1723,10 @@ const css = `
   .wpp-disparo-info { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .wpp-disparo-tag { font-size:12px; color:#c2904d; background:rgba(194,144,77,.08); border:1px solid rgba(194,144,77,.15); padding:3px 10px; border-radius:20px; }
   .wpp-disparo-count { font-size:12px; color:#4a3e30; }
+  .wpp-agente-select-wrap { display:flex; align-items:center; gap:8px; padding:8px 0 4px; }
+  .wpp-agente-select-label { font-size:12px; color:#7a6e5e; white-space:nowrap; }
+  .wpp-agente-select { background:#1a1410; border:1px solid #2a1f18; border-radius:8px; padding:5px 10px; font-size:12px; color:#c8b99a; font-family:inherit; outline:none; flex:1; }
+  .wpp-agente-select:focus { border-color:rgba(194,144,77,.4); }
   .wpp-intervalo-wrap { display:flex; align-items:center; gap:5px; margin-left:auto; background:#111009; border:1px solid #2a1f18; border-radius:8px; padding:4px 10px; }
   .wpp-intervalo-input { width:44px; background:transparent; border:none; color:#c8b99a; font-size:13px; font-family:inherit; outline:none; text-align:center; }
 
