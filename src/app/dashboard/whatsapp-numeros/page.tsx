@@ -251,8 +251,8 @@ export default function WhatsAppNumerosPage() {
         {(() => {
           const PRECOS: Record<string, { usd: number; label: string; cor: string }> = {
             marketing:      { usd: 0.0625, label: "Marketing",      cor: "#e07070" },
-            utility:        { usd: 0.0175, label: "Utilitário",     cor: "#4caf82" },
-            authentication: { usd: 0.0315, label: "Autenticação",   cor: "#4a90d9" },
+            utility:        { usd: 0.0068, label: "Utilidade",      cor: "#4caf82" },
+            authentication: { usd: 0.0068, label: "Autenticação",   cor: "#4a90d9" },
           };
           const USD_BRL = 5.55; // taxa aproximada — atualize conforme necessário
           const n = Math.max(0, parseInt(calcContatos) || 0);
