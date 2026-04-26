@@ -89,12 +89,25 @@ const EVENTOS = [
   { id: "status_atualizado", label: "status_atualizado" },
 ] as const;
 
+const PLATAFORMAS_PAGAMENTO = [
+  { id: 'hotmart',   label: 'Hotmart',   icon: '🔥', token: 'HOTMART_TOKEN',   url: '/api/webhooks/hotmart',   doc: 'Ferramentas → Webhooks → Adicionar URL' },
+  { id: 'kiwify',    label: 'Kiwify',    icon: '🥝', token: 'KIWIFY_TOKEN',    url: '/api/webhooks/kiwify',    doc: 'Configurações → Webhooks → Nova URL' },
+  { id: 'eduzz',     label: 'Eduzz',     icon: '📦', token: 'EDUZZ_TOKEN',     url: '/api/webhooks/eduzz',     doc: 'Painel → Notificações → Webhooks' },
+  { id: 'hubla',     label: 'Hubla',     icon: '🌐', token: 'HUBLA_TOKEN',     url: '/api/webhooks/hubla',     doc: 'Configurações → Webhooks → Nova integração' },
+  { id: 'lastlink',  label: 'Lastlink',  icon: '🔗', token: 'LASTLINK_TOKEN',  url: '/api/webhooks/lastlink',  doc: 'Painel → Integrações → Webhooks' },
+  { id: 'cakto',     label: 'Cakto',     icon: '🍰', token: 'CAKTO_TOKEN',     url: '/api/webhooks/cakto',     doc: 'Painel → Configurações → Webhooks' },
+  { id: 'monetizze', label: 'Monetizze', icon: '💳', token: 'MONETIZZE_TOKEN', url: '/api/webhooks/monetizze', doc: 'Painel → Postback → URL de notificação' },
+  { id: 'ticto',     label: 'Ticto',     icon: '✅', token: 'TICTO_TOKEN',     url: '/api/webhooks/ticto',     doc: 'Painel → Integrações → Webhooks' },
+];
+
 export default function IntegracoesPage() {
   const [status, setStatus] = useState<Record<string, boolean>>({});
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [platSelecionada, setPlatSelecionada] = useState('hotmart');
+  const [copiedWh, setCopiedWh] = useState(false);
 
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
   const [apiKeyName, setApiKeyName] = useState("");
@@ -108,7 +121,10 @@ export default function IntegracoesPage() {
   const [loadingWebhooks, setLoadingWebhooks] = useState(true);
 
   useEffect(() => {
-    const allKeys = FIELDS_CONFIG.flatMap((g) => g.fields.map((f) => f.key));
+    const allKeys = [
+      ...FIELDS_CONFIG.flatMap((g) => g.fields.map((f) => f.key)),
+      ...PLATAFORMAS_PAGAMENTO.map(p => p.token),
+    ];
     Promise.all(
       allKeys.map((key) =>
         fetch(`/api/admin/env?key=${key}`)
@@ -281,6 +297,77 @@ export default function IntegracoesPage() {
               </div>
             </div>
           ))}
+
+          {/* Plataformas de Pagamento */}
+          <div className="int-card">
+            <div className="int-card-head">
+              <div className="int-badge">Plataformas de Pagamento</div>
+              <div className="int-card-title">Webhooks de Vendas</div>
+            </div>
+            <p className="int-desc">Registre a URL abaixo na plataforma escolhida. O token de segurança é opcional — configure no Supabase para validar as requisições.</p>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+              {PLATAFORMAS_PAGAMENTO.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPlatSelecionada(p.id)}
+                  style={{
+                    background: platSelecionada === p.id ? 'rgba(194,144,77,.15)' : 'rgba(255,255,255,.03)',
+                    border: `1px solid ${platSelecionada === p.id ? 'rgba(194,144,77,.4)' : '#2a1f18'}`,
+                    borderRadius: 8, padding: '7px 14px', cursor: 'pointer',
+                    color: platSelecionada === p.id ? '#c2904d' : '#7a6e5e',
+                    fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                    transition: 'all .15s',
+                  }}
+                >
+                  {p.icon} {p.label}
+                </button>
+              ))}
+            </div>
+
+            {PLATAFORMAS_PAGAMENTO.filter(p => p.id === platSelecionada).map(p => {
+              const webhookUrl = `https://www.maestriasocial.com${p.url}`;
+              return (
+                <div key={p.id}>
+                  <div className="webhook-box">
+                    <div className="webhook-label">URL do Webhook</div>
+                    <div className="webhook-url">
+                      <code>{webhookUrl}</code>
+                      <button className="copy-btn" onClick={() => { navigator.clipboard.writeText(webhookUrl); setCopiedWh(true); setTimeout(() => setCopiedWh(false), 2000); }}>
+                        {copiedWh ? '✓ Copiado' : 'Copiar'}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#4a3e30', marginTop: 8 }}>📍 {p.doc}</div>
+                  </div>
+
+                  <div style={{ marginTop: 16 }}>
+                    <div className="int-label-row" style={{ marginBottom: 8 }}>
+                      <label className="int-label">Token de segurança (opcional)</label>
+                      <span className={`int-status ${status[p.token] ? 'defined' : 'undefined'}`}>
+                        {status[p.token] ? '✓ Configurado' : 'Não configurado'}
+                      </span>
+                    </div>
+                    <div className="int-row">
+                      <input
+                        className="int-input"
+                        type="password"
+                        placeholder={status[p.token] ? '••••••••• (alterar)' : `Chave secreta do ${p.label}`}
+                        value={values[p.token] ?? ''}
+                        onChange={e => setValues(v => ({ ...v, [p.token]: e.target.value }))}
+                      />
+                      <button
+                        className={`int-save-btn${saved[p.token] ? ' saved' : ''}`}
+                        onClick={() => handleSave(p.token)}
+                        disabled={saving[p.token] || !values[p.token]}
+                      >
+                        {saving[p.token] ? '...' : saved[p.token] ? '✓ Salvo' : 'Salvar'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="int-card">
             <div className="int-card-head">

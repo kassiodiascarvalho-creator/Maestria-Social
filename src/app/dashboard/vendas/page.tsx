@@ -38,6 +38,7 @@ export default function VendasPage() {
   const [dados, setDados] = useState<Dados | null>(null)
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState('30')
+  const [plataformaFiltro, setPlataformaFiltro] = useState('todas')
   const [showManual, setShowManual] = useState(false)
   const [manual, setManual] = useState({ email: '', nome: '', produto_nome: '', valor: '', transaction_id: '' })
   const [savingManual, setSavingManual] = useState(false)
@@ -66,9 +67,21 @@ export default function VendasPage() {
         <div className='vd-header'>
           <div>
             <h1 className='vd-title'>💰 Vendas</h1>
-            <p className='vd-sub'>Receita e conversões — Hotmart · Kiwify · Eduzz · Hubla · Lastlink · Cakto · Monetizze · Ticto</p>
+            <p className='vd-sub'>Receita e conversões por plataforma</p>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select className='vd-select' value={plataformaFiltro} onChange={e => setPlataformaFiltro(e.target.value)}>
+              <option value='todas'>Todas as plataformas</option>
+              <option value='hotmart'>🔥 Hotmart</option>
+              <option value='kiwify'>🥝 Kiwify</option>
+              <option value='eduzz'>📦 Eduzz</option>
+              <option value='hubla'>🌐 Hubla</option>
+              <option value='lastlink'>🔗 Lastlink</option>
+              <option value='cakto'>🍰 Cakto</option>
+              <option value='monetizze'>💳 Monetizze</option>
+              <option value='ticto'>✅ Ticto</option>
+              <option value='manual'>✏️ Manual</option>
+            </select>
             <select className='vd-select' value={periodo} onChange={e => setPeriodo(e.target.value)}>
               <option value='7'>Últimos 7 dias</option>
               <option value='30'>Últimos 30 dias</option>
@@ -77,30 +90,6 @@ export default function VendasPage() {
             </select>
             <button className='vd-btn vd-btn-ghost' onClick={carregar}>↺ Atualizar</button>
             <button className='vd-btn vd-btn-primary' onClick={() => setShowManual(true)}>+ Venda manual</button>
-          </div>
-        </div>
-
-        {/* Configuração de webhooks */}
-        <div className='vd-webhooks'>
-          <div className='vd-wh-title'>🔌 Configuração de Webhooks</div>
-          <div className='vd-wh-grid'>
-            {[
-              { plat: 'Hotmart', icon: '🔥', url: '/api/webhooks/hotmart', config: 'HOTMART_TOKEN', doc: 'Ferramentas → Webhooks → Adicionar URL' },
-              { plat: 'Kiwify', icon: '🥝', url: '/api/webhooks/kiwify', config: 'KIWIFY_TOKEN', doc: 'Configurações → Webhooks → Nova URL' },
-              { plat: 'Eduzz', icon: '📦', url: '/api/webhooks/eduzz', config: 'EDUZZ_TOKEN', doc: 'Painel → Notificações → Webhooks' },
-              { plat: 'Hubla', icon: '🌐', url: '/api/webhooks/hubla', config: 'HUBLA_TOKEN', doc: 'Configurações → Webhooks → Nova integração' },
-              { plat: 'Lastlink', icon: '🔗', url: '/api/webhooks/lastlink', config: 'LASTLINK_TOKEN', doc: 'Painel → Integrações → Webhooks' },
-              { plat: 'Cakto', icon: '🍰', url: '/api/webhooks/cakto', config: 'CAKTO_TOKEN', doc: 'Painel → Configurações → Webhooks' },
-              { plat: 'Monetizze', icon: '💳', url: '/api/webhooks/monetizze', config: 'MONETIZZE_TOKEN', doc: 'Painel → Postback → URL de notificação' },
-              { plat: 'Ticto', icon: '✅', url: '/api/webhooks/ticto', config: 'TICTO_TOKEN', doc: 'Painel → Integrações → Webhooks' },
-            ].map(w => (
-              <div key={w.plat} className='vd-wh-card'>
-                <div style={{ fontWeight: 700, color: '#c8b99a', marginBottom: 8 }}>{w.icon} {w.plat}</div>
-                <div className='vd-wh-url'>{`https://www.maestriasocial.com${w.url}`}</div>
-                <div style={{ fontSize: 11, color: '#4a3e30', marginTop: 6 }}>{w.doc}</div>
-                <div style={{ fontSize: 11, color: '#4a3e30', marginTop: 4 }}>Token (opcional): <code style={{ color: '#c2904d' }}>{w.config}</code> no Supabase</div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -186,7 +175,7 @@ export default function VendasPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dados.vendas.slice(0, 50).map(v => (
+                    {dados.vendas.filter(v => plataformaFiltro === 'todas' || v.plataforma === plataformaFiltro).slice(0, 50).map(v => (
                       <tr key={v.id} style={{ borderBottom: '1px solid #1a1410' }}>
                         <td style={{ padding: '10px 12px' }}><span title={v.plataforma}>{PLAT_ICON[v.plataforma] || '📦'} {v.plataforma}</span></td>
                         <td style={{ padding: '10px 12px', color: '#c8b99a' }}>
@@ -262,12 +251,7 @@ const css = `
   .vd-row:last-child{border-bottom:none;}
   .vd-empty{color:#4a3e30;font-size:13px;text-align:center;padding:20px 0;margin:0;}
   .vd-loading{color:#4a3e30;padding:40px;text-align:center;}
-  .vd-webhooks{background:rgba(194,144,77,.04);border:1px solid rgba(194,144,77,.15);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
-  .vd-wh-title{font-size:12px;font-weight:700;color:#c2904d;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;}
-  .vd-wh-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;}
-  .vd-wh-card{background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:14px 16px;}
-  .vd-wh-url{font-family:monospace;font-size:11px;color:#6366f1;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);padding:6px 10px;border-radius:6px;word-break:break-all;}
-  .vd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.vd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;}
   .vd-modal{background:#111009;border:1px solid #2a1f18;border-radius:18px;padding:28px;width:100%;max-width:440px;box-shadow:0 24px 80px rgba(0,0,0,.5);}
   .vd-input{width:100%;background:#1a1410;border:1px solid #2a1f18;border-radius:8px;padding:10px 12px;color:#fff9e6;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;}
   .vd-input:focus{border-color:rgba(194,144,77,.35);}
