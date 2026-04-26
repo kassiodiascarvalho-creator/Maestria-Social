@@ -21,6 +21,7 @@ const NAV = [
   { href: "/dashboard/cadencia",     label: "Cadência",         icon: "◈" },
   { href: "/dashboard/integracoes", label: "Integrações",      icon: "⬡" },
   { href: "/dashboard/paginas",    label: "Páginas",          icon: "🎨" },
+  { href: "/dashboard/vendas",     label: "Vendas",           icon: "💰" },
 ];
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
