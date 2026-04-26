@@ -397,7 +397,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
           </div>
 
           {/* ══ CANVAS ══ */}
-          <div className="builder-scroll" style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 12px', background: '#e8eaed', gap: 0 }}
+          <div className="builder-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 12px', background: '#e8eaed', gap: 0 }}
             onClick={() => setSelected(null)}>
             <div style={{ fontSize: 11, color: '#aaa', marginBottom: 12, fontWeight: 500, letterSpacing: 0.5, display: 'flex', gap: 16, alignItems: 'center' }}>
               <span>{blocks.length} bloco{blocks.length !== 1 ? 's' : ''}</span>

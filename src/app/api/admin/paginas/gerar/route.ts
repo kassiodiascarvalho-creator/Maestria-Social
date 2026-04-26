@@ -61,7 +61,7 @@ ${contexto ? `\nContexto: ${contexto}` : ''}`
 
   try {
     const { text } = await generateText({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4o-mini'),
       system: systemPrompt,
       prompt,
       temperature: 0.7,
