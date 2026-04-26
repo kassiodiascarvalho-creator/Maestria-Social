@@ -22,7 +22,7 @@ type Dados = {
 }
 
 const STATUS_COR: Record<string, string> = { aprovado: '#10b981', cancelado: '#ef4444', reembolsado: '#f59e0b', chargeback: '#dc2626', pendente: '#6b7280' }
-const PLAT_ICON: Record<string, string> = { hotmart: '🔥', kiwify: '🥝', eduzz: '📦', monetizze: '💰', manual: '✏️' }
+const PLAT_ICON: Record<string, string> = { hotmart: '🔥', kiwify: '🥝', eduzz: '📦', hubla: '🌐', lastlink: '🔗', cakto: '🍰', monetizze: '💳', ticto: '✅', manual: '✏️' }
 
 function Card({ label, value, sub, cor }: { label: string; value: string; sub?: string; cor?: string }) {
   return (
@@ -66,7 +66,7 @@ export default function VendasPage() {
         <div className='vd-header'>
           <div>
             <h1 className='vd-title'>💰 Vendas</h1>
-            <p className='vd-sub'>Receita e conversões — Hotmart · Kiwify · Manual</p>
+            <p className='vd-sub'>Receita e conversões — Hotmart · Kiwify · Eduzz · Hubla · Lastlink · Cakto · Monetizze · Ticto</p>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <select className='vd-select' value={periodo} onChange={e => setPeriodo(e.target.value)}>
@@ -85,14 +85,20 @@ export default function VendasPage() {
           <div className='vd-wh-title'>🔌 Configuração de Webhooks</div>
           <div className='vd-wh-grid'>
             {[
-              { plat: 'Hotmart', icon: '🔥', url: '/api/webhooks/hotmart', config: 'HOTMART_TOKEN', doc: 'Hotmart → Ferramentas → Webhooks → Adicionar URL' },
-              { plat: 'Kiwify', icon: '🥝', url: '/api/webhooks/kiwify', config: 'KIWIFY_TOKEN', doc: 'Kiwify → Configurações → Webhooks → Nova URL' },
+              { plat: 'Hotmart', icon: '🔥', url: '/api/webhooks/hotmart', config: 'HOTMART_TOKEN', doc: 'Ferramentas → Webhooks → Adicionar URL' },
+              { plat: 'Kiwify', icon: '🥝', url: '/api/webhooks/kiwify', config: 'KIWIFY_TOKEN', doc: 'Configurações → Webhooks → Nova URL' },
+              { plat: 'Eduzz', icon: '📦', url: '/api/webhooks/eduzz', config: 'EDUZZ_TOKEN', doc: 'Painel → Notificações → Webhooks' },
+              { plat: 'Hubla', icon: '🌐', url: '/api/webhooks/hubla', config: 'HUBLA_TOKEN', doc: 'Configurações → Webhooks → Nova integração' },
+              { plat: 'Lastlink', icon: '🔗', url: '/api/webhooks/lastlink', config: 'LASTLINK_TOKEN', doc: 'Painel → Integrações → Webhooks' },
+              { plat: 'Cakto', icon: '🍰', url: '/api/webhooks/cakto', config: 'CAKTO_TOKEN', doc: 'Painel → Configurações → Webhooks' },
+              { plat: 'Monetizze', icon: '💳', url: '/api/webhooks/monetizze', config: 'MONETIZZE_TOKEN', doc: 'Painel → Postback → URL de notificação' },
+              { plat: 'Ticto', icon: '✅', url: '/api/webhooks/ticto', config: 'TICTO_TOKEN', doc: 'Painel → Integrações → Webhooks' },
             ].map(w => (
               <div key={w.plat} className='vd-wh-card'>
                 <div style={{ fontWeight: 700, color: '#c8b99a', marginBottom: 8 }}>{w.icon} {w.plat}</div>
                 <div className='vd-wh-url'>{`https://www.maestriasocial.com${w.url}`}</div>
                 <div style={{ fontSize: 11, color: '#4a3e30', marginTop: 6 }}>{w.doc}</div>
-                <div style={{ fontSize: 11, color: '#4a3e30', marginTop: 4 }}>Token (opcional): config <code style={{ color: '#c2904d' }}>{w.config}</code> no Supabase</div>
+                <div style={{ fontSize: 11, color: '#4a3e30', marginTop: 4 }}>Token (opcional): <code style={{ color: '#c2904d' }}>{w.config}</code> no Supabase</div>
               </div>
             ))}
           </div>

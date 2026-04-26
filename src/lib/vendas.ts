@@ -4,7 +4,7 @@ import { getConfig } from './config'
 const db = () => createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
 
 interface DadosCompra {
-  plataforma: 'hotmart' | 'kiwify' | 'eduzz' | 'monetizze' | 'manual'
+  plataforma: 'hotmart' | 'kiwify' | 'eduzz' | 'hubla' | 'lastlink' | 'cakto' | 'monetizze' | 'ticto' | 'manual'
   email: string
   nome?: string
   fone?: string
