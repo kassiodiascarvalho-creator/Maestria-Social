@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getConfig } from '@/lib/config'
 
 const COOKIE = 'paginas_sid'
 const TOKEN = 'b4cc9e1f-paginas-ok-7d3a'
@@ -9,17 +9,14 @@ export async function POST(req: NextRequest) {
   const { senha } = await req.json() as { senha: string }
   if (!senha) return NextResponse.json({ error: 'Senha obrigatória' }, { status: 400 })
 
-  const hash = createHash('sha256').update(senha).digest('hex')
+  const hash = createHash('sha256').update(senha.trim(), 'utf8').digest('hex')
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = createAdminClient() as any
-  const { data } = await db
-    .from('configuracoes')
-    .select('valor')
-    .eq('chave', 'PAGINAS_SENHA_HASH')
-    .single()
+  const stored = await getConfig('PAGINAS_SENHA_HASH')
+  if (!stored) {
+    return NextResponse.json({ error: 'Configuração não encontrada — rode o SQL no Supabase.' }, { status: 503 })
+  }
 
-  if (!data || data.valor !== hash) {
+  if (stored.trim().toLowerCase() !== hash.toLowerCase()) {
     return NextResponse.json({ error: 'Senha incorreta' }, { status: 401 })
   }
 
