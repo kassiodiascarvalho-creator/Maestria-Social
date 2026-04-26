@@ -25,8 +25,8 @@ async function handler(lead_id: string): Promise<NextResponse> {
     const diagnostico = {
       lead_whatsapp: lead.whatsapp,
       numero_normalizado: normalizarTelefone(lead.whatsapp),
-      META_PHONE_NUMBER_ID: phoneNumberId ? `${phoneNumberId.substring(0, 6)}...` : 'NÃO CONFIGURADO',
-      META_ACCESS_TOKEN: accessToken ? `${accessToken.substring(0, 10)}...` : 'NÃO CONFIGURADO',
+      META_PHONE_NUMBER_ID: phoneNumberId ? '✅ configurado' : 'NÃO CONFIGURADO',
+      META_ACCESS_TOKEN: accessToken ? '✅ configurado' : 'NÃO CONFIGURADO',
       META_TEMPLATE_NAME: templateName || 'NÃO CONFIGURADO',
       META_TEMPLATE_LANGUAGE: templateLanguage,
       WHATSAPP_MODE: whatsappMode || 'não definido (padrão: meta)',
@@ -95,7 +95,7 @@ async function handlerViaService(lead_id: string): Promise<NextResponse> {
       })
       return NextResponse.json({ ok: true, via: 'enviarMensagemInicialWhatsApp' })
     } catch (err) {
-      return NextResponse.json({ ok: false, via: 'enviarMensagemInicialWhatsApp', erro: String(err), stack: err instanceof Error ? err.stack : undefined })
+      return NextResponse.json({ ok: false, via: 'enviarMensagemInicialWhatsApp', erro: String(err) })
     }
   } catch (err) {
     return NextResponse.json({ erro: String(err) }, { status: 500 })

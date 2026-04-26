@@ -61,7 +61,7 @@ export async function GET(
     })
 
     if (!res.ok) {
-      if (debug) return Response.json({ erro: 'Supabase erro', status: res.status, url, body: await res.text() })
+      if (debug) return Response.json({ erro: 'Supabase erro', status: res.status })
       return new ImageResponse(fallback, { width: 1200, height: 630 })
     }
 
@@ -71,11 +71,11 @@ export async function GET(
       : null
 
     if (!lead?.qs_total) {
-      if (debug) return Response.json({ erro: 'lead não encontrado ou sem qs_total', rows, url })
+      if (debug) return Response.json({ erro: 'lead não encontrado ou sem qs_total' })
       return new ImageResponse(fallback, { width: 1200, height: 630 })
     }
 
-    if (debug) return Response.json({ ok: true, lead, url, keyInicio: key.substring(0, 10) })
+    if (debug) return Response.json({ ok: true, lead })
 
     const scores = (lead.scores ?? {}) as Record<string, number>
 

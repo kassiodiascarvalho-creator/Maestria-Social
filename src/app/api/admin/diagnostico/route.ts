@@ -23,7 +23,7 @@ export async function GET() {
     if (!val) {
       checks[key] = '❌ NÃO CONFIGURADO'
     } else if (key.includes('TOKEN') || key.includes('KEY') || key.includes('SECRET')) {
-      checks[key] = `✅ configurado (${val.slice(0, 6)}...)`
+      checks[key] = '✅ configurado'
     } else {
       checks[key] = `✅ ${val}`
     }

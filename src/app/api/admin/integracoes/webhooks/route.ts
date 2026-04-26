@@ -22,7 +22,8 @@ export async function GET() {
     .order('criado_em', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ webhooks: data ?? [] })
+  const webhooks = (data ?? []).map(w => ({ ...w, secret: w.secret ? '••••••••' : null }))
+  return NextResponse.json({ webhooks })
 }
 
 export async function POST(req: NextRequest) {
@@ -54,5 +55,5 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ webhook: data }, { status: 201 })
+  return NextResponse.json({ webhook: { ...data, secret: data?.secret ? '••••••••' : null } }, { status: 201 })
 }
