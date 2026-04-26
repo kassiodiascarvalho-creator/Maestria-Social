@@ -4,6 +4,7 @@ import { enviarMensagemWhatsApp, enviarMidiaViaMeta } from '@/lib/meta'
 import { enviarViaBaileys, enviarMidiaViaBaileys } from '@/lib/baileys'
 import { enviarEmail } from '@/lib/email/enviar'
 import { getConfig } from '@/lib/config'
+import { responderAgenteParaLead } from '@/lib/agente/service'
 import type { Lead } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -16,7 +17,7 @@ const SITE_URL = 'https://maestriasocial.com'
 type Tarefa = {
   id: string
   lead_id: string | null
-  tipo: 'whatsapp_msg' | 'email' | 'recuperacao_quiz'
+  tipo: 'whatsapp_msg' | 'email' | 'recuperacao_quiz' | 'agente_resposta'
   payload: Record<string, unknown>
   tentativas: number
 }
@@ -279,6 +280,50 @@ async function executar(t: Tarefa): Promise<void> {
         texto,
       })
     }
+    return
+  }
+
+  if (t.tipo === 'agente_resposta') {
+    // Responde usando a última mensagem do lead salva no historico (já foi gravada pelo webhook)
+    const agenteId = t.payload.agente_id ? String(t.payload.agente_id) : null
+    const canalProvider = t.payload.canal_provider ? String(t.payload.canal_provider) : 'baileys'
+    const canalInstanceId = t.payload.canal_instance_id ? String(t.payload.canal_instance_id) : undefined
+
+    // Busca última mensagem do usuário para este lead
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: ultimaMsg } = await (supabase as any)
+      .from('conversas')
+      .select('mensagem')
+      .eq('lead_id', t.lead_id)
+      .eq('role', 'user')
+      .order('criado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!ultimaMsg?.mensagem) throw new Error('Nenhuma mensagem do usuário encontrada')
+
+    // Busca o agente pelo id
+    let agenteDB = null
+    if (agenteId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from('agentes')
+        .select('*')
+        .eq('id', agenteId)
+        .eq('ativo', true)
+        .maybeSingle()
+      agenteDB = data ?? null
+    }
+
+    await responderAgenteParaLead(
+      t.lead_id!,
+      ultimaMsg.mensagem,
+      true,
+      { provider: canalProvider as 'baileys' | 'meta', instanceId: canalInstanceId },
+      agenteDB,
+      undefined,
+      true // mensagemJaSalva — pula o insert, já foi feito pelo webhook
+    )
     return
   }
 

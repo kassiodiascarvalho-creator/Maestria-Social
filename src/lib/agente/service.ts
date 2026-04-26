@@ -200,6 +200,7 @@ type AgenteDB = {
   canais: Array<{ provider: string; id: string }>
   link_agendamento: string | null
   config?: AgenteConfig
+  debounce_segundos?: number
 }
 
 async function buscarPessoaAgenda(agenteId: string): Promise<{ id: string; nome: string } | null> {
@@ -254,7 +255,8 @@ export async function responderAgenteParaLead(
   enviarWhatsApp = true,
   canal?: CanalAgente,
   agenteDB?: AgenteDB | null,
-  extMessageId?: string
+  extMessageId?: string,
+  mensagemJaSalva = false
 ): Promise<{ ok: boolean; resposta: string }> {
   const supabase = createAdminClient()
 
@@ -273,13 +275,13 @@ export async function responderAgenteParaLead(
   }
 
   // ── Roteamento de agente ──────────────────────────────────────────────────
-  // Prioridade: 1) agente passado explicitamente  2) agente fixo do lead  3) canal  4) default
-  let agenteResolvido: AgenteDB | null = agenteDB ?? null
-
-  // Se o lead tem um agente fixo e nenhum foi passado explicitamente, usa o fixo
+  // Prioridade: 1) agente fixo do lead  2) agente passado (canal)  3) default
+  // lead.agente_id tem prioridade máxima — garante que transferências e reengajamentos persistam
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const leadAny2 = lead as any
-  if (!agenteResolvido && leadAny2.agente_id) {
+  let agenteResolvido: AgenteDB | null = null
+
+  if (leadAny2.agente_id) {
     const { data: agenteFixo } = await (supabase as any)
       .from('agentes')
       .select('*')
@@ -288,6 +290,9 @@ export async function responderAgenteParaLead(
       .maybeSingle()
     if (agenteFixo) agenteResolvido = agenteFixo as AgenteDB
   }
+
+  // Se lead não tem agente fixo, usa o agente passado (via canal) como fallback
+  if (!agenteResolvido) agenteResolvido = agenteDB ?? null
 
   // Se ainda não tem agente e não há canal, tenta o agente padrão (recepcionista)
   if (!agenteResolvido && !canal) {
@@ -324,20 +329,23 @@ export async function responderAgenteParaLead(
   // ── Registra mensagem do lead com dedup ────────────────────────────────────
   // extMessageId (Meta) ou hash de conteúdo (Baileys sem ID padronizado).
   // UNIQUE em ext_message_id: segundo webhook da mesma mensagem retorna sem responder.
+  // mensagemJaSalva=true quando o webhook já inseriu (modo debounce) — pula o insert mas mantém dedup.
   const dedupId = extMessageId
     || createHash('sha256').update(`${leadId}:${mensagem}:${Math.floor(Date.now() / 30000)}`).digest('hex').slice(0, 40)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: insertMsgError } = await (supabase as any).from('conversas').insert({
-    lead_id: leadId,
-    role: 'user',
-    mensagem,
-    agente_id: agenteDB?.id ?? null,
-    ext_message_id: dedupId,
-  })
-  if (insertMsgError?.code === '23505') {
-    // Já processado (Meta re-entrega ou dois providers para o mesmo número)
-    return { ok: true, resposta: '' }
+  if (!mensagemJaSalva) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: insertMsgError } = await (supabase as any).from('conversas').insert({
+      lead_id: leadId,
+      role: 'user',
+      mensagem,
+      agente_id: agenteDB?.id ?? null,
+      ext_message_id: dedupId,
+    })
+    if (insertMsgError?.code === '23505') {
+      // Já processado (Meta re-entrega ou dois providers para o mesmo número)
+      return { ok: true, resposta: '' }
+    }
   }
 
   // ── Pausa humana: registrou a mensagem mas o agente não responde ───────────
@@ -451,10 +459,11 @@ export async function responderAgenteParaLead(
   const agendamentoBlock = buildAgendamentoInstructions(linkAgendamento, pessoaNome, pessoaRole, etapasPipeline, agenteDB?.config?.condicoes_transferencia, jaAgendado)
   const promptSemJson = promptBase.replace(/---JSON---[\s\S]*?---JSON---/g, '').trimEnd()
   const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
-  // Se é o agente recepcionista (is_default), injeta lista de agentes disponíveis para transferência
+  // Injeta lista de agentes apenas quando é recepcionista SEM destino fixo (escolha dinâmica)
+  // Se tem transferir_para_id, a instrução de transferência automática já está no blocoTransferencia
   let blocoAgentes = ''
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((agenteDB as any)?.is_default) {
+  if ((agenteDB as any)?.is_default && !(agenteDB as any)?.transferir_para_id) {
     const { data: outrosAgentes } = await (supabase as any)
       .from('agentes')
       .select('id, nome, nome_persona, descricao_papel')
@@ -902,10 +911,10 @@ export async function responderAgenteParaLead(
           const parte = partes[i]
 
           // Delay de digitação proporcional ao tamanho — simula humano digitando
-          // mínimo 1s, máximo 4s, ~40ms por caractere + jitter aleatório
+          // mínimo 2s, máximo 8s, ~55ms por caractere + jitter progressivo
           if (i > 0) {
-            const base = Math.max(1000, Math.min(4000, parte.length * 40))
-            const jitter = Math.floor(Math.random() * 800)
+            const base = Math.max(2000, Math.min(8000, parte.length * 55))
+            const jitter = Math.floor(Math.random() * 2000) + i * 500
             await new Promise(r => setTimeout(r, base + jitter))
           }
 

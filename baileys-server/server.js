@@ -39,6 +39,19 @@ const DEBOUNCE_MS = 4000 // aguarda 4s sem nova mensagem antes de responder
 const pendingMessages = {}
 // estrutura: { [instanceId:phone]: { timer, textos: [], lastMessageId, lastMsg } }
 
+// ── Dedup de mensagens já processadas ─────────────────────────────────────────
+// Evita duplicatas quando whatsapp-web.js dispara o evento 'message' duas vezes
+// para a mesma mensagem (reconexão, multi-device, etc.)
+const processedMsgIds = new Set()
+function jaProcessado(msgId) {
+  if (!msgId) return false
+  if (processedMsgIds.has(msgId)) return true
+  processedMsgIds.add(msgId)
+  // Remove após 5 minutos para não acumular memória indefinidamente
+  setTimeout(() => processedMsgIds.delete(msgId), 5 * 60 * 1000)
+  return false
+}
+
 // ── Utilitários ────────────────────────────────────────────────────────────────
 function formatarTelefone(phone) {
   const digits = phone.replace(/\D/g, '')
@@ -196,14 +209,20 @@ function criarInstancia(id, label) {
     instances[id].phone = null
     instances[id].qrDataUrl = null
     console.log(`🔌 [Instância ${id}] Desconectado: ${reason}. Reiniciando em 5s...`)
-    setTimeout(() => client.initialize(), 5000)
+    setTimeout(() => inicializar(), 5000)
   })
 
   // Encaminha mensagens recebidas para o agente SDR (se configurado)
   client.on('message', async (msg) => {
     if (msg.fromMe) return
     if (!config.agentWebhookUrl) return
-    // Não filtra por instância aqui — o Next.js decide qual agente responde
+
+    // Dedup: ignora se já processamos essa mensagem (reconexão / double-fire)
+    const msgId = msg.id?._serialized || msg.id?.id
+    if (jaProcessado(msgId)) {
+      console.log(`[${id}] ⚠️ Mensagem duplicada ignorada: ${msgId}`)
+      return
+    }
 
     // Extrai número real do JID. @lid é ID interno do multi-device — usa getContact() para resolver.
     let phone = msg.from
@@ -272,7 +291,38 @@ function criarInstancia(id, label) {
     pendingMessages[key].timer = setTimeout(() => processarMensagensPendentes(id, phone), DEBOUNCE_MS)
   })
 
-  client.initialize()
+  function limparLocks() {
+    // Remove arquivos de lock deixados por Chrome que crashou
+    const lockFiles = [
+      path.join(sessaoDir, 'session', 'SingletonLock'),
+      path.join(sessaoDir, 'session', 'SingletonSocket'),
+      path.join(sessaoDir, 'session', 'SingletonCookies'),
+    ]
+    for (const f of lockFiles) {
+      try { if (fs.existsSync(f)) { fs.unlinkSync(f); console.log(`[${id}] 🧹 Lock removido: ${path.basename(f)}`) } } catch (_) {}
+    }
+  }
+
+  async function inicializar(tentativa = 1) {
+    limparLocks()
+    try {
+      await client.initialize()
+    } catch (err) {
+      const MAX = 5
+      console.error(`[${id}] ❌ Erro ao inicializar (tentativa ${tentativa}/${MAX}): ${err.message}`)
+      if (tentativa < MAX) {
+        const delay = tentativa * 6000
+        console.log(`[${id}] 🔄 Tentando novamente em ${delay / 1000}s...`)
+        instances[id].status = 'reconectando'
+        setTimeout(() => inicializar(tentativa + 1), delay)
+      } else {
+        console.error(`[${id}] ⛔ Instância ${id} falhou após ${MAX} tentativas. Tente deletar sessoes/instancia_${id} e reiniciar.`)
+        instances[id].status = 'erro'
+      }
+    }
+  }
+
+  inicializar()
 }
 
 // ── Salva config.json ──────────────────────────────────────────────────────────

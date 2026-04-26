@@ -33,7 +33,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   const { id } = await params
   const body = await req.json()
-  const { nome, descricao, nome_persona, descricao_papel, prompt, temperatura, modelo, ativo, is_default, transferir_para_id, canais, link_agendamento, config } = body
+  const { nome, descricao, nome_persona, descricao_papel, prompt, temperatura, modelo, ativo, is_default, transferir_para_id, canais, link_agendamento, config, debounce_segundos } = body
 
   const admin = createAdminClient()
 
@@ -69,6 +69,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
       ...(canais !== undefined && { canais }),
       ...(link_agendamento !== undefined && { link_agendamento: link_agendamento || null }),
       ...(config !== undefined && { config: config ?? {} }),
+      ...(debounce_segundos !== undefined && { debounce_segundos: Math.max(0, parseInt(debounce_segundos) || 0) }),
     })
     .eq('id', id)
     .select()

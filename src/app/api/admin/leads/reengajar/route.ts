@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         })
 
         const updateData: Record<string, unknown> = {
-          ultima_atividade_humana: new Date().toISOString(),
+          ultima_atividade_humana: null,
           etiqueta: 'ia_atendendo',
         }
         if (agente_id) updateData.agente_id = agente_id

@@ -77,6 +77,7 @@ type Agente = {
   canais: Canal[];
   link_agendamento: string | null;
   config?: AgenteConfig;
+  debounce_segundos: number;
 };
 
 type AudioAgente = {
@@ -528,6 +529,29 @@ export default function AgentePage() {
                   </div>
                 </div>
 
+                {/* Debounce */}
+                <div className="ag-card">
+                  <div className="ag-card-label">Tempo de resposta</div>
+                  <p className="ag-card-desc">Segundos que a IA aguarda antes de responder. Útil quando o lead costuma enviar várias mensagens seguidas. Use 0 para resposta imediata.</p>
+                  <div className="ag-debounce-row">
+                    <input
+                      type="number" min="0" max="300" step="5"
+                      value={selecionado.debounce_segundos ?? 0}
+                      onChange={e => update({ debounce_segundos: Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="ag-debounce-input"
+                    />
+                    <span className="ag-debounce-unit">segundos</span>
+                  </div>
+                  <div className="ag-presets" style={{marginTop:8}}>
+                    {[[0,"Imediato"],[10,"10s"],[20,"20s"],[30,"30s"],[60,"1min"]].map(([v,l]) => (
+                      <button key={v} className={`ag-preset ${(selecionado.debounce_segundos ?? 0) === v ? "preset-on" : ""}`}
+                        onClick={() => update({ debounce_segundos: v as number })}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Modelo */}
                 <div className="ag-card">
                   <div className="ag-card-label">Modelo de IA</div>
@@ -904,6 +928,10 @@ const css = `
   .ag-reset-btn:hover{border-color:rgba(194,144,77,.3);color:#c2904d;}
   .ag-prompt{width:100%;background:#111009;border:1px solid #2a1f18;border-radius:10px;padding:14px;font-size:13px;color:#fff9e6;font-family:monospace;line-height:1.7;resize:vertical;outline:none;transition:border-color .2s;}
   .ag-prompt:focus{border-color:rgba(194,144,77,.3);}
+  .ag-debounce-row{display:flex;align-items:center;gap:10px;margin-top:10px;}
+  .ag-debounce-input{width:80px;background:#1a1710;border:1px solid #3a2e22;border-radius:8px;padding:8px 12px;color:#fff9e6;font-size:15px;font-weight:600;font-family:inherit;text-align:center;}
+  .ag-debounce-input:focus{outline:none;border-color:#c2904d;}
+  .ag-debounce-unit{font-size:13px;color:#7a6a55;}
   .ag-chars{font-size:11px;color:#4a3e30;text-align:right;margin-top:6px;}
   .ag-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;padding-bottom:8px;}
   .ag-salvar-btn-desktop{background:linear-gradient(135deg,#c2904d,#d4a055);color:#0e0f09;border:none;border-radius:12px;padding:13px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;}

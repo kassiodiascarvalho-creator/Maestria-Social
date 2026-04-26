@@ -142,8 +142,55 @@ export async function POST(req: NextRequest) {
     }
 
     await saveDebug('processando', { leadId: lead.id, agenteId: agente.id, instanceId, phone: phoneReal })
-    await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente, messageId)
-    await saveDebug('respondeu', { leadId: lead.id, phone: phoneReal })
+
+    const debounce = agente.debounce_segundos ?? 0
+
+    if (debounce > 0) {
+      // Modo debounce: salva a mensagem imediatamente e agenda a resposta
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = createAdminClient() as any
+      const dedupId = messageId || null
+
+      const { error: insertErr } = await db.from('conversas').insert({
+        lead_id: lead.id,
+        role: 'user',
+        mensagem: texto,
+        agente_id: agente.id,
+        ...(dedupId ? { ext_message_id: dedupId } : {}),
+      })
+      if (insertErr?.code === '23505') {
+        await saveDebug('dedup_debounce', { messageId })
+        return NextResponse.json({ status: 'ok' })
+      }
+
+      // Cancela tarefas de resposta pendentes para este lead (lead enviou nova mensagem)
+      await db
+        .from('tarefas_agendadas')
+        .update({ status: 'cancelada' })
+        .eq('lead_id', lead.id)
+        .eq('tipo', 'agente_resposta')
+        .eq('status', 'pendente')
+
+      // Agenda nova resposta após debounce
+      const agendadoPara = new Date(Date.now() + debounce * 1000).toISOString()
+      await db.from('tarefas_agendadas').insert({
+        lead_id: lead.id,
+        tipo: 'agente_resposta',
+        payload: {
+          agente_id: agente.id,
+          canal_provider: 'baileys',
+          canal_instance_id: instanceId,
+        },
+        agendado_para: agendadoPara,
+        status: 'pendente',
+        tentativas: 0,
+      })
+
+      await saveDebug('debounce_agendado', { leadId: lead.id, debounce, agendadoPara })
+    } else {
+      await responderAgenteParaLead(lead.id, texto, true, { provider: 'baileys', instanceId }, agente, messageId)
+      await saveDebug('respondeu', { leadId: lead.id, phone: phoneReal })
+    }
   } catch (err) {
     await saveDebug('erro', { msg: String(err) })
     console.error('[webhook/baileys]', err)
