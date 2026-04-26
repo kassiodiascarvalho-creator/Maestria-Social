@@ -8,26 +8,33 @@ interface Props {
   onChange: (props: Record<string, unknown>) => void
 }
 
+// Section fora do componente — referência estável, sem remount de inputs
+function Section({ id, label, children, open, onToggle }: {
+  id: string; label: string; children: React.ReactNode
+  open: boolean; onToggle: (id: string) => void
+}) {
+  return (
+    <div style={{ borderBottom: '1px solid #2d2d4a' }}>
+      <button onClick={() => onToggle(id)} style={{
+        width: '100%', padding: '12px 16px', background: 'none', border: 'none',
+        color: open ? '#fff' : '#888', cursor: 'pointer',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'inherit',
+      }}>
+        {label} <span style={{ fontSize: 14, opacity: 0.5 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div style={{ padding: '4px 12px 16px' }}>{children}</div>}
+    </div>
+  )
+}
+
 const PropertiesPanel = memo(function PropertiesPanel({ block, onChange }: Props) {
   const meta = BLOCK_META.find(m => m.type === block.type)
   const p = block.props
   const [openSection, setOpenSection] = useState<string>('content')
+  const toggleSection = useCallback((id: string) => setOpenSection(s => s === id ? '' : id), [])
 
   const set = useCallback((key: string, val: unknown) => onChange({ [key]: val }), [onChange])
-
-  const Section = ({ id, label, children }: { id: string; label: string; children: React.ReactNode }) => (
-    <div style={{ borderBottom: '1px solid #2d2d4a' }}>
-      <button onClick={() => setOpenSection(s => s === id ? '' : id)} style={{
-        width: '100%', padding: '12px 16px', background: 'none', border: 'none',
-        color: openSection === id ? '#fff' : '#888', cursor: 'pointer',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'inherit',
-      }}>
-        {label} <span style={{ fontSize: 14, opacity: 0.5 }}>{openSection === id ? '▲' : '▼'}</span>
-      </button>
-      {openSection === id && <div style={{ padding: '4px 12px 16px' }}>{children}</div>}
-    </div>
-  )
 
   return (
     <div style={{ color: '#ccc', fontSize: 13, overflowY: 'auto', height: '100%' }}>
@@ -41,7 +48,7 @@ const PropertiesPanel = memo(function PropertiesPanel({ block, onChange }: Props
       </div>
 
       {/* Animation */}
-      <Section id="animation" label="✨ Animação">
+      <Section id="animation" label="✨ Animação" open={openSection === 'animation'} onToggle={toggleSection}>
         <Field label="Tipo">
           <Select value={(p._animType as string) || 'none'} onChange={v => set('_animType', v)} options={[
             { value: 'none', label: 'Nenhuma' },
@@ -66,12 +73,12 @@ const PropertiesPanel = memo(function PropertiesPanel({ block, onChange }: Props
       </Section>
 
       {/* Content section — block-specific */}
-      <Section id="content" label="📝 Conteúdo">
+      <Section id="content" label="📝 Conteúdo" open={openSection === 'content'} onToggle={toggleSection}>
         <BlockSpecificProps type={block.type} p={p} set={set} />
       </Section>
 
       {/* Style section — common */}
-      <Section id="style" label="🎨 Estilo">
+      <Section id="style" label="🎨 Estilo" open={openSection === 'style'} onToggle={toggleSection}>
         <BlockStyleProps type={block.type} p={p} set={set} />
       </Section>
     </div>

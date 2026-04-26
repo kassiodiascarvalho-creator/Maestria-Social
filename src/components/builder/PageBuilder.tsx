@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, memo } from 'react'
 import {
-  DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
+  DndContext, DragOverlay, closestCenter, MouseSensor, TouchSensor, useSensor, useSensors,
   type DragStartEvent, type DragEndEvent,
 } from '@dnd-kit/core'
 import {
@@ -78,7 +78,10 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
   const [previewKey, setPreviewKey] = useState(0)
 
   const history = useHistory(blocos)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } })
+  )
 
   const selectedBlock = blocks.find(b => b.id === selected) ?? null
 
@@ -443,7 +446,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
           {/* ══ PROPERTIES PANEL ══ */}
           <div className="builder-scroll" style={{ width: 268, background: '#0f0f1a', borderLeft: '1px solid #1e1e3a', overflow: 'auto', flexShrink: 0 }}>
             {selectedBlock ? (
-              <PropertiesPanel block={selectedBlock} onChange={props => updateBlockProps(selectedBlock.id, props)} />
+              <PropertiesPanel key={selectedBlock.id} block={selectedBlock} onChange={props => updateBlockProps(selectedBlock.id, props)} />
             ) : (
               <div style={{ padding: 24, textAlign: 'center', color: '#444', marginTop: 64 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>👆</div>
