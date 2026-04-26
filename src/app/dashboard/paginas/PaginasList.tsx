@@ -19,6 +19,7 @@ export default function PaginasList({ paginasIniciais }: { paginasIniciais: Pagi
   const [showAI, setShowAI] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
   const router = useRouter()
 
   const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-')
@@ -52,18 +53,23 @@ export default function PaginasList({ paginasIniciais }: { paginasIniciais: Pagi
   const generateAndCreate = async () => {
     if (!aiPrompt.trim()) return
     setAiLoading(true)
+    setAiError(null)
     try {
       const res = await fetch('/api/admin/paginas/gerar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: aiPrompt }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        const nome = data.nome || 'Nova Página'
-        setNomeNovo(nome)
-        setSlugNovo(slugify(nome))
-        await createPagina(data.conteudo || [], data.configuracoes || {}, nome)
+      const data = await res.json()
+      if (!res.ok) {
+        setAiError(data.error || `Erro ${res.status}`)
+        return
       }
+      const nome = data.nome || 'Nova Página'
+      setNomeNovo(nome)
+      setSlugNovo(slugify(nome))
+      await createPagina(data.conteudo || [], data.configuracoes || {}, nome)
+    } catch (err) {
+      setAiError(`Falha de rede: ${String(err)}`)
     } finally { setAiLoading(false) }
   }
 
@@ -212,7 +218,8 @@ export default function PaginasList({ paginasIniciais }: { paginasIniciais: Pagi
                 </button>
                 <button className="pag-btn-cancel" onClick={() => setShowAI(false)}>Cancelar</button>
               </div>
-              {aiLoading && <p style={{ textAlign: 'center', color: '#888', fontSize: 12, marginTop: 12 }}>A IA está construindo sua página... pode levar até 30s</p>}
+              {aiLoading && <p style={{ textAlign: 'center', color: '#888', fontSize: 12, marginTop: 12 }}>⏳ Gerando com IA... pode levar até 30s</p>}
+              {aiError && <div style={{ marginTop: 12, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8 }}><p style={{ color: '#dc2626', fontSize: 12, margin: 0 }}>❌ {aiError}</p></div>}
             </div>
           </div>
         )}
@@ -254,7 +261,7 @@ const css = `
 .pag-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #aaa; padding: 0; line-height: 1; }
 .pag-field { margin-bottom: 16px; }
 .pag-field label { display: block; font-size: 12px; font-weight: 600; color: #777; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
-.pag-input { width: 100%; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px; outline: none; font-family: inherit; box-sizing: border-box; }
+.pag-input { width: 100%; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px; outline: none; font-family: inherit; box-sizing: border-box; color: #111; background: #fff; }
 .pag-input:focus { border-color: #6366f1; }
 .pag-btn-cancel { padding: 10px 16px; background: #f3f4f6; color: #555; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-family: inherit; }
 .pag-ai-suggestion { width: 100%; padding: 9px 12px; background: #f8f9ff; border: 1px solid #e0e4ff; border-radius: 8px; color: #555; font-size: 12px; cursor: pointer; text-align: left; margin-bottom: 6px; font-family: inherit; }

@@ -399,7 +399,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
               background: pageConfig.backgroundColor || '#ffffff',
               borderRadius: viewport === 'mobile' ? 28 : 10,
               boxShadow: '0 2px 40px rgba(0,0,0,.14)',
-              overflow: 'hidden', minHeight: 500,
+              overflow: 'auto', minHeight: 500,
               transition: 'all .3s cubic-bezier(.4,0,.2,1)',
               outline: '3px solid transparent',
             }}>

@@ -116,6 +116,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     db.from('forms').update({ atualizado_em: new Date().toISOString() }).eq('id', form.id)
   )
 
+  // Notificação Email
+  if (form.envio_email) {
+    const linhas = respostas.slice(0, 15).map(r =>
+      `<tr><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:#555;font-size:13px"><strong>${r.label}</strong></td><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;font-size:13px">${r.valor || '—'}</td></tr>`
+    ).join('')
+    const html = `<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto">
+      <h2 style="font-size:18px;color:#111;margin-bottom:4px">📋 Nova resposta — ${form.titulo}</h2>
+      ${leadId ? `<p style="font-size:13px;color:#888;margin:0 0 16px">Lead: ${nome || email || wpp || leadId}</p>` : ''}
+      <table style="width:100%;border-collapse:collapse;background:#fafafa;border-radius:8px;overflow:hidden">${linhas}</table>
+      ${respostas.length > 15 ? `<p style="font-size:12px;color:#aaa;margin-top:8px">...e mais ${respostas.length - 15} respostas</p>` : ''}
+    </div>`
+    try {
+      const { enviarEmail } = await import('@/lib/email/enviar')
+      await enviarEmail({
+        para: form.envio_email,
+        assunto: `📋 Nova resposta: ${form.titulo}`,
+        html,
+        texto: respostas.slice(0, 15).map(r => `${r.label}: ${r.valor || '—'}`).join('\n'),
+      })
+    } catch { /* não crítico */ }
+  }
+
   // Notificação WhatsApp
   if (form.envio_whatsapp) {
     const resumo = respostas.slice(0, 5).map(r => `*${r.label}:* ${r.valor}`).join('\n')
