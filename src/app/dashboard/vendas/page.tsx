@@ -22,7 +22,7 @@ type Dados = {
 }
 
 const STATUS_COR: Record<string, string> = { aprovado: '#10b981', cancelado: '#ef4444', reembolsado: '#f59e0b', chargeback: '#dc2626', pendente: '#6b7280' }
-const PLAT_ICON: Record<string, string> = { hotmart: '🔥', kiwify: '🥝', eduzz: '📦', hubla: '🌐', lastlink: '🔗', cakto: '🍰', monetizze: '💳', ticto: '✅', manual: '✏️' }
+const PLAT_ICON: Record<string, string> = {}
 
 function Card({ label, value, sub, cor }: { label: string; value: string; sub?: string; cor?: string }) {
   return (
@@ -72,15 +72,15 @@ export default function VendasPage() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <select className='vd-select' value={plataformaFiltro} onChange={e => setPlataformaFiltro(e.target.value)}>
               <option value='todas'>Todas as plataformas</option>
-              <option value='hotmart'>🔥 Hotmart</option>
-              <option value='kiwify'>🥝 Kiwify</option>
-              <option value='eduzz'>📦 Eduzz</option>
-              <option value='hubla'>🌐 Hubla</option>
-              <option value='lastlink'>🔗 Lastlink</option>
-              <option value='cakto'>🍰 Cakto</option>
-              <option value='monetizze'>💳 Monetizze</option>
-              <option value='ticto'>✅ Ticto</option>
-              <option value='manual'>✏️ Manual</option>
+              <option value='hotmart'>Hotmart</option>
+              <option value='kiwify'>Kiwify</option>
+              <option value='eduzz'>Eduzz</option>
+              <option value='hubla'>Hubla</option>
+              <option value='lastlink'>Lastlink</option>
+              <option value='cakto'>Cakto</option>
+              <option value='monetizze'>Monetizze</option>
+              <option value='ticto'>Ticto</option>
+              <option value='manual'>Manual</option>
             </select>
             <select className='vd-select' value={periodo} onChange={e => setPeriodo(e.target.value)}>
               <option value='7'>Últimos 7 dias</option>
@@ -110,7 +110,6 @@ export default function VendasPage() {
                 <h3 className='vd-card-title'>Por plataforma</h3>
                 {Object.entries(dados.porPlataforma).map(([plat, d]) => (
                   <div key={plat} className='vd-row'>
-                    <span style={{ fontSize: 16 }}>{PLAT_ICON[plat] || '📦'}</span>
                     <span style={{ flex: 1, color: '#c8b99a', fontWeight: 600, textTransform: 'capitalize' }}>{plat}</span>
                     <span style={{ color: '#4a3e30', fontSize: 12 }}>{d.vendas} vendas</span>
                     <span style={{ color: '#c2904d', fontWeight: 700 }}>{fmt(d.receita)}</span>
@@ -177,7 +176,7 @@ export default function VendasPage() {
                   <tbody>
                     {dados.vendas.filter(v => plataformaFiltro === 'todas' || v.plataforma === plataformaFiltro).slice(0, 50).map(v => (
                       <tr key={v.id} style={{ borderBottom: '1px solid #1a1410' }}>
-                        <td style={{ padding: '10px 12px' }}><span title={v.plataforma}>{PLAT_ICON[v.plataforma] || '📦'} {v.plataforma}</span></td>
+                        <td style={{ padding: '10px 12px', textTransform: 'capitalize' }}>{v.plataforma}</td>
                         <td style={{ padding: '10px 12px', color: '#c8b99a' }}>
                           <div style={{ fontWeight: 600 }}>{v.comprador_nome || '—'}</div>
                           <div style={{ fontSize: 11, color: '#4a3e30' }}>{v.comprador_email}</div>

@@ -90,14 +90,14 @@ const EVENTOS = [
 ] as const;
 
 const PLATAFORMAS_PAGAMENTO = [
-  { id: 'hotmart',   label: 'Hotmart',   icon: '🔥', token: 'HOTMART_TOKEN',   url: '/api/webhooks/hotmart',   doc: 'Ferramentas → Webhooks → Adicionar URL' },
-  { id: 'kiwify',    label: 'Kiwify',    icon: '🥝', token: 'KIWIFY_TOKEN',    url: '/api/webhooks/kiwify',    doc: 'Configurações → Webhooks → Nova URL' },
-  { id: 'eduzz',     label: 'Eduzz',     icon: '📦', token: 'EDUZZ_TOKEN',     url: '/api/webhooks/eduzz',     doc: 'Painel → Notificações → Webhooks' },
-  { id: 'hubla',     label: 'Hubla',     icon: '🌐', token: 'HUBLA_TOKEN',     url: '/api/webhooks/hubla',     doc: 'Configurações → Webhooks → Nova integração' },
-  { id: 'lastlink',  label: 'Lastlink',  icon: '🔗', token: 'LASTLINK_TOKEN',  url: '/api/webhooks/lastlink',  doc: 'Painel → Integrações → Webhooks' },
-  { id: 'cakto',     label: 'Cakto',     icon: '🍰', token: 'CAKTO_TOKEN',     url: '/api/webhooks/cakto',     doc: 'Painel → Configurações → Webhooks' },
-  { id: 'monetizze', label: 'Monetizze', icon: '💳', token: 'MONETIZZE_TOKEN', url: '/api/webhooks/monetizze', doc: 'Painel → Postback → URL de notificação' },
-  { id: 'ticto',     label: 'Ticto',     icon: '✅', token: 'TICTO_TOKEN',     url: '/api/webhooks/ticto',     doc: 'Painel → Integrações → Webhooks' },
+  { id: 'hotmart',   label: 'Hotmart',   token: 'HOTMART_TOKEN',   url: '/api/webhooks/hotmart',   doc: 'Ferramentas → Webhooks → Adicionar URL' },
+  { id: 'kiwify',    label: 'Kiwify',    token: 'KIWIFY_TOKEN',    url: '/api/webhooks/kiwify',    doc: 'Configurações → Webhooks → Nova URL' },
+  { id: 'eduzz',     label: 'Eduzz',     token: 'EDUZZ_TOKEN',     url: '/api/webhooks/eduzz',     doc: 'Painel → Notificações → Webhooks' },
+  { id: 'hubla',     label: 'Hubla',     token: 'HUBLA_TOKEN',     url: '/api/webhooks/hubla',     doc: 'Configurações → Webhooks → Nova integração' },
+  { id: 'lastlink',  label: 'Lastlink',  token: 'LASTLINK_TOKEN',  url: '/api/webhooks/lastlink',  doc: 'Painel → Integrações → Webhooks' },
+  { id: 'cakto',     label: 'Cakto',     token: 'CAKTO_TOKEN',     url: '/api/webhooks/cakto',     doc: 'Painel → Configurações → Webhooks' },
+  { id: 'monetizze', label: 'Monetizze', token: 'MONETIZZE_TOKEN', url: '/api/webhooks/monetizze', doc: 'Painel → Postback → URL de notificação' },
+  { id: 'ticto',     label: 'Ticto',     token: 'TICTO_TOKEN',     url: '/api/webhooks/ticto',     doc: 'Painel → Integrações → Webhooks' },
 ];
 
 export default function IntegracoesPage() {
@@ -320,7 +320,7 @@ export default function IntegracoesPage() {
                     transition: 'all .15s',
                   }}
                 >
-                  {p.icon} {p.label}
+                  {p.label}
                 </button>
               ))}
             </div>
@@ -337,7 +337,7 @@ export default function IntegracoesPage() {
                         {copiedWh ? '✓ Copiado' : 'Copiar'}
                       </button>
                     </div>
-                    <div style={{ fontSize: 12, color: '#4a3e30', marginTop: 8 }}>📍 {p.doc}</div>
+                    <div style={{ fontSize: 12, color: '#4a3e30', marginTop: 8 }}>{p.doc}</div>
                   </div>
 
                   <div style={{ marginTop: 16 }}>
