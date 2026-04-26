@@ -20,6 +20,7 @@ const NAV = [
   { href: "/dashboard/forms",        label: "Formulários",      icon: "◫" },
   { href: "/dashboard/cadencia",     label: "Cadência",         icon: "◈" },
   { href: "/dashboard/integracoes", label: "Integrações",      icon: "⬡" },
+  { href: "/dashboard/paginas",    label: "Páginas",          icon: "🎨" },
 ];
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
