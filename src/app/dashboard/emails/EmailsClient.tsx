@@ -59,6 +59,8 @@ export default function EmailsClient({
   const [importando, setImportando] = useState(false)
   const [msgLista, setMsgLista] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [leadsComEmail, setLeadsComEmail] = useState<number | null>(null)
+  const [sincronizando, setSincronizando] = useState(false)
 
   // ── Estado Campanhas ──────────────────────────────────────────
   const [campanhas, setCampanhas] = useState<Campanha[]>(campanhasIniciais)
@@ -119,6 +121,23 @@ export default function EmailsClient({
   }
 
   // ── Funções Listas ────────────────────────────────────────────
+  async function carregarLeadsComEmail() {
+    const res = await fetch('/api/admin/emails/sincronizar-leads')
+    if (res.ok) { const d = await res.json(); setLeadsComEmail(d.total_com_email) }
+  }
+
+  async function sincronizarLeads() {
+    setSincronizando(true); setMsgLista(null)
+    const res = await fetch('/api/admin/emails/sincronizar-leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+    const d = await res.json()
+    if (res.ok) {
+      setMsgLista(`✅ ${d.importados} leads sincronizados para a lista "📋 Leads — Todos"`)
+      const r2 = await fetch('/api/admin/emails/listas')
+      if (r2.ok) { const d2 = await r2.json(); setListas(d2.listas || []) }
+    } else setMsgLista(`❌ ${d.error}`)
+    setSincronizando(false)
+  }
+
   async function criarLista() {
     if (!novaLista.nome.trim()) return
     const res = await fetch('/api/admin/emails/listas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(novaLista) })
@@ -314,8 +333,35 @@ export default function EmailsClient({
                 <h2 style={{ color: '#fff9e6', fontSize: 22, fontWeight: 800, margin: 0 }}>Listas de E-mails</h2>
                 <p style={{ color: '#4a3e30', fontSize: 13, margin: '4px 0 0' }}>Importe contatos, segmente e organize suas listas</p>
               </div>
-              <button className='em-btn em-btn-primary' onClick={() => setShowNovaLista(true)}>+ Nova Lista</button>
+                <button className='em-btn em-btn-primary' onClick={() => setShowNovaLista(true)}>+ Nova Lista</button>
             </div>
+
+            {/* Painel de sincronização automática */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+              {/* Sincronizar Leads */}
+              <div style={{ background: 'rgba(194,144,77,.06)', border: '1px solid rgba(194,144,77,.2)', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: '#c2904d', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>👥 Sincronizar Leads</div>
+                  <div style={{ color: '#4a3e30', fontSize: 12 }}>
+                    {leadsComEmail === null
+                      ? <button style={{ background: 'none', border: 'none', color: '#6a5a4a', cursor: 'pointer', fontSize: 12, padding: 0, textDecoration: 'underline' }} onClick={carregarLeadsComEmail}>Ver quantos têm e-mail</button>
+                      : `${leadsComEmail} leads com e-mail disponíveis`}
+                  </div>
+                </div>
+                <button className='em-btn em-btn-primary' style={{ flexShrink: 0, fontSize: 12, padding: '8px 14px' }} onClick={sincronizarLeads} disabled={sincronizando}>
+                  {sincronizando ? '⏳ Sincronizando...' : '↻ Importar'}
+                </button>
+              </div>
+              {/* Formulários info */}
+              <div style={{ background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 12, padding: '16px 20px' }}>
+                <div style={{ color: '#818cf8', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>📋 Formulários</div>
+                <div style={{ color: '#4a3e30', fontSize: 12, lineHeight: 1.6 }}>
+                  A cada submissão de formulário, o e-mail é salvo automaticamente em uma lista com o nome do formulário. As listas aparecem abaixo.
+                </div>
+              </div>
+            </div>
+
+            {msgLista && !listaDetalhe && <div className='em-msg' style={{ marginBottom: 16, background: msgLista.startsWith('✅') ? 'rgba(100,180,100,.08)' : 'rgba(224,112,112,.08)', border: `1px solid ${msgLista.startsWith('✅') ? 'rgba(100,180,100,.2)' : 'rgba(224,112,112,.2)'}`, color: msgLista.startsWith('✅') ? '#7ab87a' : '#e07070' }}>{msgLista}</div>}
 
             {showNovaLista && (
               <div className='em-card' style={{ marginBottom: 20 }}>

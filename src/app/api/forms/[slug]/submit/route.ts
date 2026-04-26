@@ -116,6 +116,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     db.from('forms').update({ atualizado_em: new Date().toISOString() }).eq('id', form.id)
   )
 
+  // Auto-adicionar email na lista do formulário
+  if (email) {
+    try {
+      const listaDb = createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
+      const nomeLista = `📋 Form: ${form.titulo}`
+      // Busca ou cria lista com o nome do formulário
+      let { data: lista } = await listaDb.from('email_listas').select('id').eq('nome', nomeLista).single()
+      if (!lista) {
+        const { data: novaLista } = await listaDb
+          .from('email_listas')
+          .insert({ nome: nomeLista, descricao: `Contatos do formulário: ${form.titulo}`, origem: 'formulario' })
+          .select('id').single()
+        lista = novaLista
+      }
+      if (lista?.id) {
+        await listaDb.from('email_lista_contatos').upsert({
+          lista_id: lista.id, lead_id: leadId, email: email.toLowerCase(),
+          nome: nome || null, origem: 'formulario', status: 'ativo',
+        }, { onConflict: 'lista_id,email' })
+      }
+    } catch { /* não crítico */ }
+  }
+
   // Notificação Email
   if (form.envio_email) {
     const linhas = respostas.slice(0, 15).map(r =>
