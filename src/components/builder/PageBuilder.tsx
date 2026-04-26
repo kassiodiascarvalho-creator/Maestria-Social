@@ -69,6 +69,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
   const [showAI, setShowAI] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
   const [showVersions, setShowVersions] = useState(false)
   const [versoes, setVersoes] = useState<Array<{ id: string; nome: string; criado_em: string }>>([])
   const [showColorPanel, setShowColorPanel] = useState(false)
@@ -99,7 +100,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
   const triggerAutosave = useCallback((b: Block[], n: string, cfg: PageConfig) => {
     setSaveStatus('unsaved')
     clearTimeout(autosaveTimer.current)
-    autosaveTimer.current = setTimeout(() => saveToServer(b, n, cfg), 2000)
+    autosaveTimer.current = setTimeout(() => saveToServer(b, n, cfg), 5000)
   }, [saveToServer])
 
   useEffect(() => {
@@ -265,6 +266,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
   const generatePage = async (mode: 'full' | 'block') => {
     if (!aiPrompt.trim()) return
     setAiLoading(true)
+    setAiError(null)
     try {
       const body = mode === 'block'
         ? { prompt: `Crie APENAS um único bloco para: ${aiPrompt}. Retorne somente 1 bloco no array conteudo.` }
@@ -272,21 +274,25 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
       const res = await fetch('/api/admin/paginas/gerar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      if (res.ok) {
-        const data = await res.json()
-        if (mode === 'full') {
-          const newBlocks = data.conteudo || []
-          setBlocks(newBlocks)
-          history.push(newBlocks)
-          if (data.configuracoes) handleConfigChange({ ...pageConfig, ...data.configuracoes })
-          if (data.nome) handleNomeChange(data.nome)
-        } else {
-          const added = data.conteudo?.slice(0, 3) || []
-          setBlocksAndHistory(prev => [...prev, ...added])
-        }
-        setShowAI(false)
-        setAiPrompt('')
+      const data = await res.json()
+      if (!res.ok) {
+        setAiError(data.error || `Erro ${res.status} — verifique se OPENAI_API_KEY está configurada nas variáveis de ambiente da Vercel.`)
+        return
       }
+      if (mode === 'full') {
+        const newBlocks = data.conteudo || []
+        setBlocks(newBlocks)
+        history.push(newBlocks)
+        if (data.configuracoes) handleConfigChange({ ...pageConfig, ...data.configuracoes })
+        if (data.nome) handleNomeChange(data.nome)
+      } else {
+        const added = data.conteudo?.slice(0, 3) || []
+        setBlocksAndHistory(prev => [...prev, ...added])
+      }
+      setShowAI(false)
+      setAiPrompt('')
+    } catch (err) {
+      setAiError(`Falha de rede: ${String(err)}`)
     } finally { setAiLoading(false) }
   }
 
@@ -302,6 +308,13 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'Inter,system-ui,sans-serif', background: '#f4f5f7' }}>
+      <style>{`
+        .builder-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .builder-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,.1); }
+        .builder-scroll::-webkit-scrollbar-thumb { background: rgba(120,120,140,.4); border-radius: 4px; }
+        .builder-scroll::-webkit-scrollbar-thumb:hover { background: rgba(120,120,140,.7); }
+        .builder-scroll { scrollbar-width: thin; scrollbar-color: rgba(120,120,140,.4) transparent; }
+      `}</style>
 
       {/* ══════════ TOOLBAR ══════════ */}
       <div style={{ height: 52, background: '#0f0f1a', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', flexShrink: 0, borderBottom: '1px solid #1e1e3a', zIndex: 100 }}>
@@ -331,7 +344,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
           ))}
         </div>
 
-        <TBtn onClick={() => setShowAI(true)} style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', borderColor: 'transparent' }}>✨ IA</TBtn>
+        <TBtn onClick={() => { setShowAI(true); setAiError(null) }} style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', borderColor: 'transparent' }}>✨ IA</TBtn>
         <TBtn onClick={() => { setShowVersions(true); loadVersions() }} title="Histórico de versões">🕐</TBtn>
         <TBtn onClick={() => { setShowPreview(true); setPreviewKey(k => k + 1) }} title="Preview isolado">👁</TBtn>
         <a href={publicUrl} target="_blank" rel="noopener noreferrer" style={tbtnStyle as React.CSSProperties}>🔗 Ver</a>
@@ -384,7 +397,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
           </div>
 
           {/* ══ CANVAS ══ */}
-          <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 12px', background: '#e8eaed', gap: 0 }}
+          <div className="builder-scroll" style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 12px', background: '#e8eaed', gap: 0 }}
             onClick={() => setSelected(null)}>
             <div style={{ fontSize: 11, color: '#aaa', marginBottom: 12, fontWeight: 500, letterSpacing: 0.5, display: 'flex', gap: 16, alignItems: 'center' }}>
               <span>{blocks.length} bloco{blocks.length !== 1 ? 's' : ''}</span>
@@ -427,7 +440,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
               )}
             </div>
 
-            <button onClick={() => setShowAI(true)} style={{ marginTop: 16, padding: '9px 20px', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>
+            <button onClick={() => { setShowAI(true); setAiError(null) }} style={{ marginTop: 16, padding: '9px 20px', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>
               ✨ Gerar com IA
             </button>
           </div>
@@ -442,7 +455,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
           </DragOverlay>
 
           {/* ══ PROPERTIES PANEL ══ */}
-          <div style={{ width: 268, background: '#0f0f1a', borderLeft: '1px solid #1e1e3a', overflow: 'auto', flexShrink: 0 }}>
+          <div className="builder-scroll" style={{ width: 268, background: '#0f0f1a', borderLeft: '1px solid #1e1e3a', overflow: 'auto', flexShrink: 0 }}>
             {selectedBlock ? (
               <PropertiesPanel block={selectedBlock} onChange={props => updateBlockProps(selectedBlock.id, props)} />
             ) : (
@@ -468,7 +481,7 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
                 <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 800, margin: 0 }}>Gerar com IA</h2>
                 <p style={{ color: '#666', fontSize: 12, margin: 0 }}>Descreva o que quer — a IA constrói para você</p>
               </div>
-              <button onClick={() => setShowAI(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#555', fontSize: 20, cursor: 'pointer', padding: 4 }}>✕</button>
+              <button onClick={() => { setShowAI(false); setAiError(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#555', fontSize: 20, cursor: 'pointer', padding: 4 }}>✕</button>
             </div>
 
             {/* Quick prompts */}
@@ -498,7 +511,12 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
                 + 1 Bloco
               </button>
             </div>
-            {aiLoading && <p style={{ textAlign: 'center', color: '#666', fontSize: 12, marginTop: 12 }}>🤖 Gerando... pode levar até 30 segundos</p>}
+            {aiLoading && <p style={{ textAlign: 'center', color: '#666', fontSize: 12, marginTop: 12 }}>🤖 Gerando com GPT-4o... pode levar até 30 segundos</p>}
+            {aiError && (
+              <div style={{ marginTop: 12, padding: '12px 14px', background: '#2d0a0a', border: '1px solid #7f1d1d', borderRadius: 10 }}>
+                <p style={{ color: '#fca5a5', fontSize: 12, margin: 0, lineHeight: 1.6 }}>❌ {aiError}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
