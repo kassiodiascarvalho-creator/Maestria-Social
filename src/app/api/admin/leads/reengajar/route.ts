@@ -51,20 +51,20 @@ export async function POST(req: NextRequest) {
         } else {
           let enviado = false
           try {
-            await enviarViaBaileys(para, mensagem)
+            await enviarViaBaileys(para, mensagemPersonalizada)
             enviado = true
           } catch (errBaileys) {
             console.warn(`[reengajar] Baileys falhou para ${lead.nome}:`, errBaileys)
           }
           if (!enviado) {
-            await enviarMensagemWhatsApp(para, mensagem)
+            await enviarMensagemWhatsApp(para, mensagemPersonalizada)
           }
         }
 
         await supabase.from('conversas').insert({
           lead_id: lead.id,
           role: 'assistant',
-          mensagem,
+          mensagem: mensagemPersonalizada,
         })
 
         const updateData: Record<string, unknown> = {
