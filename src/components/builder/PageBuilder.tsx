@@ -78,12 +78,11 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
   const [previewKey, setPreviewKey] = useState(0)
 
   const history = useHistory(blocos)
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   const selectedBlock = blocks.find(b => b.id === selected) ?? null
 
-  // ── Autosave ───────────────────────────────────────────────────
+  // ── Save (manual only) ─────────────────────────────────────────
   const saveToServer = useCallback(async (b: Block[], n: string, cfg: PageConfig) => {
     setSaveStatus('saving')
     try {
@@ -96,16 +95,6 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
       else setSaveStatus('unsaved')
     } catch { setSaveStatus('unsaved') }
   }, [paginaId])
-
-  const triggerAutosave = useCallback((b: Block[], n: string, cfg: PageConfig) => {
-    setSaveStatus('unsaved')
-    clearTimeout(autosaveTimer.current)
-    autosaveTimer.current = setTimeout(() => saveToServer(b, n, cfg), 5000)
-  }, [saveToServer])
-
-  useEffect(() => {
-    return () => clearTimeout(autosaveTimer.current)
-  }, [])
 
   // ── Save version (manual) ──────────────────────────────────────
   const saveVersion = useCallback(async () => {
@@ -173,10 +162,10 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
     setBlocks(prev => {
       const next = updater(prev)
       history.push(next)
-      triggerAutosave(next, nome, pageConfig)
+      setSaveStatus('unsaved')
       return next
     })
-  }, [history, triggerAutosave, nome, pageConfig])
+  }, [history])
 
   const addBlock = useCallback((type: BlockType, insertAt?: number) => {
     const block = createBlock(type)
@@ -216,22 +205,19 @@ export default function PageBuilder({ paginaId, nomeInicial, slugInicial, blocos
   }, [setBlocksAndHistory])
 
   const updateBlockProps = useCallback((id: string, props: Partial<Record<string, unknown>>) => {
-    setBlocks(prev => {
-      const next = prev.map(b => b.id === id ? { ...b, props: { ...b.props, ...props } } : b)
-      triggerAutosave(next, nome, pageConfig)
-      return next
-    })
-  }, [triggerAutosave, nome, pageConfig])
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, props: { ...b.props, ...props } } : b))
+    setSaveStatus('unsaved')
+  }, [])
 
   // ── Nome/Config change ─────────────────────────────────────────
   const handleNomeChange = (n: string) => {
     setNome(n)
-    triggerAutosave(blocks, n, pageConfig)
+    setSaveStatus('unsaved')
   }
 
   const handleConfigChange = (cfg: PageConfig) => {
     setPageConfig(cfg)
-    triggerAutosave(blocks, nome, cfg)
+    setSaveStatus('unsaved')
   }
 
   // ── DnD handlers ──────────────────────────────────────────────
