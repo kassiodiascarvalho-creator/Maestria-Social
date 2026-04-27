@@ -728,7 +728,7 @@ export async function responderAgenteParaLead(
         // Canal: usa o da conversa atual; fallback para o primeiro canal configurado no agente
         const seqProvider = canal?.provider
           ?? (agenteDB?.canais?.[0]?.provider as 'meta' | 'baileys' | undefined)
-          ?? 'meta'
+          ?? 'baileys' // sequências de agente sempre Baileys por padrão (sem janela 24h)
         const seqInstanceId = canal?.instanceId
           ?? agenteDB?.canais?.[0]?.id
           ?? null

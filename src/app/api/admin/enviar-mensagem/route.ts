@@ -176,12 +176,12 @@ export async function POST(req: NextRequest) {
 
     await supabase.from('conversas').insert({ lead_id: leadId, role: 'assistant', mensagem: mensagemSalva })
 
+    // Registra atividade humana (pausa o agente por 5 min automaticamente)
+    // NÃO seta humano_atendendo permanente — se quiser travar o agente para sempre,
+    // mude a etiqueta manualmente no CRM via EtiquetaSelector
     await supabase
       .from('leads')
-      .update({
-        ultima_atividade_humana: new Date().toISOString(),
-        etiqueta: 'humano_atendendo',
-      })
+      .update({ ultima_atividade_humana: new Date().toISOString() })
       .eq('id', leadId)
 
     return NextResponse.json({ ok: true })

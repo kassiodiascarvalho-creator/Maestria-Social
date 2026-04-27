@@ -151,19 +151,18 @@ async function executar(t: Tarefa): Promise<void> {
     let enviado = false
 
     // ── Envio de mídia (image/audio/video/document) ──────────────────────────
+    // Baileys sempre primeiro: sem janela 24h, entrega garantida
     if (isMidia) {
       const tipo = tipoMidia as 'image' | 'audio' | 'video' | 'document'
-      if (canalProvider === 'baileys' || !canalProvider) {
-        try {
-          if (tipo === 'audio') {
-            const { enviarAudioViaBaileys } = await import('@/lib/baileys')
-            await enviarAudioViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
-          } else {
-            await enviarMidiaViaBaileys(lead.whatsapp, tipo, textoResolvido, caption || undefined, filename || undefined, canalInstanceId)
-          }
-          enviado = true
-        } catch { /* fallback Meta */ }
-      }
+      try {
+        if (tipo === 'audio') {
+          const { enviarAudioViaBaileys } = await import('@/lib/baileys')
+          await enviarAudioViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
+        } else {
+          await enviarMidiaViaBaileys(lead.whatsapp, tipo, textoResolvido, caption || undefined, filename || undefined, canalInstanceId)
+        }
+        enviado = true
+      } catch { /* fallback Meta */ }
       if (!enviado) {
         try {
           await enviarMidiaViaMeta(lead.whatsapp, tipo, textoResolvido, caption || undefined, filename || undefined)
@@ -181,32 +180,16 @@ async function executar(t: Tarefa): Promise<void> {
     }
 
     // ── Envio de texto ───────────────────────────────────────────────────────
-    if (canalProvider === 'baileys') {
-      try {
-        await enviarViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
-        enviado = true
-      } catch { /* fallback Meta abaixo */ }
-      if (!enviado) {
-        try {
-          await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
-          enviado = true
-        } catch { /* silencioso */ }
-      }
-    } else if (canalProvider === 'meta') {
+    // Sempre Baileys primeiro (follow-ups, lembretes, sequências): sem restrição de janela 24h
+    try {
+      await enviarViaBaileys(lead.whatsapp, textoResolvido, canalInstanceId)
+      enviado = true
+    } catch { /* fallback Meta abaixo */ }
+    if (!enviado) {
       try {
         await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
         enviado = true
       } catch { /* silencioso */ }
-    } else {
-      // Legado: sem canal explícito — tenta Baileys, depois texto livre via Meta
-      try {
-        await enviarViaBaileys(lead.whatsapp, textoResolvido)
-        enviado = true
-      } catch { /* fallback Meta abaixo */ }
-      if (!enviado) {
-        await enviarMensagemWhatsApp(lead.whatsapp, textoResolvido)
-        enviado = true
-      }
     }
 
     if (!enviado) throw new Error('Nenhum canal disponível para envio')
