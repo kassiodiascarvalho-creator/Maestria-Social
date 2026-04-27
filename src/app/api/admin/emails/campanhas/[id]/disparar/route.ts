@@ -48,21 +48,21 @@ function htmlParaTexto(html: string): string {
     .trim()
 }
 
+const LOGO_URL = 'https://i.imgur.com/mJZwwpe.png'
+
 function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string): string {
   // Se o conteúdo já tem estrutura HTML completa, apenas injeta o rodapé de marca
-  const temEstrutura = /<html/i.test(conteudo)
-  const rodape = `
+  if (/<html/i.test(conteudo)) {
+    const rodapeSimples = `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #2a2a1e;margin-top:32px;">
   <tr><td style="padding:24px 0;text-align:center;font-family:Arial,sans-serif;font-size:12px;color:#7a7a6a;line-height:1.7;">
     <p style="margin:0 0 6px;">Você recebe este e-mail porque se cadastrou em um formulário da <strong style="color:#c2904d;">${remetenteNome}</strong>.</p>
     <p style="margin:0;"><a href="${unsubUrl}" style="color:#c2904d;text-decoration:none;border-bottom:1px solid #c2904d;">Cancelar inscrição</a></p>
   </td></tr>
 </table>`
-
-  if (temEstrutura) {
     return conteudo.includes('</body>')
-      ? conteudo.replace('</body>', `${rodape}</body>`)
-      : conteudo + rodape
+      ? conteudo.replace('</body>', `${rodapeSimples}</body>`)
+      : conteudo + rodapeSimples
   }
 
   return `<!DOCTYPE html>
@@ -75,33 +75,58 @@ function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string
   <title>${remetenteNome}</title>
   <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#0e0f09;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
-  <!-- Wrapper -->
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0e0f09;min-height:100%;">
+<body style="margin:0;padding:0;background-color:#0c0d08;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0c0d08;">
     <tr>
-      <td align="center" style="padding:40px 16px;">
+      <td align="center" style="padding:40px 16px 48px;">
 
         <!-- Card -->
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background-color:#111009;border-radius:4px;overflow:hidden;border:1px solid #2a2a1e;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;width:100%;background-color:#0f1009;border-radius:2px;">
 
-          <!-- Header -->
+          <!-- ── HEADER: logo + título ── -->
           <tr>
-            <td align="center" style="background-color:#0e0f09;padding:28px 40px;border-bottom:2px solid #c2904d;">
-              <span style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:700;letter-spacing:3px;color:#c2904d;text-transform:uppercase;text-decoration:none;">MAESTRIA SOCIAL</span>
+            <td align="center" style="padding:36px 48px 28px;">
+              <img src="${LOGO_URL}" alt="Maestria Social" width="56" height="56"
+                style="display:block;margin:0 auto 16px;border:0;outline:none;text-decoration:none;" />
+              <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:4px;color:#c2904d;text-transform:uppercase;margin-bottom:4px;">MAESTRIA SOCIAL</div>
+              <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#5a5a4a;letter-spacing:1px;">Inteligência Social aplicada</div>
             </td>
           </tr>
 
-          <!-- Content -->
+          <!-- Separador dourado -->
           <tr>
-            <td style="padding:40px 48px 32px;color:#e8e0d0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.75;">
+            <td style="padding:0 48px;">
+              <div style="height:1px;background-color:#2a2518;border-top:1px solid #c2904d11;"></div>
+            </td>
+          </tr>
+
+          <!-- ── CONTEÚDO ── -->
+          <tr>
+            <td style="padding:36px 48px 32px;color:#d8cfc0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.8;">
               ${conteudo}
             </td>
           </tr>
 
-          <!-- Footer -->
+          <!-- Separador inferior -->
           <tr>
-            <td style="padding:0 48px 36px;">
-              ${rodape}
+            <td style="padding:0 48px;">
+              <div style="height:1px;background-color:#1e1e14;"></div>
+            </td>
+          </tr>
+
+          <!-- ── FOOTER: logo pequena + unsubscribe ── -->
+          <tr>
+            <td align="center" style="padding:24px 48px 32px;">
+              <img src="${LOGO_URL}" alt="Maestria Social" width="28" height="28"
+                style="display:block;margin:0 auto 10px;opacity:0.5;border:0;outline:none;text-decoration:none;" />
+              <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#3a3a2e;margin-bottom:8px;">
+                © Maestria Social · maestriasocial.com
+              </div>
+              <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#4a4a38;">
+                Você recebe este e-mail porque se cadastrou em um formulário da Maestria Social.<br>
+                <a href="${unsubUrl}" style="color:#7a6a4a;text-decoration:underline;">Cancelar inscrição</a>
+              </div>
             </td>
           </tr>
 
@@ -111,7 +136,7 @@ function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string
       </td>
     </tr>
   </table>
-  <!-- /Wrapper -->
+
 </body>
 </html>`
 }
