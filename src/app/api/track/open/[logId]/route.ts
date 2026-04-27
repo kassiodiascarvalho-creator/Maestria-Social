@@ -34,12 +34,19 @@ export async function GET(req: NextRequest, { params }: P) {
       // Registra evento
       await db.from('email_eventos').insert({
         log_id: logId, tipo: 'aberto', ip, user_agent: ua,
-      })
+      }).catch(() => null)
 
-      // Atualiza total_abertos na campanha (incrementa)
+      // Incrementa total_abertos na campanha (só na primeira abertura)
       if (log.status !== 'aberto' && log.status !== 'clicado') {
-        await db.rpc('increment_col', { tbl: 'email_campanhas', col: 'total_abertos', row_id: log.campanha_id })
-          .catch(() => null)
+        const { data: camp } = await db
+          .from('email_campanhas')
+          .select('total_abertos')
+          .eq('id', log.campanha_id)
+          .single()
+        await db
+          .from('email_campanhas')
+          .update({ total_abertos: (camp?.total_abertos ?? 0) + 1 })
+          .eq('id', log.campanha_id)
       }
     }
   }

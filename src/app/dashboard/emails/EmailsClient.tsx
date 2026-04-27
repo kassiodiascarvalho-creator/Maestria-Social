@@ -131,11 +131,12 @@ export default function EmailsClient({
     const res = await fetch('/api/admin/emails/sincronizar-leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     const d = await res.json()
     if (res.ok) {
+      const ignoradosTxt = d.ignorados > 0 ? ` · ${d.ignorados} e-mail(s) falsos ignorados (Baileys/sistema)` : ''
       if (d.importados === 0) {
-        setMsgLista('Nenhum lead com e-mail encontrado.')
+        setMsgLista(`Nenhum e-mail real encontrado.${ignoradosTxt}`)
       } else {
         const detalhes = d.resumo?.map((r: { lista: string; importados: number }) => `${r.lista} (${r.importados})`).join(', ') ?? ''
-        setMsgLista(`${d.importados} contatos sincronizados em ${d.listas_criadas} lista(s): ${detalhes}`)
+        setMsgLista(`${d.importados} contatos sincronizados em ${d.listas_criadas} lista(s): ${detalhes}${ignoradosTxt}`)
       }
       const r2 = await fetch('/api/admin/emails/listas')
       if (r2.ok) { const d2 = await r2.json(); setListas(d2.listas || []) }
@@ -216,6 +217,15 @@ export default function EmailsClient({
   async function verMetricasCamp(campId: string) {
     const res = await fetch(`/api/admin/emails/metricas?campanha_id=${campId}`)
     if (res.ok) { const d = await res.json(); setCampDetalhe(d) }
+  }
+
+  async function deletarCampanha(campId: string) {
+    if (!confirm('Apagar esta campanha permanentemente?')) return
+    const res = await fetch(`/api/admin/emails/campanhas/${campId}`, { method: 'DELETE' })
+    if (res.ok) {
+      setCampanhas(prev => prev.filter(c => c.id !== campId))
+      if (campDetalhe?.campanha.id === campId) setCampDetalhe(null)
+    } else { const d = await res.json(); setMsgCamp(`Erro ao apagar: ${d.error}`) }
   }
 
   // ── Funções Métricas ──────────────────────────────────────────
@@ -567,6 +577,11 @@ export default function EmailsClient({
                       {c.status === 'enviado' && (
                         <button className='em-btn em-btn-ghost' style={{ fontSize: 12 }} onClick={() => verMetricasCamp(c.id)}>Ver métricas</button>
                       )}
+                      <button
+                        className='em-btn em-btn-ghost'
+                        style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#3a1a1a', marginTop: 4 }}
+                        onClick={() => deletarCampanha(c.id)}
+                      >Apagar</button>
                     </div>
                   </div>
                 ))

@@ -24,12 +24,19 @@ export async function GET(req: NextRequest, { params }: P) {
         if (log.status !== 'clicado') {
           updates.status = 'clicado'
           updates.clicado_em = agora
-          // Incrementa total_cliques na campanha
-          await db.rpc('increment_col', { tbl: 'email_campanhas', col: 'total_cliques', row_id: log.campanha_id })
-            .catch(() => null)
+          // Incrementa total_cliques na campanha (só no primeiro clique)
+          const { data: camp } = await db
+            .from('email_campanhas')
+            .select('total_cliques')
+            .eq('id', log.campanha_id)
+            .single()
+          await db
+            .from('email_campanhas')
+            .update({ total_cliques: (camp?.total_cliques ?? 0) + 1 })
+            .eq('id', log.campanha_id)
         }
         await db.from('email_logs').update(updates).eq('id', logId)
-        await db.from('email_eventos').insert({ log_id: logId, tipo: 'clicado', url, ip, user_agent: ua })
+        await db.from('email_eventos').insert({ log_id: logId, tipo: 'clicado', url, ip, user_agent: ua }).catch(() => null)
       }
     } catch { /* não bloqueia o redirect */ }
   }

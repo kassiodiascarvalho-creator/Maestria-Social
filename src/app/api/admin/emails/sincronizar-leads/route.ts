@@ -3,6 +3,29 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
+// Domínios fictícios usados por sistemas internos (Baileys, testes, etc.)
+const DOMINIOS_FALSOS = new Set([
+  'disparo.local', 'whatsapp.local', 'baileys.local', 'wa.local',
+  'localhost', 'local', 'internal', 'invalid', 'test', 'example',
+  'lan', 'home', 'corp', 'intranet',
+])
+
+function emailReal(email: string): boolean {
+  if (!email || !email.includes('@')) return false
+  const [local, domain] = email.toLowerCase().trim().split('@')
+  if (!local || !domain) return false
+  // Parte local é só números (ex: número de WhatsApp)
+  if (/^\d+$/.test(local)) return false
+  // Domínio sem ponto (ex: "local", "localhost")
+  if (!domain.includes('.')) return false
+  // TLD (última parte após o último ponto)
+  const tld = domain.split('.').pop() ?? ''
+  if (DOMINIOS_FALSOS.has(tld) || DOMINIOS_FALSOS.has(domain)) return false
+  // TLD muito curto ou muito longo (TLDs reais têm 2-24 chars)
+  if (tld.length < 2 || tld.length > 24) return false
+  return true
+}
+
 async function obterOuCriarLista(db: any, nome: string, descricao: string): Promise<string> { // eslint-disable-line @typescript-eslint/no-explicit-any
   const { data: existente } = await db.from('email_listas').select('id').eq('nome', nome).maybeSingle()
   if (existente) return existente.id
@@ -19,9 +42,15 @@ export async function POST(req: NextRequest) {
   let query = db.from('leads').select('id, nome, email, whatsapp, origem').not('email', 'is', null).neq('email', '')
   if (filtro_origem) query = query.ilike('origem', `%${filtro_origem}%`)
 
-  const { data: leads, error } = await query
+  const { data: leadsRaw, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!leads?.length) return NextResponse.json({ ok: true, importados: 0, listas_criadas: 0, mensagem: 'Nenhum lead com e-mail encontrado' })
+
+  // Filtra e-mails fictícios do Baileys e outros sistemas internos
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leads = (leadsRaw ?? []).filter((l: any) => emailReal(l.email))
+  const ignorados = (leadsRaw?.length ?? 0) - leads.length
+
+  if (!leads.length) return NextResponse.json({ ok: true, importados: 0, listas_criadas: 0, ignorados, mensagem: 'Nenhum lead com e-mail real encontrado' })
 
   // Se uma lista específica foi passada, importa tudo para ela
   if (lista_id) {
@@ -40,7 +69,7 @@ export async function POST(req: NextRequest) {
         .select('id')
       if (data) importados += data.length
     }
-    return NextResponse.json({ ok: true, importados, listas_criadas: 0 })
+    return NextResponse.json({ ok: true, importados, listas_criadas: 0, ignorados })
   }
 
   // Agrupa leads por origem — cria uma lista para cada origem distinta
@@ -80,7 +109,7 @@ export async function POST(req: NextRequest) {
     resumo.push({ lista: nomeLista, importados })
   }
 
-  return NextResponse.json({ ok: true, importados: totalImportados, listas_criadas: listasCriadas, resumo })
+  return NextResponse.json({ ok: true, importados: totalImportados, listas_criadas: listasCriadas, ignorados, resumo })
 }
 
 // GET: contagem de leads com e-mail

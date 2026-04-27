@@ -49,13 +49,15 @@ function htmlParaTexto(html: string): string {
 }
 
 function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string): string {
-  // Se o conteúdo já tem estrutura HTML completa, apenas injeta o rodapé
+  // Se o conteúdo já tem estrutura HTML completa, apenas injeta o rodapé de marca
   const temEstrutura = /<html/i.test(conteudo)
   const rodape = `
-<div style="margin-top:40px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;font-family:Inter,Arial,sans-serif;font-size:12px;color:#9ca3af;line-height:1.6;">
-  <p style="margin:0 0 8px;">Você está recebendo este e-mail porque se cadastrou em um dos formulários da ${remetenteNome}.</p>
-  <p style="margin:0;"><a href="${unsubUrl}" style="color:#6b7280;text-decoration:underline;">Cancelar inscrição</a></p>
-</div>`
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #2a2a1e;margin-top:32px;">
+  <tr><td style="padding:24px 0;text-align:center;font-family:Arial,sans-serif;font-size:12px;color:#7a7a6a;line-height:1.7;">
+    <p style="margin:0 0 6px;">Você recebe este e-mail porque se cadastrou em um formulário da <strong style="color:#c2904d;">${remetenteNome}</strong>.</p>
+    <p style="margin:0;"><a href="${unsubUrl}" style="color:#c2904d;text-decoration:none;border-bottom:1px solid #c2904d;">Cancelar inscrição</a></p>
+  </td></tr>
+</table>`
 
   if (temEstrutura) {
     return conteudo.includes('</body>')
@@ -64,24 +66,52 @@ function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string
   }
 
   return `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="x-apple-disable-message-reformatting">
+  <title>${remetenteNome}</title>
+  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
 </head>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:Inter,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;">
-    <tr><td align="center" style="padding:40px 16px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
-        <tr><td style="padding:40px 48px 32px;">
-          ${conteudo}
-          ${rodape}
-        </td></tr>
-      </table>
-    </td></tr>
+<body style="margin:0;padding:0;background-color:#0e0f09;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  <!-- Wrapper -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0e0f09;min-height:100%;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background-color:#111009;border-radius:4px;overflow:hidden;border:1px solid #2a2a1e;">
+
+          <!-- Header -->
+          <tr>
+            <td align="center" style="background-color:#0e0f09;padding:28px 40px;border-bottom:2px solid #c2904d;">
+              <span style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:700;letter-spacing:3px;color:#c2904d;text-transform:uppercase;text-decoration:none;">MAESTRIA SOCIAL</span>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding:40px 48px 32px;color:#e8e0d0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.75;">
+              ${conteudo}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:0 48px 36px;">
+              ${rodape}
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Card -->
+
+      </td>
+    </tr>
   </table>
+  <!-- /Wrapper -->
 </body>
 </html>`
 }
