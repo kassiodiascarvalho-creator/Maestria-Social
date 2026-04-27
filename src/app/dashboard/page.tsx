@@ -44,6 +44,7 @@ export default async function DashboardPage() {
     { count: flowsAtivos },
     { count: formsAtivos },
     { data: leadsAnalytics },
+    { data: leadsAgentes },
     { data: campanhas },
     { data: agentes },
     { data: flowsList },
@@ -61,10 +62,12 @@ export default async function DashboardPage() {
     db.from("leads").select("*", { count: "exact", head: true }).eq("status_lead", "frio").lt("criado_em", tresDialAtras),
     db.from("cadencia_flows").select("*", { count: "exact", head: true }).eq("status", "ativo"),
     db.from("forms").select("*", { count: "exact", head: true }).eq("status", "ativo"),
-    // amostra para análise de origem e scores
-    db.from("leads").select("origem, status_lead, score_email, agente_id, pipeline_etapa, criado_em").order("criado_em", { ascending: false }).limit(2000),
-    // campanhas de email
-    db.from("email_campanhas").select("id, assunto_a, status, total_enviados, total_abertos, total_cliques, criado_em").order("criado_em", { ascending: false }).limit(20),
+    // amostra para análise de origem, scores e pipeline (sem agente — não tem limite crítico)
+    db.from("leads").select("origem, status_lead, score_email, pipeline_etapa").order("criado_em", { ascending: false }).limit(3000),
+    // leads com agente — todos, sem limite (para performance real dos agentes)
+    db.from("leads").select("agente_id, status_lead").not("agente_id", "is", null),
+    // campanhas de email — busca todos os status para depois filtrar
+    db.from("email_campanhas").select("id, assunto_a, status, total_enviados, total_abertos, total_cliques, criado_em").order("criado_em", { ascending: false }).limit(30),
     // agentes
     db.from("agentes").select("id, nome").order("criado_em", { ascending: true }),
     // fluxos de cadência ativos
@@ -72,7 +75,7 @@ export default async function DashboardPage() {
   ]);
 
   // ── Processamento em JS ───────────────────────────────────────────
-  const leads: Array<{ origem: string; status_lead: string; score_email: number; agente_id: string | null; pipeline_etapa: string | null }> = leadsAnalytics ?? [];
+  const leads: Array<{ origem: string; status_lead: string; score_email: number; pipeline_etapa: string | null }> = leadsAnalytics ?? [];
 
   // Funil
   const total = totalLeads ?? 0;
@@ -105,9 +108,9 @@ export default async function DashboardPage() {
     ? Math.round(comScore.reduce((s, l) => s + (l.score_email ?? 0), 0) / comScore.length)
     : 0;
 
-  // Agentes breakdown
+  // Agentes breakdown — usa query dedicada sem limite de linhas
   const agenteMap = new Map<string, { total: number; quentes: number }>();
-  for (const l of leads) {
+  for (const l of (leadsAgentes ?? []) as Array<{ agente_id: string; status_lead: string }>) {
     if (!l.agente_id) continue;
     if (!agenteMap.has(l.agente_id)) agenteMap.set(l.agente_id, { total: 0, quentes: 0 });
     const ent = agenteMap.get(l.agente_id)!;
@@ -116,18 +119,40 @@ export default async function DashboardPage() {
   }
   const agentesData = (agentes ?? []).map((a: { id: string; nome: string }) => ({
     ...a,
-    ...( agenteMap.get(a.id) ?? { total: 0, quentes: 0 }),
+    ...(agenteMap.get(a.id) ?? { total: 0, quentes: 0 }),
   })).filter((a: any) => a.total > 0);
 
-  // Email stats
+  // Email stats — recalcula abertos/cliques dos email_logs (fonte real), igual à rota /metricas
   const camp = (campanhas ?? []) as Array<{ id: string; assunto_a: string; status: string; total_enviados: number; total_abertos: number; total_cliques: number }>;
   const campEnviadas = camp.filter(c => ["enviado", "enviando"].includes(c.status));
-  const totalEnviadosEmail = campEnviadas.reduce((s, c) => s + (c.total_enviados ?? 0), 0);
-  const totalAbertosEmail = campEnviadas.reduce((s, c) => s + (c.total_abertos ?? 0), 0);
-  const totalCliquesEmail = campEnviadas.reduce((s, c) => s + (c.total_cliques ?? 0), 0);
+  const campIds = campEnviadas.map(c => c.id);
+
+  // Busca logs reais das campanhas enviadas para recalcular abertos/cliques
+  let logAgg: Record<string, { abertos: number; cliques: number }> = {};
+  if (campIds.length > 0) {
+    const { data: emailLogs } = await db
+      .from("email_logs")
+      .select("campanha_id, status")
+      .in("campanha_id", campIds);
+    for (const l of emailLogs ?? []) {
+      if (!logAgg[l.campanha_id]) logAgg[l.campanha_id] = { abertos: 0, cliques: 0 };
+      if (["aberto", "clicado"].includes(l.status)) logAgg[l.campanha_id].abertos++;
+      if (l.status === "clicado") logAgg[l.campanha_id].cliques++;
+    }
+  }
+  // Mescla contadores reais nas campanhas
+  const campComLive = campEnviadas.map(c => ({
+    ...c,
+    total_abertos: logAgg[c.id]?.abertos ?? c.total_abertos ?? 0,
+    total_cliques: logAgg[c.id]?.cliques ?? c.total_cliques ?? 0,
+  }));
+
+  const totalEnviadosEmail = campComLive.reduce((s, c) => s + (c.total_enviados ?? 0), 0);
+  const totalAbertosEmail = campComLive.reduce((s, c) => s + (c.total_abertos ?? 0), 0);
+  const totalCliquesEmail = campComLive.reduce((s, c) => s + (c.total_cliques ?? 0), 0);
   const taxaAberturaGlobal = pct(totalAbertosEmail, totalEnviadosEmail);
   const taxaCliqueGlobal = pct(totalCliquesEmail, totalEnviadosEmail);
-  const melhorCampanha = campEnviadas
+  const melhorCampanha = campComLive
     .filter(c => c.total_enviados >= 5)
     .sort((a, b) => pct(b.total_abertos, b.total_enviados) - pct(a.total_abertos, a.total_enviados))[0];
 
@@ -285,7 +310,7 @@ export default async function DashboardPage() {
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "#4b5563", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Campanhas Recentes</div>
-              {camp.slice(0, 5).map(c => {
+              {campComLive.slice(0, 5).map(c => {
                 const taxa = pct(c.total_abertos, c.total_enviados);
                 return (
                   <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #111", fontSize: 12 }}>
