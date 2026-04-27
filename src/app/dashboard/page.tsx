@@ -380,9 +380,7 @@ function Section({ titulo, sub, children }: { titulo: string; sub?: string; chil
 
 function KPICard({ label, val, sub, cor, link }: { label: string; val: string; sub: string | null; cor: string; link: string | null }) {
   const inner = (
-    <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "18px 20px", transition: "border-color .15s", cursor: link ? "pointer" : "default" }}
-      onMouseEnter={e => { if (link) (e.currentTarget as HTMLDivElement).style.borderColor = "#2a2a2a"; }}
-      onMouseLeave={e => { if (link) (e.currentTarget as HTMLDivElement).style.borderColor = "#1e1e1e"; }}>
+    <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "18px 20px" }}>
       <div style={{ fontSize: 28, fontWeight: 700, color: cor, lineHeight: 1, marginBottom: 6 }}>{val}</div>
       <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: sub ? 4 : 0 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: cor, opacity: 0.7 }}>{sub}</div>}
