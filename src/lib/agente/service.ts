@@ -918,9 +918,16 @@ export async function responderAgenteParaLead(
             await new Promise(r => setTimeout(r, base + jitter))
           }
 
+          // Tenta Baileys quando o canal é Baileys; se falhar, cai para Meta
           if (canal?.provider === 'baileys') {
-            await enviarViaBaileys(lead.whatsapp, parte, canal.instanceId)
+            try {
+              await enviarViaBaileys(lead.whatsapp, parte, canal.instanceId)
+            } catch (baileysErr) {
+              console.warn('[agente] Baileys indisponível, caindo para Meta:', (baileysErr as Error).message)
+              await enviarMensagemWhatsApp(lead.whatsapp, parte)
+            }
           } else {
+            // Canal Meta ou não definido: envia via Meta diretamente
             await enviarMensagemWhatsApp(lead.whatsapp, parte)
           }
 
@@ -939,7 +946,11 @@ export async function responderAgenteParaLead(
       // Envia áudios extraídos do marcador [[AUDIO:nome]]
       for (const audioUrl of audioUrls) {
         if (canal?.provider === 'baileys') {
-          await enviarAudioViaBaileys(lead.whatsapp, audioUrl, canal.instanceId)
+          try {
+            await enviarAudioViaBaileys(lead.whatsapp, audioUrl, canal.instanceId)
+          } catch {
+            await enviarAudioViaMeta(lead.whatsapp, audioUrl)
+          }
         } else {
           await enviarAudioViaMeta(lead.whatsapp, audioUrl)
         }

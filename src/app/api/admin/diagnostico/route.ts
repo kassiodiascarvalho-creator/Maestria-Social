@@ -47,6 +47,19 @@ export async function GET() {
     .from('conversas')
     .select('id', { count: 'exact', head: true })
 
+  // Webhook debug log — últimas 20 entradas
+  const webhookDebugRaw = await getConfig('WEBHOOK_DEBUG_LOG')
+  let webhookDebug: unknown[] = []
+  try { webhookDebug = webhookDebugRaw ? JSON.parse(webhookDebugRaw) : [] } catch {}
+
+  // Últimas conversas (para ver se agente está respondendo)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: ultimasConversas } = await (supabase as any)
+    .from('conversas')
+    .select('role, mensagem, criado_em, lead_id')
+    .order('criado_em', { ascending: false })
+    .limit(10)
+
   return NextResponse.json({
     configs: checks,
     banco: {
@@ -54,5 +67,7 @@ export async function GET() {
       totalConversas,
       ultimoLead: ultimoLead ?? 'nenhum',
     },
+    webhookDebug,
+    ultimasConversas: ultimasConversas ?? [],
   })
 }
