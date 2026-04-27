@@ -11,25 +11,34 @@ export async function POST(req: NextRequest) {
   if (isInbound) {
     const payload = data ?? body
 
-    // Log para diagnóstico — visível em Vercel → Functions → Logs
-    console.log('[resend-inbound] payload keys:', Object.keys(payload).join(', '))
-    console.log('[resend-inbound] from:', payload.from ?? payload.sender)
-    console.log('[resend-inbound] html keys present:', !!(payload.html ?? payload.html_body ?? payload.htmlBody))
-    console.log('[resend-inbound] text keys present:', !!(payload.text ?? payload.text_body ?? payload.textBody))
-
-    // Extrai e-mail do remetente (pode vir como "Nome <email>" ou só "email")
-    const fromRaw: string = payload.from ?? payload.sender ?? ''
+    // Resend só envia metadados no webhook — busca o corpo via API usando email_id
+    const fromRaw: string = payload.from ?? ''
     const emailFrom: string = fromRaw.includes('<')
       ? (fromRaw.match(/<(.+?)>/) || [])[1]?.trim() || fromRaw.trim()
       : fromRaw.trim()
 
     const assunto: string = payload.subject ?? '(sem assunto)'
+    const emailId: string = payload.email_id ?? ''
 
-    // Resend usa nomes de campo variáveis — tenta todas as variações conhecidas
-    const corpoHtml: string =
-      payload.html ?? payload.html_body ?? payload.htmlBody ?? payload.body_html ?? ''
-    const corpoTexto: string =
-      payload.text ?? payload.text_body ?? payload.textBody ?? payload.body_text ?? payload.plain_text ?? ''
+    let corpoHtml = ''
+    let corpoTexto = ''
+
+    if (emailId) {
+      try {
+        const { Resend } = await import('resend')
+        const { getConfig } = await import('@/lib/config')
+        const apiKey = await getConfig('RESEND_API_KEY')
+        const resend = new Resend(apiKey || process.env.RESEND_API_KEY)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: emailData } = await (resend.emails as any).get(emailId)
+        if (emailData) {
+          corpoHtml  = emailData.html  ?? emailData.html_body  ?? ''
+          corpoTexto = emailData.text  ?? emailData.text_body  ?? ''
+        }
+      } catch (e) {
+        console.error('[resend-inbound] erro ao buscar corpo:', e)
+      }
+    }
 
     if (emailFrom) {
       const db = createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
