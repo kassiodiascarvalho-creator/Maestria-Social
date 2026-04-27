@@ -52,6 +52,8 @@ export default function EmailInboxTab() {
   const [resposta, setResposta] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [importando, setImportando] = useState(false)
+  const [msgImport, setMsgImport] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -120,6 +122,19 @@ export default function EmailInboxTab() {
     setEnviando(false)
   }
 
+  async function importarHistorico() {
+    setImportando(true); setMsgImport(null)
+    const res = await fetch('/api/admin/emails/inbox/backfill', { method: 'POST' })
+    const d = await res.json()
+    if (res.ok) {
+      setMsgImport(`✅ ${d.importados} conversas importadas (${d.total} e-mails processados)`)
+      carregar()
+    } else {
+      setMsgImport(`❌ ${d.error}`)
+    }
+    setImportando(false)
+  }
+
   const totalNaoLidas = conversas.reduce((s, c) => s + (c.nao_lidas || 0), 0)
 
   return (
@@ -139,6 +154,17 @@ export default function EmailInboxTab() {
               <button onClick={carregar} style={{ background: 'transparent', border: 'none', color: '#4a3e30', cursor: 'pointer', fontSize: 16 }} title='Atualizar'>↺</button>
             </div>
           </div>
+          {/* Importar histórico */}
+          {conversas.length === 0 && !loading && (
+            <div style={{ marginBottom: 10 }}>
+              <button onClick={importarHistorico} disabled={importando}
+                style={{ width: '100%', padding: '7px 10px', background: 'rgba(194,144,77,.08)', border: '1px solid rgba(194,144,77,.25)', borderRadius: 8, color: '#c2904d', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {importando ? 'Importando...' : '⬇ Importar histórico de envios'}
+              </button>
+              {msgImport && <div style={{ fontSize: 11, color: msgImport.startsWith('✅') ? '#10b981' : '#ef4444', marginTop: 5 }}>{msgImport}</div>}
+            </div>
+          )}
+
           {/* Filtros */}
           <div style={{ display: 'flex', gap: 4 }}>
             {[['', 'Todos'], ['respondido', 'Com resposta'], ['aguardando', 'Aguardando'], ['fechado', 'Fechado']].map(([v, l]) => (
