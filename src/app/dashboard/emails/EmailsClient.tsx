@@ -194,7 +194,7 @@ export default function EmailsClient({
   async function criarCampanha() {
     if (!novaCamp.nome.trim() || !novaCamp.assunto_a.trim() || !novaCamp.remetente_email.trim()) return
     const res = await fetch('/api/admin/emails/campanhas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(novaCamp) })
-    if (res.ok) { const d = await res.json(); setCampanhas(prev => [d.campanha, ...prev]); setShowNovaCamp(false); setNovaCamp({ nome: '', assunto_a: '', assunto_b: '', remetente_nome: 'Maestria Social', remetente_email: '', lista_id: '', html: '', ab_ativo: false }) }
+    if (res.ok) { const d = await res.json(); setCampanhas(prev => [d.campanha, ...prev]); setShowNovaCamp(false); setNovaCamp({ nome: '', assunto_a: '', assunto_b: '', remetente_nome: 'Maestria Social', remetente_email: 'time@maestriasocial.com', lista_id: '', html: '', ab_ativo: false }) }
   }
 
   async function disparar(campId: string) {

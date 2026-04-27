@@ -236,7 +236,7 @@ export async function POST(req: NextRequest, { params }: P) {
       const resend = new Resend(apiKey || process.env.RESEND_API_KEY)
 
       const { data: sent, error: sendError } = await resend.emails.send({
-        from: `${campanha.remetente_nome} <${campanha.remetente_email}>`,
+        from: `${campanha.remetente_nome || 'Maestria Social'} <${campanha.remetente_email || 'time@maestriasocial.com'}>`,
         to: [contato.email],
         subject: assunto,
         html: htmlFinal,
