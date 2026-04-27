@@ -14,7 +14,18 @@ export async function GET(req: NextRequest) {
   if (status) q = q.eq('status', status)
 
   const { data, error } = await q
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ conversas: data || [] })
+  if (error) {
+    // Tabelas não criadas ainda
+    const semTabela = error.message?.includes('does not exist') || error.code === '42P01'
+    if (semTabela) return NextResponse.json({ error: 'SETUP_NEEDED', conversas: [] })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Estatísticas de resposta
+  const total = data?.length || 0
+  const respondidas = data?.filter((c: { status: string }) => c.status === 'respondido').length || 0
+  const taxaResposta = total > 0 ? ((respondidas / total) * 100).toFixed(1) : '0'
+
+  return NextResponse.json({ conversas: data || [], stats: { total, respondidas, taxaResposta } })
 }
