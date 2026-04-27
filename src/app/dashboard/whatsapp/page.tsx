@@ -10,6 +10,7 @@ type Contato = {
   pilar_fraco?: string | null; nivel_qs?: string | null; status_lead?: string | null; renda_mensal?: string | null
 }
 type TipoMsg = "text" | "image" | "audio" | "video" | "document" | "template"
+type ValidacaoItem = { id: string; nome: string | null; telefone: string }
 
 interface MsgItem {
   id: string
@@ -126,7 +127,6 @@ export default function WhatsAppPage() {
   const focusedFieldRef = useRef<{ msgId: string; variacaoIdx: number | null }>({ msgId: "", variacaoIdx: null })
 
   // Validação de números WhatsApp
-  type ValidacaoItem = { id: string; nome: string | null; telefone: string }
   const [validando, setValidando] = useState(false)
   const [validacaoResult, setValidacaoResult] = useState<{ validos: ValidacaoItem[]; invalidos: ValidacaoItem[]; erros: ValidacaoItem[] } | null>(null)
   const [validacaoErro, setValidacaoErro] = useState("")
