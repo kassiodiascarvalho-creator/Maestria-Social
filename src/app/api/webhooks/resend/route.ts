@@ -5,6 +5,79 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { type, data } = body
 
+  // ── Inbound (lead responde ao e-mail) ─────────────────────────
+  // Resend envia estrutura plana para inbound (sem type/data wrapper)
+  const isInbound = type === 'email.inbound' || (!type && body.from && body.subject)
+  if (isInbound) {
+    const payload = data ?? body
+    const emailFrom: string = typeof payload.from === 'string'
+      ? payload.from.replace(/.*<(.+)>/, '$1').trim()
+      : (payload.from as string) || ''
+    const assunto: string = payload.subject || '(sem assunto)'
+    const corpoHtml: string = payload.html || ''
+    const corpoTexto: string = payload.text || ''
+
+    if (emailFrom) {
+      const db = createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
+      // Encontra conversa mais recente para este e-mail de lead
+      const { data: conversa } = await db
+        .from('conversas_email')
+        .select('id, total_mensagens, nao_lidas')
+        .eq('email_lead', emailFrom)
+        .neq('status', 'fechado')
+        .order('ultima_mensagem_em', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (conversa) {
+        const agora = new Date().toISOString()
+        await Promise.all([
+          db.from('mensagens_email').insert({
+            conversa_id: conversa.id,
+            direcao: 'entrada',
+            de: emailFrom,
+            corpo_html: corpoHtml,
+            corpo_texto: corpoTexto,
+            lida: false,
+          }),
+          db.from('conversas_email').update({
+            status: 'respondido',
+            total_mensagens: (conversa.total_mensagens || 1) + 1,
+            nao_lidas: (conversa.nao_lidas || 0) + 1,
+            ultima_mensagem_em: agora,
+          }).eq('id', conversa.id),
+        ])
+      } else {
+        // Lead escreveu sem campanha prévia: cria conversa nova
+        const { data: lead } = await db
+          .from('leads').select('id, nome').eq('email', emailFrom).single()
+        const { data: novaConversa } = await db
+          .from('conversas_email')
+          .insert({
+            lead_id: lead?.id || null,
+            email_lead: emailFrom,
+            nome_lead: lead?.nome || emailFrom,
+            assunto,
+            status: 'respondido',
+            nao_lidas: 1,
+          })
+          .select('id').single()
+        if (novaConversa) {
+          await db.from('mensagens_email').insert({
+            conversa_id: novaConversa.id,
+            direcao: 'entrada',
+            de: emailFrom,
+            corpo_html: corpoHtml,
+            corpo_texto: corpoTexto,
+            lida: false,
+          })
+        }
+      }
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── Eventos de envio (delivered, opened, clicked…) ────────────
   const resendId: string = data?.email_id || data?.id
   if (!resendId) return NextResponse.json({ ok: true })
 

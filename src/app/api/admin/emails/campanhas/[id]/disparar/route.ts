@@ -255,6 +255,35 @@ export async function POST(req: NextRequest, { params }: P) {
       } else {
         await db().from('email_logs').update({ status: 'enviando', resend_id: sent.id }).eq('id', log.id)
         enviados++
+
+        // Cria conversa no Inbox (não bloqueia o disparo se falhar)
+        try {
+          const { data: novaConversa } = await db()
+            .from('conversas_email')
+            .insert({
+              lead_id: contato.lead_id || null,
+              campanha_id: id,
+              email_lead: contato.email,
+              nome_lead: contato.nome || null,
+              assunto,
+              status: 'aguardando',
+              ultima_mensagem_em: new Date().toISOString(),
+            })
+            .select('id').single()
+          if (novaConversa?.id) {
+            await db().from('mensagens_email').insert({
+              conversa_id: novaConversa.id,
+              direcao: 'saida',
+              de: `${campanha.remetente_nome || 'Maestria Social'} <${campanha.remetente_email || 'time@maestriasocial.com'}>`,
+              corpo_html: htmlFinal,
+              corpo_texto: textoFinal,
+              lida: true,
+              resend_message_id: sent.id,
+            })
+          }
+        } catch (e) {
+          console.error('[inbox-conversa]', contato.email, e)
+        }
       }
 
       // Rate limit: 2 envios/s para não saturar Resend

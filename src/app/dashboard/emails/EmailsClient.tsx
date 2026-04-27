@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import EmailInboxTab from './EmailInboxTab'
 
 // ── Tipos ─────────────────────────────────────────────────────────
 type Template = { id: string; pilar: string; dia: number; assunto: string; corpo_html: string; ativo: boolean; atualizado_em: string }
@@ -34,7 +35,7 @@ export default function EmailsClient({
   listasIniciais: Lista[]
   campanhasIniciais: Campanha[]
 }) {
-  const [aba, setAba] = useState<'templates' | 'listas' | 'campanhas' | 'metricas'>('templates')
+  const [aba, setAba] = useState<'templates' | 'listas' | 'campanhas' | 'metricas' | 'inbox'>('templates')
 
   // ── Estado Templates ──────────────────────────────────────────
   const [templates, setTemplates] = useState(inicial)
@@ -252,7 +253,7 @@ export default function EmailsClient({
 
         {/* ── TABS ── */}
         <div className='em-tabs'>
-          {([['templates','Templates'], ['listas','Listas'], ['campanhas','Campanhas'], ['metricas','Métricas']] as const).map(([key, label]) => (
+          {([['templates','Templates'], ['listas','Listas'], ['campanhas','Campanhas'], ['metricas','Métricas'], ['inbox','Inbox']] as const).map(([key, label]) => (
             <button key={key} className={`em-tab${aba === key ? ' active' : ''}`}
               onClick={() => { setAba(key); if (key === 'metricas' && !metricas) carregarMetricas() }}>
               {label}
@@ -617,6 +618,9 @@ export default function EmailsClient({
             </div>
           </div>
         )}
+
+        {/* ══ ABA: INBOX ══ */}
+        {aba === 'inbox' && <EmailInboxTab />}
 
         {/* ══ ABA: MÉTRICAS ══ */}
         {aba === 'metricas' && (
