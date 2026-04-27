@@ -8,7 +8,7 @@
  * Próximas vezes: node server.js (sessão salva automaticamente por instância)
  */
 
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
+const { Client, LocalAuth, MessageMedia, WAState } = require('whatsapp-web.js')
 const qrcodeTerminal = require('qrcode-terminal')
 const QRCode = require('qrcode')
 const express = require('express')
@@ -69,9 +69,22 @@ async function baixarMidia(url) {
 }
 
 async function resolverChatId(client, phone) {
+  // Verifica se a sessão realmente está conectada (evita zombie sessions)
+  let state = null
+  try {
+    state = await client.getState()
+  } catch (e) {
+    throw new Error(`Sessão WhatsApp inacessível (getState falhou: ${e.message})`)
+  }
+  if (state !== WAState.CONNECTED) {
+    throw new Error(`WhatsApp não está conectado (estado: ${state ?? 'desconhecido'}) — reescaneie o QR`)
+  }
+
   const formatted = formatarTelefone(phone)
+  console.log(`  → getNumberId: ${formatted}`)
   const numberId = await client.getNumberId(formatted)
-  if (!numberId) throw new Error(`Número ${phone} não encontrado no WhatsApp`)
+  if (!numberId) throw new Error(`Número ${phone} não encontrado no WhatsApp (não é uma conta WA válida)`)
+  console.log(`  → chatId resolvido: ${numberId._serialized}`)
   return numberId._serialized
 }
 
@@ -87,7 +100,8 @@ async function enviarMensagem(inst, type, phone, content, caption, filename, mim
   }
 
   if (type === 'text') {
-    await inst.client.sendMessage(chatId, content || '')
+    const sent = await inst.client.sendMessage(chatId, content || '')
+    console.log(`  → sendMessage OK — id: ${sent?.id?._serialized ?? 'N/A'}`)
   } else if (type === 'image') {
     const media = await resolverMidia()
     await inst.client.sendMessage(chatId, media, { caption: caption || '' })
@@ -423,12 +437,14 @@ app.post('/instancia/:id/disparar', async (req, res) => {
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
 
+  console.log(`\n📤 [Instância ${req.params.id}] Disparando ${type} → ${phone}`)
   try {
     await enviarMensagem(inst, type, phone, content, caption, filename, mimeType, ptt)
+    console.log(`✅ [Instância ${req.params.id}] Enviado com sucesso → ${phone}`)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)
-    console.error(`❌ [Instância ${req.params.id}] Erro ao enviar [${type}] para ${phone}:`, msg)
+    console.error(`❌ [Instância ${req.params.id}] Falha ao enviar [${type}] para ${phone}: ${msg}`)
     res.status(500).json({ error: msg })
   }
 })
@@ -663,11 +679,15 @@ app.post('/disparar', async (req, res) => {
   const { phone, type, content, caption, filename, mimeType, ptt } = req.body
   if (!phone) return res.status(400).json({ error: '"phone" é obrigatório' })
   if (!type)  return res.status(400).json({ error: '"type" é obrigatório' })
+
+  console.log(`\n📤 [/disparar → instância ${inst.phone ?? '?'}] Disparando ${type} → ${phone}`)
   try {
     await enviarMensagem(inst, type, phone, content, caption, filename, mimeType, ptt)
+    console.log(`✅ [/disparar] Enviado com sucesso → ${phone}`)
     res.json({ ok: true })
   } catch (err) {
     const msg = err?.message || String(err)
+    console.error(`❌ [/disparar] Falha ao enviar [${type}] para ${phone}: ${msg}`)
     res.status(500).json({ error: msg })
   }
 })
