@@ -371,17 +371,15 @@ export async function responderAgenteParaLead(
     return { ok: true, resposta: '' }
   }
 
-  // Sequência em andamento: não responde enquanto há tarefas pendentes para este lead
+  // Lead respondeu ativamente: cancela tarefas pendentes da sequência para o agente poder responder
+  // (sequência automática perde prioridade quando o lead interage)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count: tarefasPendentes } = await (supabase as any)
+  await (supabase as any)
     .from('tarefas_agendadas')
-    .select('id', { count: 'exact', head: true })
+    .update({ status: 'cancelado' })
     .eq('lead_id', leadId)
     .eq('tipo', 'whatsapp_msg')
     .eq('status', 'pendente')
-  if (tarefasPendentes && tarefasPendentes > 0) {
-    return { ok: true, resposta: '' }
-  }
 
   // Filtra histórico por agente_id quando há agente configurado — contextos separados por agente
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
