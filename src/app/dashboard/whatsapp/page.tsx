@@ -130,6 +130,7 @@ export default function WhatsAppPage() {
   const [validando, setValidando] = useState(false)
   const [validacaoResult, setValidacaoResult] = useState<{ validos: ValidacaoItem[]; invalidos: ValidacaoItem[]; erros: ValidacaoItem[] } | null>(null)
   const [validacaoErro, setValidacaoErro] = useState("")
+  const [validacaoProgresso, setValidacaoProgresso] = useState<{ processados: number; total: number } | null>(null)
 
   // Disparo
   const [disparando, setDisparando] = useState(false)
@@ -442,15 +443,42 @@ export default function WhatsAppPage() {
     setValidando(true)
     setValidacaoErro("")
     setValidacaoResult(null)
+    setValidacaoProgresso(null)
     try {
+      // 1) Inicia job assíncrono no Baileys — retorna imediatamente com jobId
       const res = await fetch("/api/admin/wpp/validar-numeros", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lista_id: listaAtiva.id, instance_id: baileysInstSelecionada }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string; validos?: ValidacaoItem[]; invalidos?: ValidacaoItem[]; erros?: ValidacaoItem[] }
-      if (!res.ok || !data.ok) { setValidacaoErro(data.error ?? "Erro ao validar"); return }
-      setValidacaoResult({ validos: data.validos ?? [], invalidos: data.invalidos ?? [], erros: data.erros ?? [] })
+      const init = await res.json() as { ok?: boolean; error?: string; jobId?: string; total?: number }
+      if (!res.ok || !init.ok || !init.jobId) {
+        setValidacaoErro(init.error ?? "Erro ao iniciar validação")
+        return
+      }
+      const { jobId, total } = init
+      setValidacaoProgresso({ processados: 0, total: total ?? 0 })
+
+      // 2) Faz polling a cada 3s até o job concluir
+      const poll = async (): Promise<void> => {
+        const pr = await fetch(`/api/admin/wpp/validar-numeros?job_id=${jobId}&lista_id=${listaAtiva!.id}`)
+        const data = await pr.json() as {
+          ok?: boolean; status?: string; error?: string
+          processados?: number; total?: number
+          validos?: ValidacaoItem[]; invalidos?: ValidacaoItem[]; erros?: ValidacaoItem[]
+        }
+        if (!pr.ok || data.error) { setValidacaoErro(data.error ?? "Erro ao consultar progresso"); return }
+        if (data.status === "rodando") {
+          setValidacaoProgresso({ processados: data.processados ?? 0, total: data.total ?? total ?? 0 })
+          await new Promise(r => setTimeout(r, 3000))
+          return poll()
+        }
+        // concluído
+        setValidacaoResult({ validos: data.validos ?? [], invalidos: data.invalidos ?? [], erros: data.erros ?? [] })
+        setValidacaoProgresso(null)
+      }
+
+      await poll()
     } catch {
       setValidacaoErro("Erro de conexão com o servidor")
     } finally {
@@ -995,8 +1023,29 @@ export default function WhatsAppPage() {
                       disabled={validando || contatos.length === 0}
                       style={{ width: "100%" }}
                     >
-                      {validando ? "⏳ Validando... (pode demorar alguns minutos)" : `Validar ${contatos.length} número${contatos.length !== 1 ? "s" : ""}`}
+                      {validando
+                        ? validacaoProgresso
+                          ? `⏳ Validando... ${validacaoProgresso.processados}/${validacaoProgresso.total}`
+                          : "⏳ Iniciando validação..."
+                        : `Validar ${contatos.length} número${contatos.length !== 1 ? "s" : ""}`}
                     </button>
+
+                    {/* Barra de progresso */}
+                    {validando && validacaoProgresso && validacaoProgresso.total > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 6, overflow: "hidden", height: 8 }}>
+                          <div style={{
+                            height: "100%",
+                            width: `${Math.round((validacaoProgresso.processados / validacaoProgresso.total) * 100)}%`,
+                            background: "var(--gold, #c9a94d)",
+                            transition: "width 0.5s ease",
+                          }} />
+                        </div>
+                        <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 0", textAlign: "center" }}>
+                          {Math.round((validacaoProgresso.processados / validacaoProgresso.total) * 100)}% — aguarde, verificando números no WhatsApp...
+                        </p>
+                      </div>
+                    )}
 
                     {validacaoErro && (
                       <p className="wpp-import-msg erro" style={{ marginTop: 10 }}>{validacaoErro}</p>

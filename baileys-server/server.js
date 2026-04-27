@@ -545,6 +545,66 @@ app.post('/instancia/:id/validar-numeros', async (req, res) => {
   res.json({ ok: true, validos, invalidos, erros, total: numeros.length })
 })
 
+// POST /instancia/:id/validar-numeros-job — inicia validação em background, retorna jobId
+// body: { numeros: string[] }  (qualquer quantidade; 200ms entre checks)
+app.post('/instancia/:id/validar-numeros-job', (req, res) => {
+  const instId = req.params.id
+  const inst = instances[instId]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  if (inst.status !== 'conectado') {
+    return res.status(503).json({ error: `Instância ${instId} não conectada (${inst.status})` })
+  }
+  const { numeros } = req.body
+  if (!Array.isArray(numeros) || numeros.length === 0) {
+    return res.status(400).json({ error: '"numeros" deve ser array não vazio' })
+  }
+
+  const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+  jobs[jobId] = {
+    tipo: 'validacao',
+    total: numeros.length,
+    processados: 0,
+    validos: [],
+    invalidos: [],
+    erros: [],
+    status: 'rodando',
+    iniciadoEm: Date.now(),
+  }
+
+  // Responde imediatamente com o jobId
+  res.json({ ok: true, jobId, total: numeros.length })
+
+  // Processa em background (sem bloquear a resposta HTTP)
+  ;(async () => {
+    for (const num of numeros) {
+      const job = jobs[jobId]
+      if (!job || job.status === 'cancelado') break
+      try {
+        const formatted = formatarTelefone(num)
+        const numberId  = await inst.client.getNumberId(formatted)
+        if (numberId) {
+          job.validos.push(num)
+        } else {
+          job.invalidos.push(num)
+        }
+      } catch (e) {
+        jobs[jobId].erros.push({ numero: num, msg: e.message })
+      }
+      jobs[jobId].processados++
+      await new Promise(r => setTimeout(r, 200))
+    }
+    if (jobs[jobId]?.status === 'rodando') {
+      jobs[jobId].status = 'concluido'
+      console.log(`[Validação ${jobId}] concluído: ${jobs[jobId].validos.length} válidos / ${jobs[jobId].invalidos.length} inválidos / ${jobs[jobId].erros.length} erros`)
+    }
+  })().catch(err => {
+    if (jobs[jobId]) {
+      jobs[jobId].status = 'erro'
+      jobs[jobId].erroGeral = err.message
+    }
+  })
+})
+
 // GET /job/:jobId — retorna progresso do job
 app.get('/job/:jobId', (req, res) => {
   const job = jobs[req.params.jobId]
