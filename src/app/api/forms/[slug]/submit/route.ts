@@ -185,5 +185,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     }).catch(() => {})
   }
 
+  // Dispara fluxos de cadência com gatilho automático (fire-and-forget)
+  if (leadId) {
+    const isNovoLead = !leadExistente
+    const triggers = isNovoLead ? ['form_submit', 'lead_criado'] : ['form_submit']
+    import('@/lib/cadencia/trigger').then(({ dispararFluxosPorGatilho }) =>
+      dispararFluxosPorGatilho(leadId, triggers)
+    ).catch(() => {})
+  }
+
   return NextResponse.json({ ok: true, lead_id: leadId, response_id: responseIdFinal })
 }
