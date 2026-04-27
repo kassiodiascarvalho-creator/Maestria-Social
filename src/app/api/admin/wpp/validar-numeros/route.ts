@@ -4,8 +4,8 @@ import { getConfig } from '@/lib/config'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-// Listas grandes podem ter 500+ contatos — aumenta timeout para 10 min
-export const maxDuration = 600
+// Listas grandes podem ter 500+ contatos — máximo permitido no plano Hobby
+export const maxDuration = 300
 
 // POST /api/admin/wpp/validar-numeros
 // body: { lista_id: string; instance_id?: string }
