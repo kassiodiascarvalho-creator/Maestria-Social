@@ -125,6 +125,12 @@ export default function WhatsAppPage() {
   // Rastreia qual textarea está focado para inserção de variáveis
   const focusedFieldRef = useRef<{ msgId: string; variacaoIdx: number | null }>({ msgId: "", variacaoIdx: null })
 
+  // Validação de números WhatsApp
+  type ValidacaoItem = { id: string; nome: string | null; telefone: string }
+  const [validando, setValidando] = useState(false)
+  const [validacaoResult, setValidacaoResult] = useState<{ validos: ValidacaoItem[]; invalidos: ValidacaoItem[]; erros: ValidacaoItem[] } | null>(null)
+  const [validacaoErro, setValidacaoErro] = useState("")
+
   // Disparo
   const [disparando, setDisparando] = useState(false)
   const [disparoResult, setDisparoResult] = useState<{ total: number; enviados: number; falhas: number; erros?: { phone: string; nome: string; msg: string }[]; enviados_phones?: { phone: string; nome: string }[] } | null>(null)
@@ -427,6 +433,50 @@ export default function WhatsAppPage() {
       body: JSON.stringify({ contatoId }),
     })
     setContatos(prev => prev.filter(c => c.id !== contatoId))
+    fetchListas()
+  }
+
+  // ── Validação de números WhatsApp ──────────────────────────────────────────
+  async function validarNumeros() {
+    if (!listaAtiva) return
+    setValidando(true)
+    setValidacaoErro("")
+    setValidacaoResult(null)
+    try {
+      const res = await fetch("/api/admin/wpp/validar-numeros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lista_id: listaAtiva.id, instance_id: baileysInstSelecionada }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string; validos?: ValidacaoItem[]; invalidos?: ValidacaoItem[]; erros?: ValidacaoItem[] }
+      if (!res.ok || !data.ok) { setValidacaoErro(data.error ?? "Erro ao validar"); return }
+      setValidacaoResult({ validos: data.validos ?? [], invalidos: data.invalidos ?? [], erros: data.erros ?? [] })
+    } catch {
+      setValidacaoErro("Erro de conexão com o servidor")
+    } finally {
+      setValidando(false)
+    }
+  }
+
+  function downloadListaCSV(itens: ValidacaoItem[], nomeArquivo: string) {
+    const linhas = ["nome,telefone", ...itens.map(c => `"${c.nome ?? ""}","${c.telefone}"`)]
+    const blob = new Blob([linhas.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href = url; a.download = nomeArquivo; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function removerInvalidosDaLista() {
+    if (!listaAtiva || !validacaoResult?.invalidos.length) return
+    if (!confirm(`Remover ${validacaoResult.invalidos.length} número(s) inválido(s) da lista?`)) return
+    for (const c of validacaoResult.invalidos) {
+      await fetch(`/api/admin/wpp/listas/${listaAtiva.id}/contatos`, {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contatoId: c.id }),
+      })
+    }
+    setContatos(prev => prev.filter(c => !validacaoResult.invalidos.some(inv => inv.id === c.id)))
+    setValidacaoResult(prev => prev ? { ...prev, invalidos: [] } : null)
     fetchListas()
   }
 
@@ -932,6 +982,95 @@ export default function WhatsAppPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* ── Card Validação de Números ── */}
+                  <div className="wpp-card">
+                    <div className="wpp-card-title">Validar Números no WhatsApp</div>
+                    <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
+                      Verifica quais números existem no WhatsApp via Baileys antes do disparo. Elimina falhas por número inválido e reduz risco de restrição.
+                    </p>
+                    <button
+                      className="wpp-btn wpp-btn-gold"
+                      onClick={validarNumeros}
+                      disabled={validando || contatos.length === 0}
+                      style={{ width: "100%" }}
+                    >
+                      {validando ? "⏳ Validando... (pode demorar alguns minutos)" : `Validar ${contatos.length} número${contatos.length !== 1 ? "s" : ""}`}
+                    </button>
+
+                    {validacaoErro && (
+                      <p className="wpp-import-msg erro" style={{ marginTop: 10 }}>{validacaoErro}</p>
+                    )}
+
+                    {validacaoResult && (
+                      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                        {/* Válidos */}
+                        <div style={{ background: "rgba(90,158,90,0.08)", borderRadius: 8, padding: "10px 12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700, color: "#5a9e5a", fontSize: 14 }}>
+                              ✅ Válidos: {validacaoResult.validos.length}
+                            </span>
+                            <button
+                              className="wpp-btn wpp-btn-outline"
+                              style={{ padding: "3px 10px", fontSize: 12 }}
+                              onClick={() => downloadListaCSV(validacaoResult.validos, `validos_${listaAtiva?.nome ?? "lista"}.csv`)}
+                              disabled={validacaoResult.validos.length === 0}
+                            >
+                              ↓ Baixar CSV
+                            </button>
+                          </div>
+                          <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 0" }}>
+                            Estes números estão no WhatsApp e prontos para receber disparo.
+                          </p>
+                        </div>
+
+                        {/* Inválidos */}
+                        {validacaoResult.invalidos.length > 0 && (
+                          <div style={{ background: "rgba(194,90,90,0.08)", borderRadius: 8, padding: "10px 12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                              <span style={{ fontWeight: 700, color: "#c25a5a", fontSize: 14 }}>
+                                ❌ Inválidos: {validacaoResult.invalidos.length}
+                              </span>
+                              <button
+                                className="wpp-btn wpp-btn-outline"
+                                style={{ padding: "3px 10px", fontSize: 12 }}
+                                onClick={() => downloadListaCSV(validacaoResult.invalidos, `invalidos_${listaAtiva?.nome ?? "lista"}.csv`)}
+                              >
+                                ↓ Baixar CSV
+                              </button>
+                              <button
+                                className="wpp-btn"
+                                style={{ padding: "3px 10px", fontSize: 12, background: "#c25a5a", color: "#fff", border: "none" }}
+                                onClick={removerInvalidosDaLista}
+                              >
+                                🗑 Remover da lista
+                              </button>
+                            </div>
+                            <div style={{ maxHeight: 110, overflowY: "auto" }}>
+                              {validacaoResult.invalidos.slice(0, 30).map(c => (
+                                <div key={c.id} style={{ fontSize: 12, color: "var(--muted)", padding: "2px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                  {c.nome ? `${c.nome} — ` : ""}{c.telefone}
+                                </div>
+                              ))}
+                              {validacaoResult.invalidos.length > 30 && (
+                                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                                  +{validacaoResult.invalidos.length - 30} mais...
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Erros de rede */}
+                        {validacaoResult.erros.length > 0 && (
+                          <p style={{ fontSize: 12, color: "#c2904d", margin: 0 }}>
+                            ⚠️ {validacaoResult.erros.length} número(s) não puderam ser verificados (erro de rede). Tente validar novamente.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                 </div>
 
                 {/* ── Coluna direita: fila de disparo ── */}

@@ -509,6 +509,42 @@ app.post('/disparar-lista', (req, res) => {
   })
 })
 
+// POST /instancia/:id/validar-numeros — verifica se cada número existe no WhatsApp
+// body: { numeros: string[] }  (até 500 por chamada; 200ms de delay entre checks)
+app.post('/instancia/:id/validar-numeros', async (req, res) => {
+  const instId = req.params.id
+  const inst = instances[instId]
+  if (!inst) return res.status(404).json({ error: 'Instância não encontrada' })
+  if (inst.status !== 'conectado') {
+    return res.status(503).json({ error: `Instância ${instId} não conectada (${inst.status})` })
+  }
+  const { numeros } = req.body
+  if (!Array.isArray(numeros) || numeros.length === 0) {
+    return res.status(400).json({ error: '"numeros" deve ser array não vazio' })
+  }
+
+  const validos   = []
+  const invalidos = []
+  const erros     = []
+
+  for (const num of numeros) {
+    try {
+      const formatted = formatarTelefone(num)
+      const numberId  = await inst.client.getNumberId(formatted)
+      if (numberId) {
+        validos.push(num)
+      } else {
+        invalidos.push(num)
+      }
+    } catch (e) {
+      erros.push({ numero: num, msg: e.message })
+    }
+    await new Promise(r => setTimeout(r, 200))
+  }
+
+  res.json({ ok: true, validos, invalidos, erros, total: numeros.length })
+})
+
 // GET /job/:jobId — retorna progresso do job
 app.get('/job/:jobId', (req, res) => {
   const job = jobs[req.params.jobId]
