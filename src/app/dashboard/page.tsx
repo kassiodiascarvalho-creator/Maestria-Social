@@ -48,6 +48,8 @@ export default async function DashboardPage() {
     { data: campanhas },
     { data: agentes },
     { data: flowsList },
+    { data: leadsRenda },
+    { data: orcamentos },
   ] = await Promise.all([
     db.from("leads").select("*", { count: "exact", head: true }),
     db.from("leads").select("*", { count: "exact", head: true }).gte("criado_em", hoje.toISOString()),
@@ -72,6 +74,10 @@ export default async function DashboardPage() {
     db.from("agentes").select("id, nome").order("criado_em", { ascending: true }),
     // fluxos de cadência ativos
     db.from("cadencia_flows").select("id, nome, total_execucoes, trigger_tipo").eq("status", "ativo").limit(5),
+    // perfil financeiro: leads com renda preenchida (todos)
+    db.from("leads").select("renda_mensal, status_lead, origem").not("renda_mensal", "is", null).neq("renda_mensal", ""),
+    // orçamento extraído pela IA (qualificacoes)
+    db.from("qualificacoes").select("valor, lead_id").eq("campo", "orcamento").order("criado_em", { ascending: false }).limit(500),
   ]);
 
   // ── Processamento em JS ───────────────────────────────────────────
@@ -156,6 +162,61 @@ export default async function DashboardPage() {
     .filter(c => c.total_enviados >= 5)
     .sort((a, b) => pct(b.total_abertos, b.total_enviados) - pct(a.total_abertos, a.total_enviados))[0];
 
+  // ── Perfil Financeiro ─────────────────────────────────────────────
+  // Ordem das faixas do menor para o maior (mesma do formulário de captura)
+  const FAIXAS_ORDEM = [
+    "Até R$ 3.000",
+    "R$ 3.000 – R$ 7.000",
+    "R$ 7.000 – R$ 15.000",
+    "R$ 15.000 – R$ 30.000",
+    "Acima de R$ 30.000",
+  ];
+  const FAIXAS_CORES = ["#6b7280", "#3b82f6", "#10b981", "#f97316", "#c2a44a"];
+
+  type LeadRenda = { renda_mensal: string; status_lead: string; origem: string };
+  const leadsComRenda = (leadsRenda ?? []) as LeadRenda[];
+
+  // Agrupamento por faixa
+  const rendaMap = new Map<string, { total: number; quentes: number; origens: Map<string, number> }>();
+  for (const l of leadsComRenda) {
+    const faixa = l.renda_mensal?.trim();
+    if (!faixa) continue;
+    if (!rendaMap.has(faixa)) rendaMap.set(faixa, { total: 0, quentes: 0, origens: new Map() });
+    const ent = rendaMap.get(faixa)!;
+    ent.total++;
+    if (l.status_lead === "quente") ent.quentes++;
+    const orig = l.origem?.trim() || "Direto";
+    ent.origens.set(orig, (ent.origens.get(orig) ?? 0) + 1);
+  }
+
+  // Ordena faixas conforme a ordem canônica, inclui faixas livres no final
+  const faixasOrdenadas = [
+    ...FAIXAS_ORDEM.filter(f => rendaMap.has(f)),
+    ...Array.from(rendaMap.keys()).filter(f => !FAIXAS_ORDEM.includes(f)),
+  ].map((faixa, i) => {
+    const d = rendaMap.get(faixa)!;
+    const melhorOrigem = Array.from(d.origens.entries()).sort((a, b) => b[1] - a[1])[0];
+    const idx = FAIXAS_ORDEM.indexOf(faixa);
+    return {
+      faixa,
+      ...d,
+      conv: pct(d.quentes, d.total),
+      cor: FAIXAS_CORES[idx >= 0 ? idx : Math.min(i, FAIXAS_CORES.length - 1)],
+      melhorOrigem: melhorOrigem ? melhorOrigem[0] : null,
+    };
+  });
+
+  const totalComRenda = leadsComRenda.length;
+  const pctComRenda = pct(totalComRenda, total);
+
+  // Faixa com maior taxa de conversão (min 3 leads)
+  const faixaMaisQuente = faixasOrdenadas.filter(f => f.total >= 3).sort((a, b) => b.conv - a.conv)[0];
+  // Faixa com mais leads (maior volume)
+  const faixaMaiorVolume = faixasOrdenadas.sort((a, b) => b.total - a.total)[0];
+
+  // Orçamento da IA (qualificacoes)
+  const totalOrcamentos = (orcamentos ?? []).length;
+
   // Delta leads hoje vs ontem
   const deltaHoje = delta(leadsHoje ?? 0, leadsOntem ?? 0);
 
@@ -187,6 +248,9 @@ export default async function DashboardPage() {
   }
   if (taxaAberturaGlobal > 0 && taxaAberturaGlobal < 20) {
     alertas.push({ cor: "#f97316", icon: "📉", texto: `Taxa de abertura de emails abaixo de 20% (${taxaAberturaGlobal}%) — revise assuntos das campanhas` });
+  }
+  if (faixaMaisQuente && faixaMaisQuente.conv >= 20) {
+    alertas.push({ cor: "#c2a44a", icon: "💰", texto: `Leads com renda "${faixaMaisQuente.faixa}" convertem mais: ${faixaMaisQuente.conv}% de taxa de qualificação` });
   }
 
   // ── Render ────────────────────────────────────────────────────────
@@ -326,6 +390,93 @@ export default async function DashboardPage() {
           )}
         </Section>
       </div>
+
+      {/* ── Perfil Financeiro ──────────────────────────────────────── */}
+      {faixasOrdenadas.length > 0 && (
+        <Section titulo="💰 Perfil Financeiro dos Leads" sub={`${fmt(totalComRenda)} de ${fmt(total)} leads com renda preenchida (${pctComRenda}%)`}>
+          {/* Barra de distribuição visual */}
+          <div style={{ display: "flex", height: 10, borderRadius: 8, overflow: "hidden", marginBottom: 20, gap: 2 }}>
+            {faixasOrdenadas.map(f => (
+              <div
+                key={f.faixa}
+                style={{ flex: f.total, background: f.cor, minWidth: 4, transition: "flex .3s" }}
+                title={`${f.faixa}: ${f.total} leads`}
+              />
+            ))}
+          </div>
+
+          {/* Tabela por faixa */}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #1e1e1e" }}>
+                {["Faixa de Renda", "Leads", "% do total", "Quentes", "Conversão", "Principal canal"].map(h => (
+                  <th key={h} style={{ textAlign: "left", padding: "6px 10px", fontSize: 11, color: "#4b5563", fontWeight: 600, letterSpacing: 0.5 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {faixasOrdenadas.map((f, i) => (
+                <tr key={f.faixa} style={{ borderBottom: "1px solid #111", background: i % 2 === 0 ? "transparent" : "#0a0a0a" }}>
+                  <td style={{ padding: "10px 10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: f.cor, flexShrink: 0, display: "inline-block" }} />
+                      <span style={{ color: "#d1d5db", fontWeight: 500 }}>{f.faixa}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px 10px", color: "#fff", fontWeight: 700 }}>{fmt(f.total)}</td>
+                  <td style={{ padding: "10px 10px" }}>
+                    {/* mini barra horizontal */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 80, height: 5, background: "#1a1a1a", borderRadius: 3, overflow: "hidden", flexShrink: 0 }}>
+                        <div style={{ width: `${pct(f.total, totalComRenda)}%`, height: "100%", background: f.cor, borderRadius: 3 }} />
+                      </div>
+                      <span style={{ color: "#9ca3af", fontSize: 12 }}>{pct(f.total, totalComRenda)}%</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px 10px", color: "#ef4444", fontWeight: 600 }}>{fmt(f.quentes)}</td>
+                  <td style={{ padding: "10px 10px" }}>
+                    <span style={{
+                      background: f.conv >= 20 ? "#22c55e20" : f.conv >= 10 ? "#f9731620" : "#6b728020",
+                      color: f.conv >= 20 ? "#22c55e" : f.conv >= 10 ? "#f97316" : "#6b7280",
+                      borderRadius: 5, padding: "2px 8px", fontWeight: 700
+                    }}>
+                      {f.conv}%
+                    </span>
+                  </td>
+                  <td style={{ padding: "10px 10px", color: "#6b7280", fontSize: 12 }}>
+                    {f.melhorOrigem ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Destaques */}
+          <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+            {faixaMaisQuente && (
+              <div style={{ background: "#c2a44a10", border: "1px solid #c2a44a30", borderRadius: 10, padding: "12px 16px", flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 11, color: "#c2a44a", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Faixa que mais converte</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{faixaMaisQuente.faixa}</div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3 }}>{faixaMaisQuente.conv}% viram quentes · {fmt(faixaMaisQuente.total)} leads</div>
+              </div>
+            )}
+            {faixaMaiorVolume && faixaMaiorVolume.faixa !== faixaMaisQuente?.faixa && (
+              <div style={{ background: "#3b82f610", border: "1px solid #3b82f630", borderRadius: 10, padding: "12px 16px", flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 11, color: "#3b82f6", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Faixa com maior volume</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{faixaMaiorVolume.faixa}</div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3 }}>{fmt(faixaMaiorVolume.total)} leads · {faixaMaiorVolume.conv}% de conversão</div>
+              </div>
+            )}
+            {totalOrcamentos > 0 && (
+              <div style={{ background: "#10b98110", border: "1px solid #10b98130", borderRadius: 10, padding: "12px 16px", flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Orçamento qualificado pela IA</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmt(totalOrcamentos)} leads</div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3 }}>tiveram orçamento extraído pelo agente</div>
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
 
       {/* ── Alertas Inteligentes ────────────────────────────────────── */}
       {alertas.length > 0 && (
