@@ -7,13 +7,18 @@ export const maxDuration = 300 // 5 min — Vercel Pro
 const db = () => createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
 type P = { params: Promise<{ id: string }> }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-  ? `https://${process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL}`
-  : 'http://localhost:3000'
+function resolverBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || ''
+  if (!raw) return 'http://localhost:3000'
+  // Remove protocolo existente para evitar https://https://...
+  const semProtocolo = raw.replace(/^https?:\/\//, '')
+  return `https://${semProtocolo}`
+}
+const BASE_URL = resolverBaseUrl()
 
 function injetarTracking(html: string, logId: string): string {
-  // Pixel de abertura
-  const pixel = `<img src="${BASE_URL}/api/track/open/${logId}" width="1" height="1" style="display:none" alt="" />`
+  // Pixel de abertura — sem display:none pois alguns clientes bloqueiam com mais agressividade
+  const pixel = `<img src="${BASE_URL}/api/track/open/${logId}" width="1" height="1" border="0" alt="" />`
 
   // Substituir links <a href="..."> por links rastreados
   const htmlComLinks = html.replace(
