@@ -42,7 +42,7 @@ const FIELDS_CONFIG = [
     desc: "Configurações de envio de email via Resend.",
     fields: [
       { label: "RESEND_API_KEY", key: "RESEND_API_KEY", type: "password", placeholder: "re_..." },
-      { label: "EMAIL_FROM", key: "EMAIL_FROM", type: "text", placeholder: "Maestria Social <nao-responda@maestriasocial.com>" },
+      { label: "EMAIL_FROM", key: "EMAIL_FROM", type: "text", placeholder: "Maestria Social <time@maestriasocial.com>" },
     ],
   },
   {

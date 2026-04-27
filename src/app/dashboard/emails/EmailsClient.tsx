@@ -65,7 +65,7 @@ export default function EmailsClient({
   // ── Estado Campanhas ──────────────────────────────────────────
   const [campanhas, setCampanhas] = useState<Campanha[]>(campanhasIniciais)
   const [showNovaCamp, setShowNovaCamp] = useState(false)
-  const [novaCamp, setNovaCamp] = useState({ nome: '', assunto_a: '', assunto_b: '', remetente_nome: 'Maestria Social', remetente_email: '', lista_id: '', html: '', ab_ativo: false })
+  const [novaCamp, setNovaCamp] = useState({ nome: '', assunto_a: '', assunto_b: '', remetente_nome: 'Maestria Social', remetente_email: 'time@maestriasocial.com', lista_id: '', html: '', ab_ativo: false })
   const [disparando, setDisparando] = useState<string | null>(null)
   const [campDetalhe, setCampDetalhe] = useState<{ campanha: Campanha; metricas: Record<string, unknown> } | null>(null)
   const [msgCamp, setMsgCamp] = useState<string | null>(null)

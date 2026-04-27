@@ -15,7 +15,7 @@ async function getRemetente(): Promise<string> {
   return (
     process.env.EMAIL_FROM ||
     (await getConfig('EMAIL_FROM')) ||
-    'Maestria Social <nao-responda@maestriasocial.com>'
+    'Maestria Social <time@maestriasocial.com>'
   )
 }
 
@@ -36,7 +36,7 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<void> {
     html: input.html,
     text: input.texto,
     headers: {
-      'List-Unsubscribe': '<mailto:nao-responda@maestriasocial.com?subject=unsubscribe>',
+      'List-Unsubscribe': '<mailto:time@maestriasocial.com?subject=unsubscribe>',
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       'X-Entity-Ref-ID': `maestria-${Date.now()}`,
     },
