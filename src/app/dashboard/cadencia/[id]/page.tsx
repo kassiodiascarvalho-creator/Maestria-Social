@@ -742,6 +742,14 @@ function FlowCanvas({
           <option value="ativo">Ativo</option>
           <option value="pausado">Pausado</option>
         </select>
+        <select value={triggerTipo} onChange={e => setTriggerTipo(e.target.value)} style={{ background: "#1a1a1a", border: "1px solid #c2a44a40", color: "#c2a44a", borderRadius: 7, padding: "5px 10px", fontSize: 12, fontFamily: "inherit" }} title="Gatilho do fluxo">
+          <option value="manual">⚡ Disparo manual</option>
+          <option value="form_submit">⚡ Formulário enviado</option>
+          <option value="lead_criado">⚡ Lead criado</option>
+          <option value="tag_add">⚡ Tag adicionada</option>
+          <option value="sdr">⚡ Agente SDR</option>
+          <option value="import">⚡ Importação</option>
+        </select>
         <span style={{ fontSize: 12, color: "#4b5563", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 6, padding: "4px 9px" }}>
           {nodes.length} nós · {edges.length} conexões
         </span>
