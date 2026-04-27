@@ -67,7 +67,7 @@ export default function EmailsClient({
   const [showNovaCamp, setShowNovaCamp] = useState(false)
   const [novaCamp, setNovaCamp] = useState({ nome: '', assunto_a: '', assunto_b: '', remetente_nome: 'Maestria Social', remetente_email: 'time@maestriasocial.com', lista_id: '', html: '', ab_ativo: false })
   const [disparando, setDisparando] = useState<string | null>(null)
-  const [campDetalhe, setCampDetalhe] = useState<{ campanha: Campanha; metricas: Record<string, unknown> } | null>(null)
+  const [campDetalhe, setCampDetalhe] = useState<{ campanha: Campanha; metricas: Record<string, unknown>; engajados?: { id: string; email: string; nome?: string; status: string; aberto_em?: string; clicado_em?: string }[] } | null>(null)
   const [msgCamp, setMsgCamp] = useState<string | null>(null)
   const [previewEmail, setPreviewEmail] = useState('')
 
@@ -216,7 +216,15 @@ export default function EmailsClient({
 
   async function verMetricasCamp(campId: string) {
     const res = await fetch(`/api/admin/emails/metricas?campanha_id=${campId}`)
-    if (res.ok) { const d = await res.json(); setCampDetalhe(d) }
+    if (!res.ok) return
+    const d = await res.json()
+    setCampDetalhe(d)
+    // Atualiza contadores ao vivo no card da campanha
+    setCampanhas(prev => prev.map(c => c.id === campId ? {
+      ...c,
+      total_abertos: d.metricas.abertos,
+      total_cliques: d.metricas.clicados,
+    } : c))
   }
 
   async function deletarCampanha(campId: string) {
@@ -521,20 +529,40 @@ export default function EmailsClient({
             {campDetalhe && (
               <div className='em-card' style={{ marginBottom: 24, border: '1px solid rgba(194,144,77,.3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <h3 style={{ color: '#fff9e6', fontWeight: 700, margin: 0 }}>{campDetalhe.campanha.nome} — Métricas</h3>
+                  <h3 style={{ color: '#fff9e6', fontWeight: 700, margin: 0 }}>{campDetalhe.campanha.nome} — Métricas ao vivo</h3>
                   <button onClick={() => setCampDetalhe(null)} style={{ background: 'none', border: 'none', color: '#4a3e30', cursor: 'pointer', fontSize: 18 }}>✕</button>
                 </div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
                   {[
-                    ['Enviados', campDetalhe.metricas.total as number, '#c2904d'],
-                    ['Abertos', campDetalhe.metricas.abertos as number, '#10b981'],
-                    ['Cliques', campDetalhe.metricas.clicados as number, '#6366f1'],
-                    ['Bounce', campDetalhe.metricas.bounced as number, '#ef4444'],
-                    ['Taxa abertura', `${campDetalhe.metricas.taxaAbertura}%`, '#f59e0b'],
-                    ['CTR', `${campDetalhe.metricas.ctr}%`, '#8b5cf6'],
-                    ['CTOR', `${campDetalhe.metricas.ctor}%`, '#06b6d4'],
+                    ['Enviados',      campDetalhe.metricas.total as number,        '#c2904d'],
+                    ['Entregues',     campDetalhe.metricas.entregues as number,     '#c2904d'],
+                    ['Abertos',       campDetalhe.metricas.abertos as number,       '#10b981'],
+                    ['Cliques',       campDetalhe.metricas.clicados as number,      '#6366f1'],
+                    ['Bounce',        campDetalhe.metricas.bounced as number,       '#ef4444'],
+                    ['Taxa abertura', `${campDetalhe.metricas.taxaAbertura}%`,      '#f59e0b'],
+                    ['CTR',           `${campDetalhe.metricas.ctr}%`,               '#8b5cf6'],
+                    ['CTOR',          `${campDetalhe.metricas.ctor}%`,              '#06b6d4'],
                   ].map(([label, value, cor]) => <Stat key={label as string} label={label as string} value={value as string} cor={cor as string} />)}
                 </div>
+                {campDetalhe.engajados && campDetalhe.engajados.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, color: '#4a3e30', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Quem abriu / clicou</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+                      {campDetalhe.engajados.map(e => (
+                        <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 10px', background: '#1a1410', borderRadius: 6 }}>
+                          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: e.status === 'clicado' ? '#6366f122' : '#10b98122', color: e.status === 'clicado' ? '#818cf8' : '#34d399', fontWeight: 700 }}>{e.status}</span>
+                          <span style={{ fontSize: 13, color: '#c8b99a', flex: 1 }}>{e.nome || e.email}</span>
+                          <span style={{ fontSize: 11, color: '#4a3e30' }}>{e.email}</span>
+                          {e.clicado_em && <span style={{ fontSize: 10, color: '#6366f1' }}>clicou {new Date(e.clicado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                          {!e.clicado_em && e.aberto_em && <span style={{ fontSize: 10, color: '#10b981' }}>abriu {new Date(e.aberto_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {campDetalhe.engajados?.length === 0 && (
+                  <p style={{ fontSize: 13, color: '#4a3e30', margin: 0 }}>Nenhuma abertura registrada ainda. O pixel de rastreamento pode estar bloqueado pelo cliente de e-mail.</p>
+                )}
               </div>
             )}
 
