@@ -64,13 +64,21 @@ function avaliarCondicao(config: Record<string, unknown>, lead: Record<string, u
 
   leadVal = String(lead?.[String(campo)] ?? '')
 
+  // Operadores numéricos — usados para score_email, qs_total, etc.
+  const leadNum = parseFloat(leadVal)
+  const valorNum = parseFloat(String(valor ?? '0'))
+
   switch (operador) {
-    case 'igual':       return leadVal.toLowerCase() === String(valor ?? '').toLowerCase()
-    case 'contem':      return leadVal.toLowerCase().includes(String(valor ?? '').toLowerCase())
-    case 'nao_contem':  return !leadVal.toLowerCase().includes(String(valor ?? '').toLowerCase())
-    case 'existe':      return leadVal.trim().length > 0
-    case 'nao_existe':  return leadVal.trim().length === 0
-    default:            return false
+    case 'igual':        return leadVal.toLowerCase() === String(valor ?? '').toLowerCase()
+    case 'contem':       return leadVal.toLowerCase().includes(String(valor ?? '').toLowerCase())
+    case 'nao_contem':   return !leadVal.toLowerCase().includes(String(valor ?? '').toLowerCase())
+    case 'existe':       return leadVal.trim().length > 0
+    case 'nao_existe':   return leadVal.trim().length === 0
+    case 'maior_que':    return !isNaN(leadNum) && leadNum > valorNum
+    case 'menor_que':    return !isNaN(leadNum) && leadNum < valorNum
+    case 'maior_igual':  return !isNaN(leadNum) && leadNum >= valorNum
+    case 'menor_igual':  return !isNaN(leadNum) && leadNum <= valorNum
+    default:             return false
   }
 }
 
@@ -100,6 +108,19 @@ async function processarFluxo(
       case 'mensagem': {
         const telefone = String(lead?.whatsapp ?? '')
         if (telefone) await enviarMensagem(telefone, cfg, lead).catch(() => {})
+        currentNodeId = await getNextNodeId(db, flowId, currentNodeId)
+        break
+      }
+
+      case 'email': {
+        const emailLead = String(lead?.email ?? '')
+        if (emailLead) {
+          const { enviarEmail } = await import('@/lib/email/enviar')
+          const assunto = personalizar(String(cfg.assunto ?? '(sem assunto)'), lead)
+          const html    = personalizar(String(cfg.html ?? cfg.texto ?? ''), lead)
+          const texto   = personalizar(String(cfg.texto ?? ''), lead)
+          await enviarEmail({ para: emailLead, assunto, html, texto }).catch(() => {})
+        }
         currentNodeId = await getNextNodeId(db, flowId, currentNodeId)
         break
       }
