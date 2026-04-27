@@ -326,6 +326,24 @@ export async function responderAgenteParaLead(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   agenteDB = agenteResolvido
 
+  // ── Credenciais da instância Meta secundária ───────────────────────────────
+  // Quando a mensagem veio de um número Meta secundário (não o principal das env vars),
+  // busca as credenciais específicas para que a resposta saia pelo mesmo número.
+  let metaCreds: { phoneNumberId: string; accessToken: string } | undefined
+  if (canal?.provider === 'meta' && canal.instanceId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: instMeta } = await (supabase as any)
+      .from('whatsapp_instancias')
+      .select('meta_phone_number_id, meta_access_token')
+      .eq('meta_phone_number_id', canal.instanceId)
+      .eq('tipo', 'meta')
+      .eq('ativo', true)
+      .maybeSingle()
+    if (instMeta?.meta_phone_number_id && instMeta?.meta_access_token) {
+      metaCreds = { phoneNumberId: instMeta.meta_phone_number_id, accessToken: instMeta.meta_access_token }
+    }
+  }
+
   // ── Registra mensagem do lead com dedup ────────────────────────────────────
   // extMessageId (Meta) ou hash de conteúdo (Baileys sem ID padronizado).
   // UNIQUE em ext_message_id: segundo webhook da mesma mensagem retorna sem responder.
@@ -922,11 +940,11 @@ export async function responderAgenteParaLead(
               await enviarViaBaileys(lead.whatsapp, parte, canal.instanceId)
             } catch (baileysErr) {
               console.warn('[agente] Baileys indisponível, caindo para Meta:', (baileysErr as Error).message)
-              await enviarMensagemWhatsApp(lead.whatsapp, parte)
+              await enviarMensagemWhatsApp(lead.whatsapp, parte, metaCreds)
             }
           } else {
-            // Canal Meta ou não definido: envia via Meta diretamente
-            await enviarMensagemWhatsApp(lead.whatsapp, parte)
+            // Canal Meta: usa credenciais da instância secundária quando disponível
+            await enviarMensagemWhatsApp(lead.whatsapp, parte, metaCreds)
           }
 
           // Salva cada parte separada no histórico
@@ -947,10 +965,10 @@ export async function responderAgenteParaLead(
           try {
             await enviarAudioViaBaileys(lead.whatsapp, audioUrl, canal.instanceId)
           } catch {
-            await enviarAudioViaMeta(lead.whatsapp, audioUrl)
+            await enviarAudioViaMeta(lead.whatsapp, audioUrl, metaCreds)
           }
         } else {
-          await enviarAudioViaMeta(lead.whatsapp, audioUrl)
+          await enviarAudioViaMeta(lead.whatsapp, audioUrl, metaCreds)
         }
       }
     } catch (err) {

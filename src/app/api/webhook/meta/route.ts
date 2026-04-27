@@ -285,10 +285,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 })
     }
 
-    await saveDebug('disparando_agente', { leadId: lead.id, texto: textoFinal })
+    await saveDebug('disparando_agente', { leadId: lead.id, texto: textoFinal, phoneNumberId })
     try {
-      const agente = await encontrarAgentePorCanal('meta')
-      const result = await responderAgenteParaLead(lead.id, textoFinal, true, { provider: 'meta' }, agente, msgIdFinal)
+      const agente = await encontrarAgentePorCanal('meta', phoneNumberId)
+      const result = await responderAgenteParaLead(lead.id, textoFinal, true, { provider: 'meta', instanceId: phoneNumberId ?? undefined }, agente, msgIdFinal)
       await saveDebug('agente_respondeu', { leadId: lead.id, resposta: result.resposta })
     } catch (agenteErr) {
       await saveDebug('agente_erro', { leadId: lead.id, erro: String(agenteErr) })

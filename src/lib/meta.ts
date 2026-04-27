@@ -59,8 +59,10 @@ async function getWhatsAppMode(): Promise<'meta' | 'coexistencia'> {
   return 'coexistencia'
 }
 
-async function postMeta(payload: Record<string, unknown>) {
-  const { phoneNumberId, accessToken } = await getMetaCredenciais()
+type MetaCreds = { phoneNumberId: string; accessToken: string }
+
+async function postMeta(payload: Record<string, unknown>, creds?: MetaCreds) {
+  const { phoneNumberId, accessToken } = creds ?? await getMetaCredenciais()
   const res = await fetch(`${META_API_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -76,7 +78,7 @@ async function postMeta(payload: Record<string, unknown>) {
   }
 }
 
-export async function enviarMensagemWhatsApp(para: string, texto: string): Promise<void> {
+export async function enviarMensagemWhatsApp(para: string, texto: string, creds?: MetaCreds): Promise<void> {
   const to = normalizarTelefone(para)
   const mode = await getWhatsAppMode()
 
@@ -91,7 +93,7 @@ export async function enviarMensagemWhatsApp(para: string, texto: string): Promi
       to,
       type: 'text',
       text: { body: texto },
-    })
+    }, creds)
   } catch (err) {
     const coexistenciaUrl = await getCoexistenciaUrl()
     if (!coexistenciaUrl) throw err
@@ -175,6 +177,7 @@ export async function enviarMidiaViaMeta(
   url: string,
   caption?: string,
   filename?: string,
+  creds?: MetaCreds,
 ): Promise<void> {
   const to = normalizarTelefone(para)
   const mode = await getWhatsAppMode()
@@ -191,7 +194,7 @@ export async function enviarMidiaViaMeta(
   }
 
   try {
-    await postMeta({ messaging_product: 'whatsapp', ...msgPayload })
+    await postMeta({ messaging_product: 'whatsapp', ...msgPayload }, creds)
   } catch (err) {
     const coexistenciaUrl = await getCoexistenciaUrl()
     if (!coexistenciaUrl) throw err
@@ -202,7 +205,7 @@ export async function enviarMidiaViaMeta(
 /**
  * Envia áudio via Meta WhatsApp API (URL pública).
  */
-export async function enviarAudioViaMeta(para: string, audioUrl: string): Promise<void> {
+export async function enviarAudioViaMeta(para: string, audioUrl: string, creds?: MetaCreds): Promise<void> {
   const to = normalizarTelefone(para)
   const mode = await getWhatsAppMode()
 
@@ -219,7 +222,7 @@ export async function enviarAudioViaMeta(para: string, audioUrl: string): Promis
   }
 
   try {
-    await postMeta(payload)
+    await postMeta(payload, creds)
   } catch (err) {
     const coexistenciaUrl = await getCoexistenciaUrl()
     if (!coexistenciaUrl) throw err
