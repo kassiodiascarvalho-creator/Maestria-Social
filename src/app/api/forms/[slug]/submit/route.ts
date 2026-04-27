@@ -49,6 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   // Cria ou localiza lead
   let leadId: string | null = null
+  let isNovoLead = false
   if (nome || email || wpp) {
     const leadData: Record<string, unknown> = {
       nome: nome || 'Anônimo', origem: form.titulo, form_id: form.id,
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     } else {
       const { data: novoLead } = await db.from('leads').insert(leadData).select('id').single()
       leadId = novoLead?.id ?? null
+      isNovoLead = true
     }
   }
 
@@ -187,7 +189,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   // Dispara fluxos de cadência com gatilho automático (fire-and-forget)
   if (leadId) {
-    const isNovoLead = !leadExistente
     const triggers = isNovoLead ? ['form_submit', 'lead_criado'] : ['form_submit']
     import('@/lib/cadencia/trigger').then(({ dispararFluxosPorGatilho }) =>
       dispararFluxosPorGatilho(leadId, triggers)
