@@ -126,7 +126,7 @@ function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string
               <img src="${LOGO_URL}" alt="Maestria Social" width="28" height="28"
                 style="display:block;margin:0 auto 10px;opacity:0.5;border:0;outline:none;text-decoration:none;" />
               <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#3a3a2e;margin-bottom:8px;">
-                © Maestria Social · maestriasocial.com
+                © Maestria Social · <a href="https://maestriasocial.com" style="color:#3a3a2e;text-decoration:none;">maestriasocial.com</a>
               </div>
               <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#4a4a38;">
                 Você recebe este e-mail porque se cadastrou em um formulário da Maestria Social.<br>
