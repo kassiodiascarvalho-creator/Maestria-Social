@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
 
   // ── Inbound (lead responde ao e-mail) ─────────────────────────
   // Resend envia estrutura plana para inbound (sem type/data wrapper)
-  const isInbound = type === 'email.inbound' || (!type && body.from && body.subject)
+  const isInbound = type === 'email.inbound' || type === 'email.received' || (!type && body.from && body.subject)
   if (isInbound) {
     const payload = data ?? body
     const emailFrom: string = typeof payload.from === 'string'
