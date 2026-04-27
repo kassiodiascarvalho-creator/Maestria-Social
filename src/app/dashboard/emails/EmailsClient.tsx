@@ -131,10 +131,15 @@ export default function EmailsClient({
     const res = await fetch('/api/admin/emails/sincronizar-leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     const d = await res.json()
     if (res.ok) {
-      setMsgLista(`✅ ${d.importados} leads sincronizados para a lista "📋 Leads — Todos"`)
+      if (d.importados === 0) {
+        setMsgLista('Nenhum lead com e-mail encontrado.')
+      } else {
+        const detalhes = d.resumo?.map((r: { lista: string; importados: number }) => `${r.lista} (${r.importados})`).join(', ') ?? ''
+        setMsgLista(`${d.importados} contatos sincronizados em ${d.listas_criadas} lista(s): ${detalhes}`)
+      }
       const r2 = await fetch('/api/admin/emails/listas')
       if (r2.ok) { const d2 = await r2.json(); setListas(d2.listas || []) }
-    } else setMsgLista(`❌ ${d.error}`)
+    } else setMsgLista(`Erro: ${d.error}`)
     setSincronizando(false)
   }
 
@@ -196,7 +201,7 @@ export default function EmailsClient({
     setDisparando(campId); setMsgCamp(null)
     const res = await fetch(`/api/admin/emails/campanhas/${campId}/disparar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     const d = await res.json()
-    if (res.ok) { setMsgCamp(`✅ ${d.enviados} enviados, ${d.falhas} falhas`); setCampanhas(prev => prev.map(c => c.id === campId ? { ...c, status: 'enviado', total_enviados: d.enviados } : c)) }
+    if (res.ok) { setMsgCamp(`${d.enviados} e-mails enviados${d.falhas ? `, ${d.falhas} falhas` : ''}.`); setCampanhas(prev => prev.map(c => c.id === campId ? { ...c, status: 'enviado', total_enviados: d.enviados } : c)) }
     else setMsgCamp(`❌ ${d.error}`)
     setDisparando(null)
   }
@@ -229,7 +234,7 @@ export default function EmailsClient({
 
         {/* ── TABS ── */}
         <div className='em-tabs'>
-          {([['templates','📧 Templates'], ['listas','📋 Listas'], ['campanhas','🚀 Campanhas'], ['metricas','📊 Métricas']] as const).map(([key, label]) => (
+          {([['templates','Templates'], ['listas','Listas'], ['campanhas','Campanhas'], ['metricas','Métricas']] as const).map(([key, label]) => (
             <button key={key} className={`em-tab${aba === key ? ' active' : ''}`}
               onClick={() => { setAba(key); if (key === 'metricas' && !metricas) carregarMetricas() }}>
               {label}
@@ -452,23 +457,52 @@ export default function EmailsClient({
 
             {showNovaCamp && (
               <div className='em-card' style={{ marginBottom: 24 }}>
-                <h3 style={{ color: '#fff9e6', fontWeight: 700, margin: '0 0 20px' }}>Nova Campanha</h3>
+                <h3 style={{ color: '#fff9e6', fontWeight: 700, margin: '0 0 4px' }}>Nova Campanha</h3>
+                <p style={{ color: '#4a3e30', fontSize: 13, margin: '0 0 20px' }}>Preencha os campos abaixo. Você poderá revisar antes de disparar.</p>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <div><label className='em-label'>Nome interno *</label><input className='em-input' value={novaCamp.nome} onChange={e => setNovaCamp(c => ({ ...c, nome: e.target.value }))} placeholder='Ex: Black Friday 2026' /></div>
-                  <div><label className='em-label'>Lista de destino</label>
-                    <select className='em-select' style={{ width: '100%' }} value={novaCamp.lista_id} onChange={e => setNovaCamp(c => ({ ...c, lista_id: e.target.value }))}>
-                      <option value=''>Selecionar lista...</option>{listas.map(l => <option key={l.id} value={l.id}>{l.nome} ({l.total_contatos} contatos)</option>)}
-                    </select>
+                  <div>
+                    <label className='em-label'>Nome interno *</label>
+                    <input className='em-input' value={novaCamp.nome} onChange={e => setNovaCamp(c => ({ ...c, nome: e.target.value }))} placeholder='Ex: Black Friday 2026' />
                   </div>
-                  <div><label className='em-label'>Assunto A *</label><input className='em-input' value={novaCamp.assunto_a} onChange={e => setNovaCamp(c => ({ ...c, assunto_a: e.target.value }))} placeholder='Assunto do e-mail' /></div>
-                  <div><label className='em-label'>Assunto B (A/B test)</label><input className='em-input' value={novaCamp.assunto_b} onChange={e => setNovaCamp(c => ({ ...c, assunto_b: e.target.value }))} placeholder='Variante B do assunto' /></div>
-                  <div><label className='em-label'>Nome remetente</label><input className='em-input' value={novaCamp.remetente_nome} onChange={e => setNovaCamp(c => ({ ...c, remetente_nome: e.target.value }))} /></div>
-                  <div><label className='em-label'>E-mail remetente *</label><input className='em-input' value={novaCamp.remetente_email} onChange={e => setNovaCamp(c => ({ ...c, remetente_email: e.target.value }))} placeholder='suporte@seudominio.com' /></div>
+
+                  <div>
+                    <label className='em-label'>Lista de destino *</label>
+                    <select className='em-select' style={{ width: '100%' }} value={novaCamp.lista_id} onChange={e => setNovaCamp(c => ({ ...c, lista_id: e.target.value }))}>
+                      <option value=''>— Escolha uma lista —</option>
+                      {listas.map(l => <option key={l.id} value={l.id}>{l.nome} · {l.total_contatos} contatos</option>)}
+                    </select>
+                    {!novaCamp.lista_id && <span style={{ fontSize: 11, color: '#7a4a30', marginTop: 4, display: 'block' }}>Obrigatório — o disparo só funciona com uma lista selecionada.</span>}
+                  </div>
+
+                  <div>
+                    <label className='em-label'>Assunto do e-mail *</label>
+                    <input className='em-input' value={novaCamp.assunto_a} onChange={e => setNovaCamp(c => ({ ...c, assunto_a: e.target.value }))} placeholder='Ex: O método que mudou minha vida social' />
+                  </div>
+                  <div>
+                    <label className='em-label'>Assunto B — variante A/B (opcional)</label>
+                    <input className='em-input' value={novaCamp.assunto_b} onChange={e => setNovaCamp(c => ({ ...c, assunto_b: e.target.value }))} placeholder='Deixe em branco para não usar A/B' />
+                  </div>
+
+                  <div>
+                    <label className='em-label'>Nome do remetente</label>
+                    <input className='em-input' value={novaCamp.remetente_nome} onChange={e => setNovaCamp(c => ({ ...c, remetente_nome: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className='em-label'>E-mail remetente *</label>
+                    <input className='em-input' value={novaCamp.remetente_email} onChange={e => setNovaCamp(c => ({ ...c, remetente_email: e.target.value }))} placeholder='suporte@maestriasocial.com' />
+                    <span style={{ fontSize: 11, color: '#4a3e30', marginTop: 4, display: 'block' }}>O domínio precisa estar verificado no Resend. Veja em Integrações → Resend.</span>
+                  </div>
                 </div>
+
                 <label className='em-label'>Conteúdo HTML</label>
-                <textarea className='em-textarea' value={novaCamp.html} onChange={e => setNovaCamp(c => ({ ...c, html: e.target.value }))} rows={8} placeholder='Cole o HTML do e-mail aqui. Use {nome} para personalizar.' style={{ marginBottom: 16 }} />
+                <textarea className='em-textarea' value={novaCamp.html} onChange={e => setNovaCamp(c => ({ ...c, html: e.target.value }))} rows={8} placeholder={'Cole o HTML do e-mail aqui.\nUse {nome} para personalizar com o nome do contato.'} style={{ marginBottom: 16 }} />
+
                 <div className='em-actions'>
-                  <button className='em-btn em-btn-primary' onClick={criarCampanha}>Salvar Campanha</button>
+                  <button className='em-btn em-btn-primary' onClick={criarCampanha}
+                    disabled={!novaCamp.nome.trim() || !novaCamp.assunto_a.trim() || !novaCamp.remetente_email.trim() || !novaCamp.lista_id}>
+                    Salvar Campanha
+                  </button>
                   <button className='em-btn em-btn-ghost' onClick={() => setShowNovaCamp(false)}>Cancelar</button>
                 </div>
               </div>
@@ -477,7 +511,7 @@ export default function EmailsClient({
             {campDetalhe && (
               <div className='em-card' style={{ marginBottom: 24, border: '1px solid rgba(194,144,77,.3)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <h3 style={{ color: '#fff9e6', fontWeight: 700, margin: 0 }}>📊 {campDetalhe.campanha.nome}</h3>
+                  <h3 style={{ color: '#fff9e6', fontWeight: 700, margin: 0 }}>{campDetalhe.campanha.nome} — Métricas</h3>
                   <button onClick={() => setCampDetalhe(null)} style={{ background: 'none', border: 'none', color: '#4a3e30', cursor: 'pointer', fontSize: 18 }}>✕</button>
                 </div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -504,13 +538,13 @@ export default function EmailsClient({
                         <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: `${STATUS_COR[c.status]}22`, color: STATUS_COR[c.status], fontWeight: 700, border: `1px solid ${STATUS_COR[c.status]}44` }}>{c.status}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#4a3e30' }}>
-                        {c.email_listas?.nome && <span>📋 {c.email_listas.nome} · </span>}
+                        {c.email_listas?.nome && <span>Lista: {c.email_listas.nome} · </span>}
                         <span>Assunto: {c.assunto_a}</span>
                       </div>
                       {c.status === 'enviado' && (
                         <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                          {[['✉', c.total_enviados, 'enviados'], ['👁', c.total_abertos, 'abertos'], ['🖱', c.total_cliques, 'cliques']].map(([icon, val, lbl]) => (
-                            <span key={lbl as string} style={{ fontSize: 12, color: '#7a6e5e' }}>{icon} {val} {lbl}</span>
+                          {[[c.total_enviados, 'enviados'], [c.total_abertos, 'abertos'], [c.total_cliques, 'cliques']].map(([val, lbl]) => (
+                            <span key={lbl as string} style={{ fontSize: 12, color: '#7a6e5e' }}>{val} {lbl}</span>
                           ))}
                         </div>
                       )}
@@ -519,16 +553,19 @@ export default function EmailsClient({
                       {c.status === 'rascunho' && (
                         <>
                           <div style={{ display: 'flex', gap: 6 }}>
-                            <input value={previewEmail} onChange={e => setPreviewEmail(e.target.value)} placeholder='Preview para...' className='em-input' style={{ width: 180, fontSize: 12, padding: '6px 10px' }} />
+                            <input value={previewEmail} onChange={e => setPreviewEmail(e.target.value)} placeholder='Enviar preview para...' className='em-input' style={{ width: 190, fontSize: 12, padding: '6px 10px' }} />
                             <button className='em-btn em-btn-ghost' style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => enviarPreview(c.id)}>Testar</button>
                           </div>
-                          <button className='em-btn em-btn-send' style={{ fontSize: 13, padding: '8px 16px' }} onClick={() => disparar(c.id)} disabled={disparando === c.id}>
-                            {disparando === c.id ? '⏳ Disparando...' : '🚀 Disparar'}
-                          </button>
+                          {!c.lista_id
+                            ? <span style={{ fontSize: 11, color: '#c2904d', textAlign: 'right' }}>Selecione uma lista antes de disparar</span>
+                            : <button className='em-btn em-btn-send' style={{ fontSize: 13, padding: '8px 16px' }} onClick={() => disparar(c.id)} disabled={disparando === c.id}>
+                                {disparando === c.id ? 'Disparando...' : `Disparar → ${c.email_listas?.nome || 'lista'}`}
+                              </button>
+                          }
                         </>
                       )}
                       {c.status === 'enviado' && (
-                        <button className='em-btn em-btn-ghost' style={{ fontSize: 12 }} onClick={() => verMetricasCamp(c.id)}>📊 Ver métricas</button>
+                        <button className='em-btn em-btn-ghost' style={{ fontSize: 12 }} onClick={() => verMetricasCamp(c.id)}>Ver métricas</button>
                       )}
                     </div>
                   </div>
