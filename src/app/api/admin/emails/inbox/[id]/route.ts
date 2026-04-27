@@ -8,16 +8,21 @@ export async function GET(_req: NextRequest, { params }: P) {
   const db = createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const [{ data: conversa }, { data: mensagens }] = await Promise.all([
-    db.from('conversas_email')
-      .select('*, leads(nome, telefone, email), email_campanhas(nome)')
-      .eq('id', id).single(),
-    db.from('mensagens_email')
-      .select('*')
-      .eq('conversa_id', id)
-      .order('criado_em', { ascending: true }),
+    db.from('conversas_email').select('*').eq('id', id).single(),
+    db.from('mensagens_email').select('*').eq('conversa_id', id).order('criado_em', { ascending: true }),
   ])
 
   if (!conversa) return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 })
+
+  // Enriquece com dados do lead (sem depender de FK)
+  if (conversa.lead_id) {
+    const { data: lead } = await db.from('leads').select('id,nome,telefone,email').eq('id', conversa.lead_id).single()
+    if (lead) conversa.leads = lead
+  }
+  if (conversa.campanha_id) {
+    const { data: camp } = await db.from('email_campanhas').select('id,nome').eq('id', conversa.campanha_id).single()
+    if (camp) conversa.email_campanhas = camp
+  }
 
   // Marca não lidas como lidas
   if (conversa.nao_lidas > 0) {
