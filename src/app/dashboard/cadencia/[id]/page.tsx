@@ -24,12 +24,13 @@ const COLORS: Record<string, { bg: string; border: string; icon: string }> = {
   tag:       { bg: "#22c55e20", border: "#22c55e60", icon: "🏷" },
   agente_ia: { bg: "#a855f720", border: "#a855f760", icon: "🤖" },
   webhook:   { bg: "#06b6d420", border: "#06b6d460", icon: "🔗" },
+  email:     { bg: "#10b98120", border: "#10b98160", icon: "✉" },
   fim:       { bg: "#ef444420", border: "#ef444460", icon: "🏁" },
 };
 const TIPO_LABEL: Record<string, string> = {
   inicio: "Início", mensagem: "Mensagem", aguardar: "Aguardar",
   condicao: "Condição", tag: "Tag", agente_ia: "Agente IA",
-  webhook: "Webhook", fim: "Fim",
+  webhook: "Webhook", email: "Email", fim: "Fim",
 };
 const fallback = { bg: "#6b728020", border: "#6b728060", icon: "◈" };
 
@@ -161,6 +162,24 @@ function WebhookNode({ data, selected }: NodeProps<FlowNode>) {
   );
 }
 
+function EmailNode({ data, selected }: NodeProps<FlowNode>) {
+  const d = data as Record<string, unknown>;
+  const assunto = String(d.assunto ?? "");
+  const preview = String(d.html ?? d.texto ?? "");
+  return (
+    <BaseNode tipo="email" data={data} selected={selected}>
+      <Handle type="target" position={Position.Top} style={handleStyle} />
+      {assunto ? (
+        <div style={{ color: "#34d399", fontSize: 11, fontWeight: 600, marginBottom: 3 }}>{assunto.slice(0, 40)}{assunto.length > 40 ? "…" : ""}</div>
+      ) : (
+        <div style={{ color: "#4b5563", fontSize: 11 }}>Sem assunto definido</div>
+      )}
+      {preview && <div style={{ color: "#9ca3af", fontSize: 11 }}>{preview.replace(/<[^>]+>/g, "").slice(0, 45)}…</div>}
+      <Handle type="source" position={Position.Bottom} style={handleStyle} />
+    </BaseNode>
+  );
+}
+
 function FimNode({ data, selected }: NodeProps<FlowNode>) {
   return (
     <BaseNode tipo="fim" data={data} selected={selected}>
@@ -175,7 +194,7 @@ const handleStyle: React.CSSProperties = { width: 10, height: 10, background: "#
 const NODE_TYPES = {
   inicio: InicioNode, mensagem: MensagemNode, aguardar: AguardarNode,
   condicao: CondicaoNode, tag: TagNode, agente_ia: AgenteIANode,
-  webhook: WebhookNode, fim: FimNode,
+  webhook: WebhookNode, email: EmailNode, fim: FimNode,
 };
 
 // ─── Default data por tipo ────────────────────────────────────────────
@@ -187,6 +206,7 @@ const DEFAULT_DATA: Record<string, FlowData> = {
   tag:       { label: "Atribuir Tag", tag: "" },
   agente_ia: { label: "Agente IA", instrucoes: "" },
   webhook:   { label: "Webhook", url: "", metodo: "POST", descricao: "" },
+  email:     { label: "Email", assunto: "", html: "", texto: "" },
   fim:       { label: "Fim" },
 };
 
@@ -198,6 +218,7 @@ const PALETTE_ITEMS = [
   { tipo: "tag",       label: "Tag" },
   { tipo: "agente_ia", label: "Agente IA" },
   { tipo: "webhook",   label: "Webhook" },
+  { tipo: "email",     label: "Email" },
   { tipo: "fim",       label: "Fim" },
 ];
 
@@ -405,6 +426,10 @@ function NodePanel({ node, onChange, onDelete }: {
               <option value="origem">Origem</option>
               <option value="utm_source">UTM Source</option>
               <option value="tags">Tags</option>
+              <option value="score_email">Score de E-mail</option>
+              <option value="qs_total">Score do Quiz</option>
+              <option value="status_lead">Status do Lead</option>
+              <option value="pipeline_etapa">Etapa do Pipeline</option>
             </select>
           </div>
           <div>
@@ -415,12 +440,24 @@ function NodePanel({ node, onChange, onDelete }: {
               <option value="igual">Igual a</option>
               <option value="contem">Contém</option>
               <option value="nao_contem">Não contém</option>
+              <option value="maior_que">Maior que</option>
+              <option value="menor_que">Menor que</option>
+              <option value="maior_igual">Maior ou igual</option>
+              <option value="menor_igual">Menor ou igual</option>
             </select>
           </div>
-          {(d.operador === "igual" || d.operador === "contem" || d.operador === "nao_contem") && (
+          {(d.operador === "igual" || d.operador === "contem" || d.operador === "nao_contem" ||
+            d.operador === "maior_que" || d.operador === "menor_que" ||
+            d.operador === "maior_igual" || d.operador === "menor_igual") && (
             <div>
               <label style={lbl}>Valor</label>
-              <input value={String(d.valor ?? "")} onChange={e => upd("valor", e.target.value)} style={inp} placeholder="Digite o valor..." />
+              <input
+                type={["maior_que","menor_que","maior_igual","menor_igual"].includes(String(d.operador)) ? "number" : "text"}
+                value={String(d.valor ?? "")}
+                onChange={e => upd("valor", e.target.value)}
+                style={inp}
+                placeholder={["maior_que","menor_que","maior_igual","menor_igual"].includes(String(d.operador)) ? "ex: 10" : "Digite o valor..."}
+              />
             </div>
           )}
           <div style={{ background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#6b7280" }}>
@@ -469,6 +506,33 @@ function NodePanel({ node, onChange, onDelete }: {
           </div>
           <div style={{ background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#6b7280" }}>
             Enviará dados do lead + flow_id + execucao_id como JSON. Timeout: 10s.
+          </div>
+        </>
+      )}
+
+      {tipo === "email" && (
+        <>
+          <div>
+            <label style={lbl}>Assunto</label>
+            <input
+              value={String(d.assunto ?? "")}
+              onChange={e => upd("assunto", e.target.value)}
+              style={inp}
+              placeholder="ex: Olá {nome}, temos uma novidade!"
+            />
+          </div>
+          <div>
+            <label style={lbl}>Conteúdo (HTML ou texto)</label>
+            <textarea
+              value={String(d.html ?? d.texto ?? "")}
+              onChange={e => { upd("html", e.target.value); onChange(node.id, { ...d, html: e.target.value, texto: e.target.value }); }}
+              placeholder={"<p>Olá {nome}!</p>\n<p>Seu conteúdo aqui...</p>"}
+              style={{ ...inp, minHeight: 140, resize: "vertical", fontFamily: "monospace", fontSize: 11 }}
+            />
+          </div>
+          <div style={{ background: "#0d0d0d", border: "1px solid #10b98130", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#6b7280" }}>
+            <div style={{ color: "#34d399", marginBottom: 4 }}>✉ Enviado via Resend</div>
+            Variáveis disponíveis: {"{nome}"} {"{email}"} {"{whatsapp}"} {"{origem}"}
           </div>
         </>
       )}
