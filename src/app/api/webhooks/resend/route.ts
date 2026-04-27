@@ -10,12 +10,26 @@ export async function POST(req: NextRequest) {
   const isInbound = type === 'email.inbound' || type === 'email.received' || (!type && body.from && body.subject)
   if (isInbound) {
     const payload = data ?? body
-    const emailFrom: string = typeof payload.from === 'string'
-      ? payload.from.replace(/.*<(.+)>/, '$1').trim()
-      : (payload.from as string) || ''
-    const assunto: string = payload.subject || '(sem assunto)'
-    const corpoHtml: string = payload.html || ''
-    const corpoTexto: string = payload.text || ''
+
+    // Log para diagnóstico — visível em Vercel → Functions → Logs
+    console.log('[resend-inbound] payload keys:', Object.keys(payload).join(', '))
+    console.log('[resend-inbound] from:', payload.from ?? payload.sender)
+    console.log('[resend-inbound] html keys present:', !!(payload.html ?? payload.html_body ?? payload.htmlBody))
+    console.log('[resend-inbound] text keys present:', !!(payload.text ?? payload.text_body ?? payload.textBody))
+
+    // Extrai e-mail do remetente (pode vir como "Nome <email>" ou só "email")
+    const fromRaw: string = payload.from ?? payload.sender ?? ''
+    const emailFrom: string = fromRaw.includes('<')
+      ? (fromRaw.match(/<(.+?)>/) || [])[1]?.trim() || fromRaw.trim()
+      : fromRaw.trim()
+
+    const assunto: string = payload.subject ?? '(sem assunto)'
+
+    // Resend usa nomes de campo variáveis — tenta todas as variações conhecidas
+    const corpoHtml: string =
+      payload.html ?? payload.html_body ?? payload.htmlBody ?? payload.body_html ?? ''
+    const corpoTexto: string =
+      payload.text ?? payload.text_body ?? payload.textBody ?? payload.body_text ?? payload.plain_text ?? ''
 
     if (emailFrom) {
       const db = createAdminClient() as any // eslint-disable-line @typescript-eslint/no-explicit-any
