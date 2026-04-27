@@ -35,6 +35,57 @@ function substituirVariaveis(html: string, vars: Record<string, string>): string
   return html.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`)
 }
 
+function htmlParaTexto(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function embrulharHtml(conteudo: string, unsubUrl: string, remetenteNome: string): string {
+  // Se o conteúdo já tem estrutura HTML completa, apenas injeta o rodapé
+  const temEstrutura = /<html/i.test(conteudo)
+  const rodape = `
+<div style="margin-top:40px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;font-family:Inter,Arial,sans-serif;font-size:12px;color:#9ca3af;line-height:1.6;">
+  <p style="margin:0 0 8px;">Você está recebendo este e-mail porque se cadastrou em um dos formulários da ${remetenteNome}.</p>
+  <p style="margin:0;"><a href="${unsubUrl}" style="color:#6b7280;text-decoration:underline;">Cancelar inscrição</a></p>
+</div>`
+
+  if (temEstrutura) {
+    return conteudo.includes('</body>')
+      ? conteudo.replace('</body>', `${rodape}</body>`)
+      : conteudo + rodape
+  }
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+</head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+        <tr><td style="padding:40px 48px 32px;">
+          ${conteudo}
+          ${rodape}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
 export async function POST(req: NextRequest, { params }: P) {
   const { id } = await params
   const { preview_email } = await req.json().catch(() => ({}))
@@ -112,7 +163,11 @@ export async function POST(req: NextRequest, { params }: P) {
         nome: contato.nome || 'Olá',
         email: contato.email,
       }
-      const htmlFinal = injetarTracking(substituirVariaveis(htmlBase, vars), log.id)
+      const unsubUrl = `${BASE_URL}/api/track/unsub/${log.id}`
+      const htmlPersonalizado = substituirVariaveis(htmlBase, vars)
+      const htmlEmbrulhado = embrulharHtml(htmlPersonalizado, unsubUrl, campanha.remetente_nome)
+      const htmlFinal = injetarTracking(htmlEmbrulhado, log.id)
+      const textoFinal = campanha.texto?.trim() || htmlParaTexto(htmlPersonalizado)
 
       // Envia via Resend
       const { Resend } = await import('resend')
@@ -125,9 +180,12 @@ export async function POST(req: NextRequest, { params }: P) {
         to: [contato.email],
         subject: assunto,
         html: htmlFinal,
-        text: campanha.texto || '',
+        text: textoFinal,
         headers: {
-          'List-Unsubscribe': `<${BASE_URL}/api/track/unsub/${log.id}>`,
+          'List-Unsubscribe': `<${unsubUrl}>, <mailto:time@maestriasocial.com?subject=unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          'Precedence': 'bulk',
+          'X-Entity-Ref-ID': `maestria-${log.id}`,
         },
       })
 
