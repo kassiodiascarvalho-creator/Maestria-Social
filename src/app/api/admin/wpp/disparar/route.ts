@@ -413,6 +413,8 @@ export async function POST(req: NextRequest) {
     const filtros: Filtros = payload.filtros ?? {}
     const delayMs: number = typeof payload.delay_ms === 'number' ? Math.max(1000, payload.delay_ms) : 10000
     const delayMsMax: number | null = typeof payload.delay_ms_max === 'number' && payload.delay_ms_max > delayMs ? payload.delay_ms_max : null
+    const pausaACada: number = typeof payload.pausa_a_cada === 'number' && payload.pausa_a_cada > 0 ? payload.pausa_a_cada : 0
+    const pausaDuracaoMs: number = typeof payload.pausa_duracao_ms === 'number' && payload.pausa_duracao_ms > 0 ? payload.pausa_duracao_ms : 0
     const apiProvider: 'meta' | 'zapi' | 'baileys' = ['zapi', 'baileys'].includes(payload.api_provider)
       ? payload.api_provider
       : 'meta'
@@ -645,7 +647,7 @@ export async function POST(req: NextRequest) {
       const baileysRes = await fetch(`${base}/disparar-lista`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys, delayMs, ...(delayMsMax ? { delayMsMax } : {}) }),
+        body: JSON.stringify({ instanceId: baileysInstanceId, contatos: listaParaBaileys, delayMs, ...(delayMsMax ? { delayMsMax } : {}), ...(pausaACada > 0 ? { pausaACada, pausaDuracaoMs } : {}) }),
         signal: AbortSignal.timeout(10000),
       })
 

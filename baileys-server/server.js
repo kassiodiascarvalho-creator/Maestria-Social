@@ -466,7 +466,7 @@ setInterval(() => {
 // POST /disparar-lista — recebe lista já personalizada, processa em background
 app.post('/disparar-lista', (req, res) => {
   // contatos: [{ phone, mensagens: [{ type, content, caption, filename }] }]
-  const { instanceId, contatos, delayMs, delayMsMax } = req.body
+  const { instanceId, contatos, delayMs, delayMsMax, pausaACada, pausaDuracaoMs } = req.body
 
   const instId = String(instanceId || '1')
   const inst = instances[instId]
@@ -487,6 +487,9 @@ app.post('/disparar-lista', (req, res) => {
   const intervalo = intervaloMin
 
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+  const pausaACadaVal   = typeof pausaACada === 'number' && pausaACada > 0 ? pausaACada : 0
+  const pausaDuracaoVal = typeof pausaDuracaoMs === 'number' && pausaDuracaoMs > 0 ? pausaDuracaoMs : 0
+
   jobs[jobId] = {
     total: contatos.length,
     enviados: 0,
@@ -495,13 +498,16 @@ app.post('/disparar-lista', (req, res) => {
     status: 'rodando',
     iniciadoEm: Date.now(),
     delayMs: intervalo,
+    pausaACada: pausaACadaVal,
+    pausaDuracaoMs: pausaDuracaoVal,
+    pausandoEm: null,
   }
 
   // Responde imediatamente com o jobId
   res.json({ ok: true, jobId, total: contatos.length })
 
   // Processa em background (sem await na resposta)
-  processarLista(jobId, instId, contatos, sortearDelay).catch(err => {
+  processarLista(jobId, instId, contatos, sortearDelay, pausaACadaVal, pausaDuracaoVal).catch(err => {
     if (jobs[jobId]) {
       jobs[jobId].status = 'erro'
       jobs[jobId].erroGeral = err.message
@@ -658,9 +664,10 @@ async function aguardarSeNecessario(jobId) {
 
 // Processa a lista em background
 // getDelay pode ser número fixo ou função que retorna delay aleatório a cada chamada
-async function processarLista(jobId, instId, contatos, getDelay = 10000) {
+async function processarLista(jobId, instId, contatos, getDelay = 10000, pausaACada = 0, pausaDuracaoMs = 0) {
   const sortear = typeof getDelay === 'function' ? getDelay : () => getDelay
   const job = jobs[jobId]
+  let enviadosNaRodada = 0
 
   for (const contato of contatos) {
     // Aguarda se o job foi pausado
@@ -718,15 +725,26 @@ async function processarLista(jobId, instId, contatos, getDelay = 10000) {
       }
     }
 
-    if (contatoOk) job.enviados++
+    if (contatoOk) { job.enviados++; enviadosNaRodada++ }
     else job.falhas++
 
-    // Delay entre contatos: sorteia entre mín e máx (ou usa fixo)
-    if (contatos.indexOf(contato) < contatos.length - 1) {
-      const delay = sortear()
-      console.log(`[Job ${jobId}] Aguardando ${(delay/1000).toFixed(1)}s antes do próximo envio...`)
-      await new Promise(r => setTimeout(r, delay))
+    const ehUltimo = contatos.indexOf(contato) === contatos.length - 1
+    if (ehUltimo) break
+
+    // Pausa longa a cada N envios (anti-restrição WhatsApp)
+    if (pausaACada > 0 && pausaDuracaoMs > 0 && enviadosNaRodada > 0 && enviadosNaRodada % pausaACada === 0) {
+      const minutos = (pausaDuracaoMs / 60000).toFixed(1)
+      console.log(`[Job ${jobId}] ☕ Pausa anti-restrição: ${enviadosNaRodada} envios — aguardando ${minutos}min...`)
+      job.pausandoEm = enviadosNaRodada
+      await new Promise(r => setTimeout(r, pausaDuracaoMs))
+      job.pausandoEm = null
+      console.log(`[Job ${jobId}] ▶ Retomando após pausa`)
     }
+
+    // Delay entre contatos: sorteia entre mín e máx (ou usa fixo)
+    const delay = sortear()
+    console.log(`[Job ${jobId}] Aguardando ${(delay/1000).toFixed(1)}s antes do próximo envio...`)
+    await new Promise(r => setTimeout(r, delay))
   }
 
   job.status = 'concluido'

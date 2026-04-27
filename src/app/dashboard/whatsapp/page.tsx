@@ -140,6 +140,9 @@ export default function WhatsAppPage() {
   const [intervaloMin, setIntervaloMin] = useState(10)
   const [intervaloMax, setIntervaloMax] = useState(60)
   const [intervaloDinamico, setIntervaloDinamico] = useState(false)
+  const [pausaAtiva, setPausaAtiva] = useState(false)
+  const [pausaACada, setPausaACada] = useState(30)
+  const [pausaDuracaoMin, setPausaDuracaoMin] = useState(10)
 
   // Agente responsável pelo disparo
   type AgenteOpcao = { id: string; nome: string }
@@ -192,7 +195,7 @@ export default function WhatsAppPage() {
   }, [metaInstSelecionada])
 
   // Baileys job — progresso em tempo real
-  type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "pausado" | "concluido" | "erro"; erroGeral?: string }
+  type BaileysJob = { jobId: string; total: number; enviados: number; falhas: number; erros: { phone: string; msg: string }[]; status: "rodando" | "pausado" | "concluido" | "erro"; erroGeral?: string; pausandoEm?: number | null; pausaACada?: number; pausaDuracaoMs?: number }
   const [baileysJob, setBaileysJob] = useState<BaileysJob | null>(null)
   const [pausando, setPausando] = useState(false)
   const [pauseErro, setPauseErro] = useState("")
@@ -753,8 +756,10 @@ export default function WhatsAppPage() {
         api_provider: apiProvider,
         baileys_instance_id: baileysInstSelecionada,
         meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
-        delay_ms: intervaloDinamico ? intervaloMin * 1000 : intervaloMin * 1000,
+        delay_ms: intervaloMin * 1000,
         delay_ms_max: intervaloDinamico ? intervaloMax * 1000 : undefined,
+        pausa_a_cada: pausaAtiva ? pausaACada : undefined,
+        pausa_duracao_ms: pausaAtiva ? pausaDuracaoMin * 60 * 1000 : undefined,
         agente_id: agenteSelecionado || undefined,
       }),
     })
@@ -1676,6 +1681,38 @@ export default function WhatsAppPage() {
                             {intervaloDinamico ? "🎲 dinâmico" : "fixo"}
                           </button>
                         </div>
+
+                        {/* Pausa anti-restrição */}
+                        <div className="wpp-intervalo-wrap" title="Pausa automática a cada N envios">
+                          <button
+                            className={`wpp-intervalo-toggle${pausaAtiva ? " wpp-intervalo-toggle-on" : ""}`}
+                            onClick={() => setPausaAtiva(v => !v)}
+                            title={pausaAtiva ? "Pausa ativa — clique para desativar" : "Ativar pausa anti-restrição"}
+                          >
+                            ☕ pausa
+                          </button>
+                          {pausaAtiva && (
+                            <>
+                              <span style={{ fontSize: 11, color: "#4a3e30" }}>a cada</span>
+                              <input
+                                className="wpp-intervalo-input"
+                                type="number" min={5} max={500}
+                                value={pausaACada}
+                                onChange={e => setPausaACada(Math.max(5, Math.min(500, Number(e.target.value))))}
+                                style={{ width: 44 }}
+                              />
+                              <span style={{ fontSize: 11, color: "#4a3e30" }}>envios por</span>
+                              <input
+                                className="wpp-intervalo-input"
+                                type="number" min={1} max={60}
+                                value={pausaDuracaoMin}
+                                onChange={e => setPausaDuracaoMin(Math.max(1, Math.min(60, Number(e.target.value))))}
+                                style={{ width: 38 }}
+                              />
+                              <span style={{ fontSize: 11, color: "#4a3e30" }}>min</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                       {agentes.length > 0 && (
                         <div className="wpp-agente-select-wrap">
@@ -1751,6 +1788,12 @@ export default function WhatsAppPage() {
                                 ⚠ {pauseErro} — verifique se o servidor Baileys suporta pausa
                               </div>
                             )}
+                            {/* Indicador de pausa anti-restrição automática */}
+                            {baileysJob.pausandoEm && (
+                              <div style={{ background: "rgba(201,169,77,0.12)", border: "1px solid rgba(201,169,77,0.3)", borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "var(--gold, #c9a94d)" }}>
+                                ☕ Pausa anti-restrição após {baileysJob.pausandoEm} envios — retomando em {baileysJob.pausaDuracaoMs ? Math.round(baileysJob.pausaDuracaoMs / 60000) : "?"} min...
+                              </div>
+                            )}
                             <div className="wpp-progress-bar">
                               <div
                                 className="wpp-progress-fill"
@@ -1761,6 +1804,9 @@ export default function WhatsAppPage() {
                               ✓ {baileysJob.enviados} enviados &nbsp;·&nbsp;
                               {baileysJob.falhas > 0 && <span style={{ color: "#e07070" }}>✕ {baileysJob.falhas} falhas &nbsp;·&nbsp;</span>}
                               {baileysJob.total - baileysJob.enviados - baileysJob.falhas} restantes de {baileysJob.total}
+                              {baileysJob.pausaACada && baileysJob.pausaACada > 0 && (
+                                <span style={{ color: "var(--muted)", fontSize: 11 }}>&nbsp;·&nbsp;☕ pausa a cada {baileysJob.pausaACada}</span>
+                              )}
                             </span>
                           </>
                         ) : (
