@@ -665,6 +665,15 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Meta / Z-API: processa no Vercel (sem timeout para listas razoáveis) ──
+    // Pré-validação: previne 504 do Vercel (maxDuration = 300s; reservamos 30s de buffer)
+    const tempoEstimadoMs = (contatosFiltrados.length - 1) * delayMs + contatosFiltrados.length * 1500
+    if (tempoEstimadoMs > 270000) {
+      const sugerido = Math.floor(270000 / delayMs)
+      return NextResponse.json({
+        error: `Lista grande demais para o tempo limite (estimado ${Math.round(tempoEstimadoMs/1000)}s). Reduza para até ${sugerido} contatos OU use o Baileys (suporta jobs em background sem limite).`
+      }, { status: 400 })
+    }
+
     let enviados = 0
     let falhas = 0
     const erros: { phone: string; nome: string; msg: string }[] = []
@@ -673,7 +682,8 @@ export async function POST(req: NextRequest) {
     // Delay entre picadas de um mesmo contato (fixo pequeno para não travar)
     const delayPicadas = 300
 
-    for (const contato of contatosFiltrados) {
+    for (let idx = 0; idx < contatosFiltrados.length; idx++) {
+      const contato = contatosFiltrados[idx]
       let contatoOk = true
       let primeiroTextoEnviado: string | null = null
       const nome = contato.nome || ''
@@ -777,7 +787,10 @@ export async function POST(req: NextRequest) {
           registrosConversa.push({ phone: normalizarTelefone(contato.telefone), mensagem: primeiroTextoEnviado })
         }
       } else falhas++
-      await new Promise(r => setTimeout(r, delayMs))
+      // Pula delay no último contato (não há próximo envio)
+      if (idx < contatosFiltrados.length - 1) {
+        await new Promise(r => setTimeout(r, delayMs))
+      }
     }
 
     // Salva mensagens enviadas no histórico de conversa dos leads
