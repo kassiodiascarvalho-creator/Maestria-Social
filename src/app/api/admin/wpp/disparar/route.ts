@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getConfig } from '@/lib/config'
 
+export const maxDuration = 300
+
 const META_API_URL = 'https://graph.facebook.com/v21.0'
 const ZAPI_BASE_URL = 'https://api.z-api.io/instances'
 

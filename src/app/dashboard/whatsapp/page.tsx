@@ -728,56 +728,68 @@ export default function WhatsAppPage() {
     statusOverrideRef.current = null
     if (baileysJobIntervalRef.current) { clearInterval(baileysJobIntervalRef.current); baileysJobIntervalRef.current = null }
 
-    const mensagens = fila.map(m => {
-      if (m.tipo === "template") {
-        return {
-          tipo: "template" as const,
-          template_name: m.template_name,
-          template_lang: m.template_lang || "pt_BR",
-          template_vars: m.template_vars.filter(v => v.trim()),
-          template_param_count: m.template_param_count ?? 0,
+    try {
+      const mensagens = fila.map(m => {
+        if (m.tipo === "template") {
+          return {
+            tipo: "template" as const,
+            template_name: m.template_name,
+            template_lang: m.template_lang || "pt_BR",
+            template_vars: m.template_vars.filter(v => v.trim()),
+            template_param_count: m.template_param_count ?? 0,
+          }
         }
+        return {
+          tipo: m.tipo,
+          conteudo: m.conteudo,
+          variacoes: m.tipo === "text" && m.variacoes.length > 0 ? m.variacoes : undefined,
+          caption: m.caption || undefined,
+          filename: m.filename || undefined,
+        }
+      })
+
+      const res = await fetch("/api/admin/wpp/disparar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lista_id: listaAtiva.id, mensagens,
+          filtros: listaAtiva.is_leads ? filtros : undefined,
+          api_provider: apiProvider,
+          baileys_instance_id: baileysInstSelecionada,
+          meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
+          delay_ms: intervaloMin * 1000,
+          delay_ms_max: intervaloDinamico ? intervaloMax * 1000 : undefined,
+          pausa_a_cada: pausaAtiva ? pausaACada : undefined,
+          pausa_duracao_ms: pausaAtiva ? pausaDuracaoMin * 60 * 1000 : undefined,
+          agente_id: agenteSelecionado || undefined,
+        }),
+      })
+
+      let data: Record<string, unknown>
+      try {
+        data = await res.json()
+      } catch {
+        setDisparoErro("Erro ao processar resposta. O disparo pode ter excedido o tempo limite.")
+        return
       }
-      return {
-        tipo: m.tipo,
-        conteudo: m.conteudo,
-        variacoes: m.tipo === "text" && m.variacoes.length > 0 ? m.variacoes : undefined,
-        caption: m.caption || undefined,
-        filename: m.filename || undefined,
+
+      if (!res.ok) {
+        setDisparoErro((data.error as string) || "Erro ao disparar")
+        return
       }
-    })
 
-    const res = await fetch("/api/admin/wpp/disparar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lista_id: listaAtiva.id, mensagens,
-        filtros: listaAtiva.is_leads ? filtros : undefined,
-        api_provider: apiProvider,
-        baileys_instance_id: baileysInstSelecionada,
-        meta_instancia_id: apiProvider === "meta" && metaInstSelecionada ? metaInstSelecionada : undefined,
-        delay_ms: intervaloMin * 1000,
-        delay_ms_max: intervaloDinamico ? intervaloMax * 1000 : undefined,
-        pausa_a_cada: pausaAtiva ? pausaACada : undefined,
-        pausa_duracao_ms: pausaAtiva ? pausaDuracaoMin * 60 * 1000 : undefined,
-        agente_id: agenteSelecionado || undefined,
-      }),
-    })
-    const data = await res.json()
-    setDisparando(false)
-
-    if (!res.ok) {
-      setDisparoErro(data.error || "Erro ao disparar")
-      return
-    }
-
-    if (data.jobId) {
-      // Baileys: processa em background — inicia polling de progresso
-      setBaileysJob({ jobId: data.jobId, total: data.total, enviados: 0, falhas: 0, erros: [], status: "rodando" })
-      iniciarPollingJob(data.jobId, data.total)
-    } else {
-      // Meta / Z-API: resultado imediato
-      setDisparoResult({ total: data.total, enviados: data.enviados, falhas: data.falhas, erros: data.erros, enviados_phones: data.enviados_phones })
+      if (data.jobId) {
+        // Baileys: processa em background — inicia polling de progresso
+        setBaileysJob({ jobId: data.jobId as string, total: data.total as number, enviados: 0, falhas: 0, erros: [], status: "rodando" })
+        iniciarPollingJob(data.jobId as string, data.total as number)
+      } else {
+        // Meta / Z-API: resultado imediato
+        setDisparoResult({ total: data.total as number, enviados: data.enviados as number, falhas: data.falhas as number, erros: data.erros as string[], enviados_phones: data.enviados_phones as { phone: string; nome: string }[] })
+      }
+    } catch (err) {
+      setDisparoErro(`Erro de rede: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setDisparando(false)
     }
   }
 
