@@ -687,6 +687,13 @@ async function processarLista(jobId, instId, contatos, getDelay = 10000, pausaAC
       inst = instances[instId]
     }
 
+    // Sem mensagens (ex: fila só tinha templates, filtrados pelo servidor)
+    if (!contato.mensagens || contato.mensagens.length === 0) {
+      console.warn(`[Job ${jobId}] ⚠️ Contato ${contato.phone} sem mensagens — pulando (templates não são suportados no Baileys)`)
+      job.falhas++
+      continue
+    }
+
     let contatoOk = true
 
     for (const msg of contato.mensagens) {

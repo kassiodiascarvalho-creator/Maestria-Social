@@ -29,37 +29,6 @@ function variacoesTelefone(tel: string): string[] {
   return Array.from(vars).filter(Boolean)
 }
 
-// ── Baileys ────────────────────────────────────────────────────────────────────
-async function enviarBaileys(
-  apiUrl: string,
-  telefone: string,
-  msg: MensagemItem,
-  instanceId = '1'
-): Promise<void> {
-  if (msg.tipo === 'template') return // Baileys não usa templates Meta
-
-  const body: Record<string, unknown> = {
-    phone: normalizarTelefone(telefone),
-    type: msg.tipo,
-    content: msg.conteudo,
-  }
-  if (msg.caption) body.caption = msg.caption
-  if (msg.filename) body.filename = msg.filename
-
-  // Usa rota de instância específica se disponível, senão rota legada
-  const base = apiUrl.replace(/\/$/, '')
-  const url = `${base}/instancia/${instanceId}/disparar`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Baileys: ${err}`)
-  }
-}
-
 // ── Z-API ──────────────────────────────────────────────────────────────────────
 async function enviarZApi(
   instanceId: string,
@@ -627,22 +596,29 @@ export async function POST(req: NextRequest) {
 
     // ── Baileys: envia lista ao servidor local e retorna jobId para polling ──
     if (apiProvider === 'baileys') {
+      // Baileys não suporta templates Meta — remove da fila antes de enviar
+      const mensagensBaileys = mensagens.filter(m => m.tipo !== 'template')
+      if (mensagensBaileys.length === 0) {
+        return NextResponse.json(
+          { error: 'Nenhuma mensagem compatível com Baileys. Templates são suportados apenas pela API Meta.' },
+          { status: 400 }
+        )
+      }
+
       // Monta lista personalizada por contato (Vercel faz a personalização, Baileys só envia)
       const listaParaBaileys = contatosFiltrados.map(contato => ({
         phone: contato.telefone,
-        mensagens: mensagens
-          .filter(m => m.tipo !== 'template')
-          .map(msg => {
-            if (msg.tipo === 'text') {
-              return { type: 'text', content: substituirVariaveis(sortearTexto(msg), contato as Record<string, unknown>) }
-            }
-            return {
-              type: msg.tipo,
-              content: msg.conteudo,
-              caption: msg.caption ? substituirVariaveis(msg.caption, contato as Record<string, unknown>) : undefined,
-              filename: msg.filename,
-            }
-          }),
+        mensagens: mensagensBaileys.map(msg => {
+          if (msg.tipo === 'text') {
+            return { type: 'text', content: substituirVariaveis(sortearTexto(msg), contato as Record<string, unknown>) }
+          }
+          return {
+            type: msg.tipo,
+            content: msg.conteudo,
+            caption: msg.caption ? substituirVariaveis(msg.caption, contato as Record<string, unknown>) : undefined,
+            filename: msg.filename,
+          }
+        }),
       }))
 
       const base = baileysApiUrl!.replace(/\/$/, '')
