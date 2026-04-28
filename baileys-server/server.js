@@ -84,8 +84,10 @@ async function resolverChatId(client, phone) {
   console.log(`  → getNumberId: ${formatted}`)
   const numberId = await client.getNumberId(formatted)
   if (!numberId) throw new Error(`Número ${phone} não encontrado no WhatsApp (não é uma conta WA válida)`)
-  console.log(`  → chatId resolvido: ${numberId._serialized}`)
-  return numberId._serialized
+  // Usa sempre @c.us para envio — @lid (multi-device) pode impedir entrega
+  const chatId = numberId._serialized.endsWith('@lid') ? formatted : numberId._serialized
+  console.log(`  → chatId resolvido: ${chatId} (raw: ${numberId._serialized})`)
+  return chatId
 }
 
 async function enviarMensagem(inst, type, phone, content, caption, filename, mimeType, ptt) {
