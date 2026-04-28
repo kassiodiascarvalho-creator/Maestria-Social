@@ -237,7 +237,7 @@ export default function WhatsAppPage() {
           // Se o usuário clicou em pausar/retomar recentemente, mantém o status local por mais tempo
           const override = statusOverrideRef.current
           const statusFinal = (override && Date.now() < override.expira) ? override.status : job.status
-          setBaileysJob({ jobId, total, ...job, status: statusFinal })
+          setBaileysJob({ jobId, ...job, total, status: statusFinal })
           if (job.status === "concluido" || job.status === "erro") {
             statusOverrideRef.current = null
             clearInterval(baileysJobIntervalRef.current!)
