@@ -784,7 +784,7 @@ export default function WhatsAppPage() {
         iniciarPollingJob(data.jobId as string, data.total as number)
       } else {
         // Meta / Z-API: resultado imediato
-        setDisparoResult({ total: data.total as number, enviados: data.enviados as number, falhas: data.falhas as number, erros: data.erros as string[], enviados_phones: data.enviados_phones as { phone: string; nome: string }[] })
+        setDisparoResult({ total: data.total as number, enviados: data.enviados as number, falhas: data.falhas as number, erros: data.erros as { phone: string; nome: string; msg: string }[], enviados_phones: data.enviados_phones as { phone: string; nome: string }[] })
       }
     } catch (err) {
       setDisparoErro(`Erro de rede: ${err instanceof Error ? err.message : String(err)}`)
