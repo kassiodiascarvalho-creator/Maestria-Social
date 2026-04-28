@@ -1472,27 +1472,48 @@ export default function WhatsAppPage() {
                             ))}
                           </select>
                         </div>
-                        <input
-                          className="wpp-input"
-                          placeholder='Variáveis separadas por vírgula (ex: João, 85, Persuasão) — deixe vazio se o template não tem variáveis'
-                          value={diagVars}
-                          onChange={e => setDiagVars(e.target.value)}
-                        />
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <button
-                            className="wpp-btn wpp-btn-primary"
-                            onClick={testarEnvio}
-                            disabled={diagCarregando || !diagTelefone || !diagTemplate}
-                            style={{ padding: "8px 18px" }}
-                          >
-                            {diagCarregando ? "Testando…" : "▶ Testar agora"}
-                          </button>
-                          {templates.length === 0 && (
-                            <span style={{ fontSize: 11, color: "#4a3e30" }}>
-                              Carregue os templates acima primeiro
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const tpl = templates.find(t => t.name === diagTemplate)
+                          const body = tpl?.components.find(c => c.type === "BODY")
+                          const matches = body?.text?.match(/\{\{\d+\}\}/g) || []
+                          const paramCount = matches.length
+                          const varsAtuais = diagVars.trim() ? diagVars.split(",").map(v => v.trim()).filter(Boolean) : []
+                          const varsCount = varsAtuais.length
+                          const matchOk = !diagTemplate || varsCount === paramCount
+                          return (
+                            <>
+                              <input
+                                className="wpp-input"
+                                placeholder={diagTemplate ? (paramCount === 0 ? 'Este template não tem variáveis — deixe vazio' : `Preencha ${paramCount} variável${paramCount > 1 ? 'is' : ''} separada${paramCount > 1 ? 's' : ''} por vírgula`) : 'Selecione um template primeiro'}
+                                value={diagVars}
+                                onChange={e => setDiagVars(e.target.value)}
+                                style={!matchOk ? { borderColor: "#e07070" } : undefined}
+                              />
+                              {diagTemplate && (
+                                <div style={{ fontSize: 11, color: matchOk ? "#7a6e5e" : "#e07070", marginTop: -4 }}>
+                                  {paramCount === 0
+                                    ? "✓ Template sem variáveis"
+                                    : `${matchOk ? "✓" : "⚠"} Template espera ${paramCount} variável${paramCount > 1 ? "is" : ""} — você forneceu ${varsCount}`}
+                                </div>
+                              )}
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <button
+                                  className="wpp-btn wpp-btn-primary"
+                                  onClick={testarEnvio}
+                                  disabled={diagCarregando || !diagTelefone || !diagTemplate || !matchOk}
+                                  style={{ padding: "8px 18px" }}
+                                >
+                                  {diagCarregando ? "Testando…" : "▶ Testar agora"}
+                                </button>
+                                {templates.length === 0 && (
+                                  <span style={{ fontSize: 11, color: "#4a3e30" }}>
+                                    Carregue os templates acima primeiro
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          )
+                        })()}
 
                         {diagResult && (
                           <div style={{

@@ -223,18 +223,30 @@ function preencherVarsTemplate(
   contato: Record<string, unknown>
 ): MensagemItem {
   if (msg.tipo !== 'template') return msg
-  // Se já tem variáveis preenchidas manualmente, usa elas
-  if (msg.template_vars && msg.template_vars.some(v => v.trim() !== '')) return msg
 
   const nome = (contato.nome as string) || 'Lead'
   const qs_total = String(contato.qs_total ?? 0)
   const pilar = (contato.pilar_fraco as string) || 'N/A'
   const pool = [nome, qs_total, pilar]
 
-  // Quantas variáveis o template tem
-  // 0 = não foi informado → não envia componentes (evita erro de contagem na Meta)
   const count = msg.template_param_count ?? 0
-  const vars = count > 0 ? pool.slice(0, Math.min(count, pool.length)) : []
+  const fornecidas = (msg.template_vars ?? []).map(v => (v ?? '').trim())
+
+  // Sem params no template → manda array vazio (sem componentes)
+  if (count === 0) return { ...msg, template_vars: [] }
+
+  // Garante exatamente `count` vars: usa as fornecidas, completa do pool, fallback "N/A"
+  const vars: string[] = []
+  for (let i = 0; i < count; i++) {
+    const fornecida = fornecidas[i]
+    if (fornecida) {
+      vars.push(fornecida)
+    } else if (i < pool.length) {
+      vars.push(pool[i])
+    } else {
+      vars.push('N/A')
+    }
+  }
 
   return { ...msg, template_vars: vars }
 }
